@@ -9,7 +9,7 @@ default = []
 
 [dependencies]
 log = "0.4.11"
-surface = { path = "../surf-n-term/surface" }
+surface = { path = "../surface" }
 png = { version = "0.16.4", optional = true }
 
 [dev-dependencies]
