@@ -2882,11 +2882,23 @@ pub enum LineJoin {
     Round,
 }
 
+impl Default for LineJoin {
+    fn default() -> Self {
+        Self::Miter(4.0)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum LineCap {
     Butt,
     Square,
     Round,
+}
+
+impl Default for LineCap {
+    fn default() -> Self {
+        Self::Butt
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
