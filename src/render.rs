@@ -3209,6 +3209,40 @@ mod tests {
     }
 
     #[test]
+    fn test_transform_fit() {
+        let s0 = BBox::new(Point::new(1.0, 1.0), Point::new(2.0, 2.0));
+        let s1 = BBox::new(Point::new(1.0, 1.0), Point::new(1.5, 2.0));
+        let s2 = BBox::new(Point::new(1.0, 1.0), Point::new(2.0, 1.5));
+        let d = BBox::new(Point::new(3.0, 5.0), Point::new(13.0, 15.0));
+
+        let tr0 = Transform::fit(s0, d, Align::Mid);
+        assert!(tr0.apply(s0.min).is_close_to(d.min));
+        assert!(tr0.apply(s0.max).is_close_to(d.max));
+
+        let tr1 = Transform::fit(s1, d, Align::Min);
+        assert!(tr1.apply(s1.min).is_close_to(d.min));
+        assert!(tr1.apply(s1.max).is_close_to(Point::new(8.0, 15.0)));
+
+        let tr2 = Transform::fit(s2, d, Align::Max);
+        assert!(tr2.apply(s2.max).is_close_to(d.max));
+        assert!(tr2.apply(s2.min).is_close_to(Point::new(3.0, 10.0)));
+
+        let tr3 = Transform::fit(s1, d, Align::Mid);
+        assert!(tr3
+            .apply((s1.min + s1.max) / 2.0)
+            .is_close_to((d.min + d.max) / 2.0));
+        assert!(tr3.apply(s1.min).is_close_to(Point::new(5.5, 5.0)));
+        assert!(tr3.apply(s1.max).is_close_to(Point::new(10.5, 15.0)));
+
+        let tr4 = Transform::fit(s2, d, Align::Mid);
+        assert!(tr4
+            .apply((s2.min + s2.max) / 2.0)
+            .is_close_to((d.min + d.max) / 2.0));
+        assert!(tr4.apply(s2.min).is_close_to(Point::new(3.0, 7.5)));
+        assert!(tr4.apply(s2.max).is_close_to(Point::new(13.0, 12.5)));
+    }
+
+    #[test]
     fn test_split_at() {
         let cubic = Cubic::new((3.0, 7.0), (2.0, 8.0), (0.0, 3.0), (6.0, 5.0));
         assert_eq!(cubic.split(), cubic.split_at(0.5));
