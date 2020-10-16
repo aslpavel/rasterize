@@ -2702,13 +2702,13 @@ fn range_intersect(
 
 impl fmt::Debug for BBox {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "BBox ")?;
+        write!(f, "BBox x=")?;
         scalar_fmt(f, self.x())?;
-        write!(f, ", ")?;
+        write!(f, ", y=")?;
         scalar_fmt(f, self.y())?;
-        write!(f, ", ")?;
+        write!(f, ", w=")?;
         scalar_fmt(f, self.width())?;
-        write!(f, ", ")?;
+        write!(f, ", h=")?;
         scalar_fmt(f, self.height())
     }
 }
@@ -3024,6 +3024,20 @@ mod tests {
 
     #[test]
     fn test_bbox() {
+        let b0 = BBox::new(Point::new(2.0, 2.0), Point::new(4.0, 4.0));
+        let b1 = b0.extend(Point::new(1.0, 3.0));
+        assert!(b1.min.is_close_to(Point::new(1.0, 2.0)));
+        assert!(b1.max.is_close_to(b0.max));
+        let b2 = b1.extend(Point::new(5.0, 3.0));
+        assert!(b2.min.is_close_to(b1.min));
+        assert!(b2.max.is_close_to(Point::new(5.0, 4.0)));
+        let b3 = b2.extend(Point::new(3.0, 1.0));
+        assert!(b3.min.is_close_to(Point::new(1.0, 1.0)));
+        assert!(b3.max.is_close_to(b2.max));
+        let b4 = b3.extend(Point::new(3.0, 5.0));
+        assert!(b4.min.is_close_to(b3.min));
+        assert!(b4.max.is_close_to(Point::new(5.0, 5.0)));
+
         let cubic = Cubic::new((106.0, 0.0), (0.0, 100.0), (382.0, 216.0), (324.0, 14.0));
         let bbox = cubic.bbox(None);
         assert_approx_eq!(bbox.x(), 87.308, 0.001);
