@@ -10,7 +10,7 @@ default = []
 [dependencies]
 log = "0.4.11"
 surface = { path = "../surface" }
-png = { version = "0.16.4", optional = true }
+png = { version = "0.16", optional = true }
 
 [dev-dependencies]
 env_logger = "0.7.1"
