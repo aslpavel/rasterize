@@ -124,6 +124,7 @@ impl Point {
 }
 
 impl From<(Scalar, Scalar)> for Point {
+    #[inline]
     fn from(xy: (Scalar, Scalar)) -> Self {
         Self([xy.0, xy.1])
     }
@@ -152,6 +153,7 @@ impl Mul<Point> for Scalar {
 impl Div<Scalar> for Point {
     type Output = Point;
 
+    #[inline]
     fn div(self, rhs: Scalar) -> Self::Output {
         let Point([x, y]) = self;
         Point([x / rhs, y / rhs])
