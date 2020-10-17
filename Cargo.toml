@@ -1,21 +1,21 @@
 [package]
-name = "rasterize"
-version = "0.1.0"
 authors = ["Pavel Aslanov <asl.pavel@gmail.com>"]
 edition = "2018"
+name = "rasterize"
+version = "0.1.0"
 
 [features]
 default = []
 
 [dependencies]
 log = "0.4.11"
-surface = { path = "../surface" }
-png = { version = "0.16", optional = true }
+png = {version = "0.16", optional = true}
+surface = {path = "../surface"}
 
 [dev-dependencies]
-env_logger = "0.7.1"
 criterion = "0.3"
+env_logger = "0.7"
 
 [[bench]]
-name = "rasterize_bench"
 harness = false
+name = "rasterize_bench"
