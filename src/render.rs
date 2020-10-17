@@ -2726,14 +2726,15 @@ fn signed_difference_line(mut surf: impl SurfaceMut<Item = Scalar>, line: Line) 
     let width = surf.width() as Scalar - 1.0;
     let line = if p0.x() > width || p1.x() > width {
         if p0.x() > width && p1.x() > width {
-            return;
-        }
-        let t = (p0.x() - width) / (p0.x() - p1.x());
-        let mid = Point::new(width, (1.0 - t) * p0.y() + t * p1.y());
-        if p0.x() < width {
-            Line::new(p0, mid)
+            Line::new((width - 0.001, p0.y()), (width - 0.001, p1.y()))
         } else {
-            Line::new(mid, p1)
+            let t = (p0.x() - width) / (p0.x() - p1.x());
+            let mid = Point::new(width, (1.0 - t) * p0.y() + t * p1.y());
+            if p0.x() < width {
+                Line::new(p0, mid)
+            } else {
+                Line::new(mid, p1)
+            }
         }
     } else {
         line
