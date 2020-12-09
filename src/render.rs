@@ -272,7 +272,7 @@ impl Line {
     /// Find intersection point between two line segments
     pub fn intersect_point(&self, other: Line) -> Option<Point> {
         let (t0, t1) = self.intersect(other)?;
-        if t0 >= 0.0 && t0 <= 1.0 && t1 >= 0.0 && t1 <= 1.0 {
+        if (0.0..=1.0).contains(&t0) && (0.0..=1.0).contains(&t1) {
             Some(self.at(t0))
         } else {
             None
@@ -570,14 +570,14 @@ impl Curve for Quad {
         // curve'(t)_x = 0
         if a0.abs() > EPSILON {
             let t0 = -b0 / a0;
-            if t0 >= 0.0 && t0 <= 1.0 {
+            if (0.0..=1.0).contains(&t0) {
                 bbox = bbox.extend(self.at(t0));
             }
         }
         // curve'(t)_y = 0
         if a1.abs() > EPSILON {
             let t1 = -b1 / a1;
-            if t1 >= 0.0 && t1 <= 1.0 {
+            if (0.0..=1.0).contains(&t1) {
                 bbox = bbox.extend(self.at(t1));
             }
         }
@@ -1296,7 +1296,7 @@ impl Segment {
                 let (_, start) = self.ends();
                 let (end, _) = other.ends();
                 match start.intersect(end) {
-                    Some((t0, t1)) if t0 >= 0.0 && t0 <= 1.0 && t1 >= 0.0 && t1 <= 1.0 => {
+                    Some((t0, t1)) if (0.0..=1.0).contains(&t0) && (0.0..=1.0).contains(&t1) => {
                         // ends intersect
                         result.push(bevel.into());
                     }
@@ -1585,12 +1585,12 @@ impl SubPath {
         }
     }
 
-    pub fn flatten<'a>(
-        &'a self,
+    pub fn flatten(
+        &self,
         tr: Transform,
         flatness: Scalar,
         close: bool,
-    ) -> impl Iterator<Item = Line> + 'a {
+    ) -> impl Iterator<Item = Line> + '_ {
         let last = if self.closed || close {
             Some(Line::new(self.end(), self.start()).transform(tr))
         } else {
@@ -2252,7 +2252,7 @@ impl<'a> PathParser<'a> {
     }
 
     /// Consume insignificant separators
-    fn parse_separators(&mut self) -> Result<(), Error> {
+    fn parse_separators(&mut self) {
         while !self.is_eof() {
             match self.text[self.offset] {
                 b' ' | b'\t' | b'\r' | b'\n' | b',' => {
@@ -2261,7 +2261,6 @@ impl<'a> PathParser<'a> {
                 _ => break,
             }
         }
-        Ok(())
     }
 
     /// Check if byte under the cursor is a digit and advance
@@ -2291,7 +2290,7 @@ impl<'a> PathParser<'a> {
 
     /// Parse single scalar
     fn parse_scalar(&mut self) -> Result<Scalar, Error> {
-        self.parse_separators()?;
+        self.parse_separators();
         let start = self.offset;
         self.parse_sign()?;
         let whole = self.parse_digits()?;
@@ -2340,7 +2339,7 @@ impl<'a> PathParser<'a> {
 
     /// Parse SVG flag `0|1` used by elliptic arc command
     fn parse_flag(&mut self) -> Result<bool, Error> {
-        self.parse_separators()?;
+        self.parse_separators();
         match self.current()? {
             b'0' => {
                 self.advance(1);
@@ -2382,7 +2381,7 @@ impl<'a> PathParser<'a> {
     /// Parse SVG path and apply changes to the path builder.
     fn parse(mut self, mut builder: PathBuilder) -> Result<PathBuilder, Error> {
         loop {
-            self.parse_separators()?;
+            self.parse_separators();
             if self.is_eof() {
                 break;
             }
