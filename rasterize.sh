@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-cd $(dirname "${BASH_SOURCE[0]}")
+CARGO=$(dirname $(realpath "${BASH_SOURCE[0]}"))/Cargo.toml
 export RUST_LOG=debug
-exec cargo run --release --example rasterize -- "${@}"
+exec cargo run --manifest-path="$CARGO" --release --example rasterize -- "${@}"
