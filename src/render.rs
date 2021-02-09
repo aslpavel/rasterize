@@ -193,6 +193,8 @@ impl Mul for Point {
     }
 }
 
+type CurveRoots = ArrayIter<[Option<Scalar>; 3]>;
+
 pub trait Curve: Sized {
     /// Iterator returned by flatten method
     type FlattenIter: IntoIterator<Item = Line>;
@@ -226,6 +228,9 @@ pub trait Curve: Sized {
 
     /// Same cruve but in reverse direction.
     fn reverse(&self) -> Self;
+
+    /// Solve for `curve(t)_y = 0`
+    fn roots(&self) -> CurveRoots;
 }
 
 /// Line segment curve
@@ -255,7 +260,7 @@ impl Line {
     /// Find intersection of two lines
     ///
     /// Returns pair of parametric `t` parameters for this line and the other.
-    /// Found by solving `self.at(t0) == self.at(t1)`. Actual intersection of
+    /// Found by solving `self.at(t0) == other.at(t1)`. Actual intersection of
     /// line segments can be found by making sure that `0.0 <= t0 <= 1.0 && 0.0 <= t1 <= 1.0`
     pub fn intersect(&self, other: Line) -> Option<(Scalar, Scalar)> {
         let Line([Point([x1, y1]), Point([x2, y2])]) = *self;
@@ -417,6 +422,18 @@ impl Curve for Line {
     fn reverse(&self) -> Self {
         let Self([p0, p1]) = *self;
         Self([p1, p0])
+    }
+
+    fn roots(&self) -> CurveRoots {
+        let mut result = CurveRoots::new();
+        let Self([Point([_, y0]), Point([_, y1])]) = self;
+        if (y0 - y1).abs() > EPSILON {
+            let t = y0 / (y0 - y1);
+            if (0.0..=1.0).contains(&t) {
+                result.push(t);
+            }
+        }
+        result
     }
 }
 
@@ -592,6 +609,18 @@ impl Curve for Quad {
     fn reverse(&self) -> Self {
         let Self([p0, p1, p2]) = *self;
         Self([p2, p1, p0])
+    }
+
+    fn roots(&self) -> CurveRoots {
+        let mut result = CurveRoots::new();
+        // curve(t)_y = 0
+        let Self([Point([_, y0]), Point([_, y1]), Point([_, y2])]) = *self;
+        let a = y0 - 2.0 * y1 + y2;
+        let b = -2.0 * y0 + 2.0 * y1;
+        let c = y0;
+        dbg!(a, b, c);
+        result.extend(quadratic_solve(a, b, c).filter(|t| (0.0..=1.0).contains(t)));
+        result
     }
 }
 
@@ -844,6 +873,18 @@ impl Curve for Cubic {
         let Self([p0, p1, p2, p3]) = *self;
         Self([p3, p2, p1, p0])
     }
+
+    fn roots(&self) -> CurveRoots {
+        let mut result = CurveRoots::new();
+        // curve(t)_y = 0
+        let Self([Point([_, y0]), Point([_, y1]), Point([_, y2]), Point([_, y3])]) = *self;
+        let a = -y0 + 3.0 * y1 - 3.0 * y2 + y3;
+        let b = 3.0 * y0 - 6.0 * y1 + 3.0 * y2;
+        let c = -3.0 * y0 + 3.0 * y1;
+        let d = y0;
+        result.extend(cubic_solve(a, b, c, d).filter(|t| (0.0..=1.0).contains(t)));
+        result
+    }
 }
 
 /// Recursive cubic offset.
@@ -1093,6 +1134,10 @@ impl Curve for EllipArc {
             eta: self.eta + self.eta_delta,
             eta_delta: -self.eta_delta,
         }
+    }
+
+    fn roots(&self) -> CurveRoots {
+        todo!()
     }
 }
 
@@ -1493,6 +1538,14 @@ impl Curve for Segment {
             Segment::Line(line) => line.reverse().into(),
             Segment::Quad(quad) => quad.reverse().into(),
             Segment::Cubic(cubic) => cubic.reverse().into(),
+        }
+    }
+
+    fn roots(&self) -> CurveRoots {
+        match self {
+            Segment::Line(line) => line.roots(),
+            Segment::Quad(quad) => quad.roots(),
+            Segment::Cubic(cubic) => cubic.roots(),
         }
     }
 }
@@ -2526,15 +2579,17 @@ impl Transform {
     }
 
     /// Find transformation which makes line horizontal with origin at (0, 0).
-    pub fn make_horizontal(line: Line) -> Option<Transform> {
+    pub fn make_horizontal(line: Line) -> Transform {
         let [p0, p1] = line.points();
-        let sin_cos = (p1 - p0).normalize()?;
-        let sin = sin_cos.x();
-        let cos = sin_cos.y();
-        let transform = Transform::default()
-            .matmul(Self([cos, -sin, 0.0, sin, cos, 0.0]))
-            .translate(-p0.x(), -p0.y());
-        Some(transform)
+        let cos_sin = match (p1 - p0).normalize() {
+            None => return Transform::default(),
+            Some(cos_sin) => cos_sin,
+        };
+        let cos = cos_sin.x();
+        let sin = cos_sin.y();
+        Transform::default()
+            .matmul(Self([cos, sin, 0.0, -sin, cos, 0.0]))
+            .translate(-p0.x(), -p0.y())
     }
 
     /// Find transformation that is requred to fit `src` box into `dst`.
@@ -2910,6 +2965,7 @@ pub struct StrokeStyle {
     pub line_cap: LineCap,
 }
 
+/// Solve quadratic equation `a * t ^ 2 + b * t + c = 0` for `t`
 fn quadratic_solve(a: Scalar, b: Scalar, c: Scalar) -> impl Iterator<Item = Scalar> {
     let mut result = ArrayIter::<[Option<Scalar>; 2]>::new();
     if a.abs() < EPSILON {
@@ -2918,12 +2974,12 @@ fn quadratic_solve(a: Scalar, b: Scalar, c: Scalar) -> impl Iterator<Item = Scal
         }
         return result;
     }
-    let det = b * b - 4.0 * a * c;
-    if det.abs() < EPSILON {
+    let disc = b * b - 4.0 * a * c;
+    if disc.abs() < EPSILON {
         result.push(-b / (2.0 * a));
-    } else if det > 0.0 {
-        let sq = det.sqrt();
-        // More stable solution then generic formula:
+    } else if disc > 0.0 {
+        let sq = disc.sqrt();
+        // More stable solution than generic formula:
         // https://people.csail.mit.edu/bkph/articles/Quadratics.pdf
         if b >= 0.0 {
             let mul = -b - sq;
@@ -2936,6 +2992,63 @@ fn quadratic_solve(a: Scalar, b: Scalar, c: Scalar) -> impl Iterator<Item = Scal
         }
     }
     result
+}
+
+/// Solve cubic equation `a * t ^ 3 + b * t ^ 2 + c * t + d = 0` for `t`
+/// Reference: https://www.trans4mind.com/personal_development/mathematics/polynomials/cubicAlgebra.htm
+#[allow(clippy::many_single_char_names)]
+fn cubic_solve(a: Scalar, b: Scalar, c: Scalar, d: Scalar) -> impl Iterator<Item = Scalar> {
+    let mut results = ArrayIter::<[Option<Scalar>; 3]>::new();
+    if a.abs() < EPSILON {
+        results.extend(quadratic_solve(b, c, d));
+        return results;
+    }
+    if d.abs() < EPSILON {
+        results.push(0.0);
+        results.extend(quadratic_solve(a, b, c));
+        return results;
+    }
+
+    // helper to calculate cubic root
+    fn crt(value: Scalar) -> Scalar {
+        if value < 0.0 {
+            -(-value).powf(1.0 / 3.0)
+        } else {
+            value.powf(1.0 / 3.0)
+        }
+    }
+
+    // convert to `t ^ 3 + a * t ^ 2 + b * t + c = 0`
+    let (a, b, c) = (b / a, c / a, d / a);
+
+    // convert to `t ^ 3 + p * t + q = 0`
+    let p = (3.0 * b - a * a) / 3.0;
+    let q = ((2.0 * a * a - 9.0 * b) * a + 27.0 * c) / 27.0;
+    let p3 = p / 3.0;
+    let q2 = q / 2.0;
+    let disc = q2 * q2 + p3 * p3 * p3;
+
+    if disc.abs() < EPSILON {
+        // two roots
+        let u1 = if q2 < 0.0 { crt(-q2) } else { -crt(q2) };
+        results.push(2.0 * u1 - a / 3.0);
+        results.push(-u1 - a / 3.0);
+    } else if disc > 0.0 {
+        // one root
+        let sd = disc.sqrt();
+        results.push(crt(sd - q2) - crt(sd + q2) - a / 3.0);
+    } else {
+        // three roots
+        let r = (-p3 * p3 * p3).sqrt();
+        let phi = clamp(-q / (2.0 * r), -1.0, 1.0).acos();
+        let c = 2.0 * crt(r);
+        let a3 = a / 3.0;
+        results.push(c * (phi / 3.0).cos() - a3);
+        results.push(c * ((phi + 2.0 * PI) / 3.0).cos() - a3);
+        results.push(c * ((phi + 4.0 * PI) / 3.0).cos() - a3);
+    }
+
+    results
 }
 
 fn scalar_fmt(f: &mut fmt::Formatter<'_>, value: Scalar) -> fmt::Result {
@@ -2963,6 +3076,41 @@ mod tests {
         ( $v0:expr, $v1: expr, $e: expr ) => {{
             assert!(($v0 - $v1).abs() < $e, "{} != {}", $v0, $v1);
         }};
+    }
+
+    #[test]
+    fn test_solve() {
+        fn solve_check(a: Scalar, b: Scalar, c: Scalar, d: Scalar, roots: &[Scalar]) {
+            const PREC: Scalar = 0.00001;
+            let mut index = 0;
+            for root in cubic_solve(a, b, c, d) {
+                let value = a * root * root * root + b * root * root + c * root + d;
+                if value.abs() > PREC {
+                    panic!("f(x = {}) = {} != 0", root, value);
+                }
+                match roots.get(index) {
+                    Some(root_ref) => assert_approx_eq!(root, *root_ref, PREC),
+                    None => panic!("result is longer than expected: {:?}", roots),
+                }
+                index += 1;
+            }
+            if index != roots.len() {
+                panic!("result is shorter than expected: {:?}", roots)
+            }
+        }
+
+        // cubic
+        solve_check(1.0, 0.0, -12.0, 16.0, &[-4.0, 2.0]);
+        solve_check(1.0, -6.0, 11.0, -6.0, &[3.0, 1.0, 2.0]);
+        solve_check(23.0, 17.0, -11.0, 13.0, &[-1.38148]);
+
+        // quadratic
+        solve_check(0.0, 1.0, -5.0, 6.0, &[2.0, 3.0]);
+        solve_check(0.0, 1.0, -6.0, 9.0, &[3.0]);
+        solve_check(0.0, 1.0, 3.0, 5.0, &[]);
+
+        // liner
+        solve_check(0.0, 0.0, 5.0, 10.0, &[-2.0]);
     }
 
     #[test]
@@ -3220,6 +3368,12 @@ mod tests {
         let p2 = inv.apply(p1);
         assert_approx_eq!(p2.x(), 1.0, 1e-6);
         assert_approx_eq!(p2.y(), 1.0, 1e-6);
+
+        let l0 = Line::new((1.0, 0.0), (-3.0, 3.0));
+        let l1 = l0.transform(Transform::make_horizontal(l0));
+        assert_eq!(l1.start(), Point::new(0.0, 0.0));
+        assert_approx_eq!(l1.end().x(), 5.0);
+        assert_approx_eq!(l1.end().y(), 0.0, 1e-6);
     }
 
     #[test]
@@ -3348,5 +3502,23 @@ mod tests {
         let mut ps = [p0, p1, p2, Point::new(2.0, -1.0)];
         assert!(polyline_offset(&mut ps, dist));
         assert_eq!(&ps, &[r0, r1, Point::new(5.0, 0.0), Point::new(3.0, -2.0)]);
+    }
+
+    #[test]
+    fn test_roots() {
+        let l = Line::new((0.0, -1.0), (2.0, 1.0));
+        assert_eq!(l.roots().collect::<Vec<_>>(), vec![0.5]);
+
+        let q = Quad::new((0.0, -2.0), (7.0, 6.0), (6.0, -4.0));
+        assert_eq!(
+            q.roots().collect::<Vec<_>>(),
+            vec![0.73841681234051, 0.15047207654837882]
+        );
+
+        let c = Cubic::new((0.0, -2.0), (2.0, 4.0), (4.0, -3.0), (9.0, 1.0));
+        assert_eq!(
+            c.roots().collect::<Vec<_>>(),
+            vec![0.8812186869024836, 0.1627575589800928, 0.5810237541174236]
+        );
     }
 }

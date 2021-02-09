@@ -129,7 +129,7 @@ impl_array!(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
 /// Fixed sized iterator
 ///
 /// This is similar to a smallvec but it never allocates and just panics if you try to fit
-/// more data inside then expected.
+/// more data than expected.
 #[derive(Clone, Copy)]
 pub struct ArrayIter<A> {
     size: usize,
