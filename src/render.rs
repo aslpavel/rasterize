@@ -223,8 +223,8 @@ pub trait Curve: Sized {
     /// Offset curve
     fn offset(&self, dist: Scalar, out: &mut impl Extend<Segment>);
 
-    /// Derivative with respect to t at t.
-    fn deriv_at(&self, t: Scalar) -> Point;
+    /// Derivative with respect to t, `deriv(t) = [curve'(t)_x, curve'(t)_y]`
+    fn deriv(&self) -> Segment;
 
     /// Same cruve but in reverse direction.
     fn reverse(&self) -> Self;
@@ -399,9 +399,9 @@ impl Curve for Line {
         (1.0 - t) * p0 + t * p1
     }
 
-    fn deriv_at(&self, _t: Scalar) -> Point {
-        let Self([p0, p1]) = self;
-        *p1 - *p0
+    fn deriv(&self) -> Segment {
+        let deriv = self.end() - self.start();
+        Line::new(deriv, deriv).into()
     }
 
     fn split_at(&self, t: Scalar) -> (Self, Self) {
@@ -496,12 +496,6 @@ impl Quad {
         2.0 * p2 - *p1
     }
 
-    /// Derivative of the curve `deriv(t) = [curve'(t)_x, curve'(t)_y]`, which will be a Line
-    pub fn deriv(&self) -> Line {
-        let Self([p0, p1, p2]) = *self;
-        Line::new(2.0 * (p1 - p0), 2.0 * (p2 - p1))
-    }
-
     /// Flattness criteria for the cubic curve
     ///
     /// It is equal to `f = maxarg d(t) where d(t) = |q(t) - l(t)|, l(t) = (1 - t) * p0 + t * p2`
@@ -560,8 +554,9 @@ impl Curve for Quad {
         t_2 * p0 + 2.0 * t1 * t_1 * p1 + t2 * p2
     }
 
-    fn deriv_at(&self, t: Scalar) -> Point {
-        self.deriv().at(t)
+    fn deriv(&self) -> Segment {
+        let Self([p0, p1, p2]) = *self;
+        Line::new(2.0 * (p1 - p0), 2.0 * (p2 - p1)).into()
     }
 
     fn split_at(&self, t: Scalar) -> (Self, Self) {
@@ -618,7 +613,6 @@ impl Curve for Quad {
         let a = y0 - 2.0 * y1 + y2;
         let b = -2.0 * y0 + 2.0 * y1;
         let c = y0;
-        dbg!(a, b, c);
         result.extend(quadratic_solve(a, b, c).filter(|t| (0.0..=1.0).contains(t)));
         result
     }
@@ -728,12 +722,6 @@ impl Cubic {
         2.0 * p3 - *p2
     }
 
-    /// Derivative of the curve `deriv(t) = [curve'(t)_x, curve'(t)_y]` which will be a Quad curve
-    pub fn deriv(&self) -> Quad {
-        let Self([p0, p1, p2, p3]) = *self;
-        Quad::new(3.0 * (p1 - p0), 3.0 * (p2 - p1), 3.0 * (p3 - p2))
-    }
-
     /// Flattness criteria for the cubic curve
     ///
     /// It is equal to `f = maxarg d(t) where d(t) = |b(t) - l(t)|, l(t) = (1 - t) * b0 + t * b3`
@@ -824,8 +812,9 @@ impl Curve for Cubic {
         t_3 * p0 + 3.0 * t1 * t_2 * p1 + 3.0 * t2 * t_1 * p2 + t3 * p3
     }
 
-    fn deriv_at(&self, t: Scalar) -> Point {
-        self.deriv().at(t)
+    fn deriv(&self) -> Segment {
+        let Self([p0, p1, p2, p3]) = *self;
+        Quad::new(3.0 * (p1 - p0), 3.0 * (p2 - p1), 3.0 * (p3 - p2)).into()
     }
 
     fn split_at(&self, t: Scalar) -> (Self, Self) {
@@ -1107,7 +1096,7 @@ impl Curve for EllipArc {
         Transform::default().rotate(self.phi).apply(point) + self.center
     }
 
-    fn deriv_at(&self, _t: Scalar) -> Point {
+    fn deriv(&self) -> Segment {
         todo!()
     }
 
@@ -1492,11 +1481,11 @@ impl Curve for Segment {
         }
     }
 
-    fn deriv_at(&self, t: Scalar) -> Point {
+    fn deriv(&self) -> Segment {
         match self {
-            Segment::Line(line) => line.deriv_at(t),
-            Segment::Quad(quad) => quad.deriv_at(t),
-            Segment::Cubic(cubic) => cubic.deriv_at(t),
+            Segment::Line(line) => line.deriv(),
+            Segment::Quad(quad) => quad.deriv(),
+            Segment::Cubic(cubic) => cubic.deriv(),
         }
     }
 
@@ -2999,7 +2988,7 @@ fn quadratic_solve(a: Scalar, b: Scalar, c: Scalar) -> impl Iterator<Item = Scal
 #[allow(clippy::many_single_char_names)]
 fn cubic_solve(a: Scalar, b: Scalar, c: Scalar, d: Scalar) -> impl Iterator<Item = Scalar> {
     let mut results = ArrayIter::<[Option<Scalar>; 3]>::new();
-    if a.abs() < EPSILON {
+    if a.abs() < 1.0 && a.abs().powi(2) < EPSILON {
         results.extend(quadratic_solve(b, c, d));
         return results;
     }

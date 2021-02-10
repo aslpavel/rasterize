@@ -172,6 +172,16 @@ impl<A: Array> ArrayIter<A> {
         self.array.put(self.size, item);
         self.size += 1;
     }
+
+    /// Check if array iterator is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Number of uncosumed elements
+    pub fn len(&self) -> usize {
+        self.size - self.consumed
+    }
 }
 
 impl<A: Array> Extend<A::Item> for ArrayIter<A> {
