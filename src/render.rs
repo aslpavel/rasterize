@@ -1,4 +1,4 @@
-use crate::{clamp, ArrayIter, SurfaceMut, SurfaceOwned};
+use crate::{clamp, ArrayIter, SurfaceMut, SurfaceOwned, M3, M4};
 use std::{
     cmp::min,
     fmt,
@@ -217,6 +217,9 @@ pub trait Curve: Sized {
     /// Split curve at specified parametric value `t` (0.0 .. 1.0)
     fn split_at(&self, t: Scalar) -> (Self, Self);
 
+    /// Create subcurve specified by parametric value (t0..t1)
+    fn cut(&self, t0: Scalar, t1: Scalar) -> Self;
+
     /// Bounding box of the curve given initial bounding box.
     fn bbox(&self, init: Option<BBox>) -> BBox;
 
@@ -410,6 +413,10 @@ impl Curve for Line {
         (Self([*p0, mid]), Self([mid, *p1]))
     }
 
+    fn cut(&self, a: Scalar, b: Scalar) -> Self {
+        Self([self.at(a), self.at(b)])
+    }
+
     fn bbox(&self, init: Option<BBox>) -> BBox {
         let Self([p0, p1]) = *self;
         BBox::new(p0, p1).union_opt(init)
@@ -436,6 +443,22 @@ impl Curve for Line {
         result
     }
 }
+
+// Matrix form for quadratic bezier curve
+#[rustfmt::skip]
+const Q: M3 = M3([
+    1.0,  0.0, 0.0,
+   -2.0,  2.0, 0.0,
+    1.0, -2.0, 1.0,
+]);
+
+// Inverted matrix form for quadratic bezier curve
+#[rustfmt::skip]
+const QI: M3 = M3([
+    1.0, 0.0, 0.0,
+    1.0, 0.5, 0.0,
+    1.0, 1.0, 1.0,
+]);
 
 /// Quadratic bezier curve
 ///
@@ -571,6 +594,36 @@ impl Curve for Quad {
         )
     }
 
+    fn cut(&self, a: Scalar, b: Scalar) -> Self {
+        // Given curve as Q(t) = [1 t t^2] M Q
+        // we can change parameter t -> a + (b - a) * t which will produced desired curve
+        // it is possible to decompose it as
+        //             ┌                         ┐
+        // ┌         ┐ │  1  a       a^2         │
+        // │ 1 t t^2 │ │  0  (b - a) 2*a*(b - a) │ = [1 t t^2] T
+        // └         ┘ │  0  0       (b - a)^2   │
+        //             └                         ┘
+        // we can convert it back to desired curve by Q[a, b](t) = [1 t t^2] Q (QI T Q) P
+        let Self([p0, p1, p2]) = self;
+        let ba = b - a;
+        #[rustfmt::skip]
+        let t = M3([
+            1.0, a  , a * a       ,
+            0.0, ba , 2.0 * a * ba,
+            0.0, 0.0, ba * ba     ,
+        ]);
+        #[rustfmt::skip]
+        let M3([
+            m00, m01, m02,
+            m10, m11, m12,
+            m20, m21, m22,
+        ]) = QI * t * Q;
+        let q0 = m00 * p0 + m01 * p1 + m02 * p2;
+        let q1 = m10 * p0 + m11 * p1 + m12 * p2;
+        let q2 = m20 * p0 + m21 * p1 + m22 * p2;
+        Self([q0, q1, q2])
+    }
+
     fn bbox(&self, init: Option<BBox>) -> BBox {
         let Self([p0, p1, p2]) = self;
         let mut bbox = BBox::new(*p0, *p2).union_opt(init);
@@ -647,6 +700,24 @@ fn quad_offset_rec(quad: Quad, dist: Scalar, out: &mut impl Extend<Segment>, dep
         }
     }
 }
+
+/// Matrix form for cubic bezier curve
+#[rustfmt::skip]
+const C: M4 = M4([
+    1.0,  0.0,  0.0, 0.0,
+   -3.0,  3.0,  0.0, 0.0,
+    3.0, -6.0,  3.0, 0.0,
+   -1.0,  3.0, -3.0, 1.0,
+]);
+
+/// Inverted matrix form for cubic bezier curve
+#[rustfmt::skip]
+const CI: M4 = M4([
+    1.0, 0.0      , 0.0      , 0.0,
+    1.0, 1.0 / 3.0, 0.0      , 0.0,
+    1.0, 2.0 / 3.0, 1.0 / 3.0, 0.0,
+    1.0, 1.0      , 1.0      , 1.0,
+]);
 
 /// Cubic bezier curve
 ///
@@ -837,6 +908,40 @@ impl Curve for Cubic {
             *p3,
         ]);
         (c0, c1)
+    }
+
+    fn cut(&self, a: Scalar, b: Scalar) -> Self {
+        // Given curve as C(t) = [1 t t^2 t^3] M C
+        // we can change parameter t -> a + (b - a) * t which will produced desired curve
+        // it is possible to decompose it as
+        //                 ┌                                       ┐
+        // ┌             ┐ │  1  a       a^2         a^3           │
+        // │ 1 t t^2 t^3 │ │  0  (b - a) 2*a*(b - a) 3*a^2*(b - a) │ = [1 t t^2 t^3] T
+        // └             ┘ │  0  0       (b - a)^2   3*a*(b - a)^2 │
+        //                 │  0  0       0           (b - a)^3     │
+        //                 └                                       ┘
+        // we can convert it back to desired curve by C[a, b](t) = [1 t t^2 t^3] C (CI T C) P
+        let Self([p0, p1, p2, p3]) = self;
+        let ba = b - a;
+        #[rustfmt::skip]
+        let t = M4([
+            1.0, a  , a * a       , a * a * a        ,
+            0.0, ba , 2.0 * a * ba, 3.0 * a * a * ba ,
+            0.0, 0.0, ba * ba     , 3.0 * a * ba * ba,
+            0.0, 0.0, 0.0         , ba * ba * ba     ,
+        ]);
+        #[rustfmt::skip]
+        let M4([
+            m00, m01, m02, m03,
+            m10, m11, m12, m13,
+            m20, m21, m22, m23,
+            m30, m31, m32, m33,
+        ]) = CI * t * C;
+        let c0 = m00 * p0 + m01 * p1 + m02 * p2 + m03 * p3;
+        let c1 = m10 * p0 + m11 * p1 + m12 * p2 + m13 * p3;
+        let c2 = m20 * p0 + m21 * p1 + m22 * p2 + m23 * p3;
+        let c3 = m30 * p0 + m31 * p1 + m32 * p2 + m33 * p3;
+        Self([c0, c1, c2, c3])
     }
 
     fn bbox(&self, init: Option<BBox>) -> BBox {
@@ -1101,6 +1206,10 @@ impl Curve for EllipArc {
     }
 
     fn split_at(&self, _t: Scalar) -> (Self, Self) {
+        todo!()
+    }
+
+    fn cut(&self, _a: Scalar, _b: Scalar) -> Self {
         todo!()
     }
 
@@ -1503,6 +1612,14 @@ impl Curve for Segment {
                 let (c0, c1) = cubic.split_at(t);
                 (c0.into(), c1.into())
             }
+        }
+    }
+
+    fn cut(&self, a: Scalar, b: Scalar) -> Self {
+        match self {
+            Segment::Line(line) => line.cut(a, b).into(),
+            Segment::Quad(quad) => quad.cut(a, b).into(),
+            Segment::Cubic(cubic) => cubic.cut(a, b).into(),
         }
     }
 
@@ -3400,11 +3517,18 @@ mod tests {
     }
 
     #[test]
-    fn test_split_at() {
-        let cubic = Cubic::new((3.0, 7.0), (2.0, 8.0), (0.0, 3.0), (6.0, 5.0));
-        assert_eq!(cubic.split(), cubic.split_at(0.5));
-        let quad = Quad::new((0.0, 0.0), (8.0, 5.0), (4.0, 0.0));
-        assert_eq!(quad.split(), quad.split_at(0.5));
+    fn test_split() {
+        let q = Quad::new((0.0, 0.0), (8.0, 5.0), (4.0, 0.0));
+        let (ql, qr) = q.split();
+        assert_eq!((ql, qr), q.split_at(0.5));
+        assert_eq!(ql, q.cut(0.0, 0.5));
+        assert_eq!(qr, q.cut(0.5, 1.0));
+
+        let c = Cubic::new((3.0, 7.0), (2.0, 8.0), (0.0, 3.0), (6.0, 5.0));
+        let (cl, cr) = c.split();
+        assert_eq!((cl, cr), c.split_at(0.5));
+        assert_eq!(cl, c.cut(0.0, 0.5));
+        assert_eq!(cr, c.cut(0.5, 1.0));
     }
 
     #[test]
@@ -3509,5 +3633,48 @@ mod tests {
             c.roots().collect::<Vec<_>>(),
             vec![0.8812186869024836, 0.1627575589800928, 0.5810237541174236]
         );
+
+        let c: Cubic = "M8,-1 C1,3 6,-3 9,1".parse().unwrap();
+        assert_eq!(
+            c.roots().collect::<Vec<_>>(),
+            vec![0.8872983346207419, 0.11270166537925835, 0.4999999999999995]
+        );
+    }
+
+    #[test]
+    fn test_matmul() {
+        #[rustfmt::skip]
+        let i3 = [
+            1.0, 0.0, 0.0,
+            0.0, 1.0, 0.0,
+            0.0, 0.0, 1.0
+        ];
+        let M3(q) = Q * QI;
+        assert_eq!(i3.len(), q.len());
+        for (v0, v1) in i3.iter().zip(q.iter()) {
+            assert_approx_eq!(v0, v1);
+        }
+
+        #[rustfmt::skip]
+        let i4 = [
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0,
+        ];
+        let M4(c) = C * CI;
+        assert_eq!(i4.len(), c.len());
+        for (v0, v1) in i4.iter().zip(c.iter()) {
+            assert_approx_eq!(v0, v1);
+        }
+
+        let m0 = M3([31.0, 11.0, 21.0, 12.0, 19.0, 3.0, 18.0, 25.0, 16.0]);
+        let m1 = M3([19.0, 7.0, 14.0, 1.0, 0.0, 12.0, 10.0, 29.0, 29.0]);
+        let r = [
+            810.0, 826.0, 1175.0, 277.0, 171.0, 483.0, 527.0, 590.0, 1016.0,
+        ];
+        for (v0, v1) in (m0 * m1).0.iter().zip(&r) {
+            assert_approx_eq!(v0, v1);
+        }
     }
 }

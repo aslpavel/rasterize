@@ -1,6 +1,6 @@
 #![deny(warnings)]
 
-use std::{fmt, io::Write, iter::FromIterator};
+use std::{fmt, io::Write, iter::FromIterator, ops::Mul};
 pub mod render;
 pub use render::{
     Align, BBox, Cubic, Curve, Error, FillRule, Line, LineCap, LineJoin, Path, Point, Quad, Scalar,
@@ -222,5 +222,47 @@ impl<A: Array> Iterator for ArrayIter<A> {
     fn size_hint(&self) -> (usize, Option<usize>) {
         let size = self.size - self.consumed;
         (size, Some(size))
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct M3([Scalar; 9]);
+
+impl Mul<M3> for M3 {
+    type Output = M3;
+
+    fn mul(self, other: Self) -> Self::Output {
+        let M3(a) = self;
+        let M3(b) = other;
+        let mut out = [0.0; 9];
+        for i in 0..3 {
+            for j in 0..3 {
+                for k in 0..3 {
+                    out[k + 3 * i] += a[j + 3 * i] * b[k + 3 * j];
+                }
+            }
+        }
+        M3(out)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct M4([Scalar; 16]);
+
+impl Mul<M4> for M4 {
+    type Output = M4;
+
+    fn mul(self, other: Self) -> Self::Output {
+        let M4(a) = self;
+        let M4(b) = other;
+        let mut out = [0.0; 16];
+        for i in 0..4 {
+            for j in 0..4 {
+                for k in 0..4 {
+                    out[k + 4 * i] += a[j + 4 * i] * b[k + 4 * j];
+                }
+            }
+        }
+        M4(out)
     }
 }
