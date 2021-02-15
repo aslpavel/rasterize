@@ -17,7 +17,7 @@ pub const FLATNESS: Scalar = 0.05;
 
 /// Value representing a point or a 2D vector.
 #[derive(Clone, Copy, PartialEq)]
-pub struct Point([Scalar; 2]);
+pub struct Point(pub [Scalar; 2]);
 
 impl fmt::Debug for Point {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -1775,6 +1775,13 @@ impl SubPath {
             .fold(init, |bbox, seg| Some(seg.transform(tr).bbox(bbox)))
             .expect("SubPath is never empty")
     }
+
+    pub fn reverse(&self) -> Self {
+        Self {
+            segments: self.segments.iter().rev().map(|s| s.reverse()).collect(),
+            closed: self.closed,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -1902,6 +1909,13 @@ impl Path {
             .fold(None, |bbox, subpath| Some(subpath.bbox(bbox, tr)))
     }
 
+    /// Rreverse order and direction of all segments
+    pub fn reverse(&self) -> Self {
+        Self {
+            subpaths: self.subpaths.iter().map(|s| s.reverse()).collect(),
+        }
+    }
+
     /// Rasterize mast for the path in into a provided surface.
     ///
     /// Everything that is outside of the surface will be cropped. Surface is assumed
@@ -2008,7 +2022,8 @@ impl Path {
         let mut buffer = Vec::new();
         input.read_to_end(&mut buffer)?;
         let parser = PathParser::new(&buffer);
-        let builder = parser.parse(PathBuilder::new())?;
+        let mut builder = PathBuilder::new();
+        parser.parse(&mut builder)?;
         Ok(builder.build())
     }
 }
@@ -2188,24 +2203,25 @@ impl PathBuilder {
     }
 
     /// Build path
-    pub fn build(self) -> Path {
+    pub fn build(&mut self) -> Path {
         let PathBuilder {
             subpath,
             mut subpaths,
             ..
-        } = self;
+        } = std::mem::replace(self, Default::default());
         subpaths.extend(SubPath::new(subpath, false));
         Path::new(subpaths)
     }
 
     /// Extend path from string, which is specified in the same format as SVGs path element.
-    pub fn append_svg_path(self, string: impl AsRef<[u8]>) -> Result<Self, Error> {
+    pub fn append_svg_path(&mut self, string: impl AsRef<[u8]>) -> Result<&mut Self, Error> {
         let parser = PathParser::new(string.as_ref());
-        parser.parse(self)
+        parser.parse(self)?;
+        Ok(self)
     }
 
     /// Move current position, ending current subpath
-    pub fn move_to(mut self, p: impl Into<Point>) -> Self {
+    pub fn move_to(&mut self, p: impl Into<Point>) -> &mut Self {
         let subpath = std::mem::replace(&mut self.subpath, Vec::new());
         self.subpaths.extend(SubPath::new(subpath, false));
         self.position = p.into();
@@ -2213,7 +2229,7 @@ impl PathBuilder {
     }
 
     /// Close current subpath
-    pub fn close(mut self) -> Self {
+    pub fn close(&mut self) -> &mut Self {
         let subpath = std::mem::replace(&mut self.subpath, Vec::new());
         if let Some(seg) = subpath.first() {
             self.position = seg.start();
@@ -2223,7 +2239,7 @@ impl PathBuilder {
     }
 
     /// Add line from the current position to the specified point
-    pub fn line_to(mut self, p: impl Into<Point>) -> Self {
+    pub fn line_to(&mut self, p: impl Into<Point>) -> &mut Self {
         let p = p.into();
         if !self.position.is_close_to(p) {
             let line = Line::new(self.position, p);
@@ -2234,7 +2250,7 @@ impl PathBuilder {
     }
 
     /// Add quadratic bezier curve
-    pub fn quad_to(mut self, p1: impl Into<Point>, p2: impl Into<Point>) -> Self {
+    pub fn quad_to(&mut self, p1: impl Into<Point>, p2: impl Into<Point>) -> &mut Self {
         let quad = Quad::new(self.position, p1, p2);
         self.position = quad.end();
         self.subpath.push(quad.into());
@@ -2242,7 +2258,7 @@ impl PathBuilder {
     }
 
     /// Add smooth quadratic bezier curve
-    pub fn quad_smooth_to(self, p2: impl Into<Point>) -> Self {
+    pub fn quad_smooth_to(&mut self, p2: impl Into<Point>) -> &mut Self {
         let p1 = match self.subpath.last() {
             Some(Segment::Quad(quad)) => quad.smooth(),
             _ => self.position,
@@ -2252,11 +2268,11 @@ impl PathBuilder {
 
     /// Add cubic beizer curve
     pub fn cubic_to(
-        mut self,
+        &mut self,
         p1: impl Into<Point>,
         p2: impl Into<Point>,
         p3: impl Into<Point>,
-    ) -> Self {
+    ) -> &mut Self {
         let cubic = Cubic::new(self.position, p1, p2, p3);
         self.position = cubic.end();
         self.subpath.push(cubic.into());
@@ -2264,7 +2280,7 @@ impl PathBuilder {
     }
 
     /// Add smooth cubic bezier curve
-    pub fn cubic_smooth_to(self, p2: impl Into<Point>, p3: impl Into<Point>) -> Self {
+    pub fn cubic_smooth_to(&mut self, p2: impl Into<Point>, p3: impl Into<Point>) -> &mut Self {
         let p1 = match self.subpath.last() {
             Some(Segment::Cubic(cubic)) => cubic.smooth(),
             _ => self.position,
@@ -2274,13 +2290,13 @@ impl PathBuilder {
 
     /// Add elliptic arc segment
     pub fn arc_to(
-        mut self,
+        &mut self,
         radii: impl Into<Point>,
         x_axis_rot: Scalar,
         large: bool,
         sweep: bool,
         p: impl Into<Point>,
-    ) -> Self {
+    ) -> &mut Self {
         let radii: Point = radii.into();
         let p = p.into();
         let arc = EllipArc::new_param(
@@ -2305,7 +2321,7 @@ impl PathBuilder {
     /// Add circle with the center at current position and provided radius.
     ///
     /// Current position is not changed after invocation.
-    pub fn circle(self, radius: Scalar) -> Self {
+    pub fn circle(&mut self, radius: Scalar) -> &mut Self {
         // https://stackoverflow.com/questions/1734745/how-to-create-circle-with-b%C3%A9zier-curves
         // (4/3)*tan(pi/8) = 4*(sqrt(2)-1)/3 = 0.5522847498307935
         let offset = 0.5522847498307935 * radius;
@@ -2336,8 +2352,9 @@ impl FromStr for Path {
     type Err = Error;
 
     fn from_str(text: &str) -> Result<Path, Self::Err> {
+        let mut builder = PathBuilder::new();
         let parser = PathParser::new(text.as_ref());
-        let builder = parser.parse(PathBuilder::new())?;
+        parser.parse(&mut builder)?;
         Ok(builder.build())
     }
 }
@@ -2538,7 +2555,7 @@ impl<'a> PathParser<'a> {
     }
 
     /// Parse SVG path and apply changes to the path builder.
-    fn parse(mut self, mut builder: PathBuilder) -> Result<PathBuilder, Error> {
+    fn parse(mut self, builder: &mut PathBuilder) -> Result<(), Error> {
         loop {
             self.parse_separators();
             if self.is_eof() {
@@ -2546,9 +2563,13 @@ impl<'a> PathParser<'a> {
             }
             self.position = builder.position();
             let cmd = self.parse_cmd()?;
-            builder = match cmd {
-                b'M' | b'm' => builder.move_to(self.parse_point()?),
-                b'L' | b'l' => builder.line_to(self.parse_point()?),
+            match cmd {
+                b'M' | b'm' => {
+                    builder.move_to(self.parse_point()?);
+                }
+                b'L' | b'l' => {
+                    builder.line_to(self.parse_point()?);
+                }
                 b'V' | b'v' => {
                     let y = self.parse_scalar()?;
                     let p0 = builder.position();
@@ -2557,7 +2578,7 @@ impl<'a> PathParser<'a> {
                     } else {
                         Point::new(p0.x(), y)
                     };
-                    builder.line_to(p1)
+                    builder.line_to(p1);
                 }
                 b'H' | b'h' => {
                     let x = self.parse_scalar()?;
@@ -2567,16 +2588,24 @@ impl<'a> PathParser<'a> {
                     } else {
                         Point::new(x, p0.y())
                     };
-                    builder.line_to(p1)
+                    builder.line_to(p1);
                 }
-                b'Q' | b'q' => builder.quad_to(self.parse_point()?, self.parse_point()?),
-                b'T' | b't' => builder.quad_smooth_to(self.parse_point()?),
-                b'C' | b'c' => builder.cubic_to(
-                    self.parse_point()?,
-                    self.parse_point()?,
-                    self.parse_point()?,
-                ),
-                b'S' | b's' => builder.cubic_smooth_to(self.parse_point()?, self.parse_point()?),
+                b'Q' | b'q' => {
+                    builder.quad_to(self.parse_point()?, self.parse_point()?);
+                }
+                b'T' | b't' => {
+                    builder.quad_smooth_to(self.parse_point()?);
+                }
+                b'C' | b'c' => {
+                    builder.cubic_to(
+                        self.parse_point()?,
+                        self.parse_point()?,
+                        self.parse_point()?,
+                    );
+                }
+                b'S' | b's' => {
+                    builder.cubic_smooth_to(self.parse_point()?, self.parse_point()?);
+                }
                 b'A' | b'a' => {
                     let rx = self.parse_scalar()?;
                     let ry = self.parse_scalar()?;
@@ -2584,13 +2613,15 @@ impl<'a> PathParser<'a> {
                     let large_flag = self.parse_flag()?;
                     let sweep_flag = self.parse_flag()?;
                     let dst = self.parse_point()?;
-                    builder.arc_to((rx, ry), x_axis_rot, large_flag, sweep_flag, dst)
+                    builder.arc_to((rx, ry), x_axis_rot, large_flag, sweep_flag, dst);
                 }
-                b'Z' | b'z' => builder.close(),
+                b'Z' | b'z' => {
+                    builder.close();
+                }
                 _ => unreachable!(),
             }
         }
-        Ok(builder)
+        Ok(())
     }
 }
 

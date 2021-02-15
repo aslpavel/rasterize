@@ -124,25 +124,26 @@ fn outline(path: &Path) -> Path {
     let mut output = path.stroke(stroke_style);
     for subpath in path.subpaths().iter() {
         for segment in subpath.segments() {
-            let control = match segment {
-                Segment::Line(_) => Path::builder(),
+            let mut control = Path::builder();
+            match segment {
+                Segment::Line(_) => {}
                 Segment::Quad(quad) => {
                     let [p0, p1, p2] = quad.points();
-                    Path::builder()
+                    control
                         .move_to(p0)
                         .line_to(p1)
                         .circle(control_radius)
-                        .line_to(p2)
+                        .line_to(p2);
                 }
                 Segment::Cubic(cubic) => {
                     let [p0, p1, p2, p3] = cubic.points();
-                    Path::builder()
+                    control
                         .move_to(p0)
                         .line_to(p1)
                         .circle(control_radius)
                         .move_to(p3)
                         .line_to(p2)
-                        .circle(control_radius)
+                        .circle(control_radius);
                 }
             };
             output.extend(
