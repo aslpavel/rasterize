@@ -132,8 +132,8 @@ impl_array!(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
 /// more data than expected.
 #[derive(Clone, Copy)]
 pub struct ArrayIter<A> {
-    size: usize,
-    consumed: usize,
+    start: usize,
+    end: usize,
     array: A,
 }
 
@@ -144,7 +144,7 @@ where
 {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut list = fmt.debug_list();
-        for index in self.consumed..self.size {
+        for index in self.start..self.end {
             self.array.at(index).map(|item| list.entry(item));
         }
         list.finish()?;
@@ -161,16 +161,16 @@ impl<A: Array> Default for ArrayIter<A> {
 impl<A: Array> ArrayIter<A> {
     pub fn new() -> Self {
         Self {
-            consumed: 0,
-            size: 0,
+            start: 0,
+            end: 0,
             array: A::new(),
         }
     }
 
     /// Push new element to the end of the iterator
     pub fn push(&mut self, item: A::Item) {
-        self.array.put(self.size, item);
-        self.size += 1;
+        self.array.put(self.end, item);
+        self.end += 1;
     }
 
     /// Check if array iterator is empty
@@ -180,7 +180,7 @@ impl<A: Array> ArrayIter<A> {
 
     /// Number of uncosumed elements
     pub fn len(&self) -> usize {
-        self.size - self.consumed
+        self.end - self.start
     }
 }
 
@@ -210,9 +210,9 @@ impl<A: Array> Iterator for ArrayIter<A> {
     type Item = A::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.consumed < self.size {
-            let item = self.array.take(self.consumed);
-            self.consumed += 1;
+        if self.start < self.end {
+            let item = self.array.take(self.start);
+            self.start += 1;
             item
         } else {
             None
@@ -220,8 +220,19 @@ impl<A: Array> Iterator for ArrayIter<A> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let size = self.size - self.consumed;
+        let size = self.end - self.start;
         (size, Some(size))
+    }
+}
+
+impl<A: Array> DoubleEndedIterator for ArrayIter<A> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.start < self.end {
+            self.end -= 1;
+            self.array.take(self.end)
+        } else {
+            None
+        }
     }
 }
 

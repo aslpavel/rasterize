@@ -3677,4 +3677,21 @@ mod tests {
             assert_approx_eq!(v0, v1);
         }
     }
+
+    #[test]
+    fn test_array_iter() {
+        let mut iter: ArrayIter<[Option<u32>; 5]> = (0..5).collect();
+        assert_eq!(iter.len(), 5);
+        assert!(!iter.is_empty());
+        assert_eq!(iter.next(), Some(0));
+        assert_eq!(iter.next_back(), Some(4));
+        assert_eq!(iter.next(), Some(1));
+        assert_eq!(iter.len(), 2);
+        assert_eq!(iter.next_back(), Some(3));
+        assert_eq!(iter.next_back(), Some(2));
+        assert_eq!(iter.len(), 0);
+        assert!(iter.is_empty());
+        assert_eq!(iter.next(), None);
+        assert_eq!(iter.next_back(), None);
+    }
 }
