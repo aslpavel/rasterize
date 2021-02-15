@@ -2342,6 +2342,43 @@ impl PathBuilder {
             .move_to(center)
     }
 
+    /// Add box with rounded corners, with current position being low-x and low-y coordinate
+    pub fn rbox(&mut self, size: impl Into<Point>, radii: impl Into<Point>) -> &mut Self {
+        let Point([rx, ry]) = radii.into();
+        let rx = rx.abs();
+        let ry = ry.abs();
+        let radii = Point::new(rx, ry);
+
+        let size = size.into();
+        let lx = self.position.x();
+        let ly = self.position.y();
+        let hx = lx + size.x().abs();
+        let hy = ly + size.y().abs();
+        let rounded = rx > EPSILON && ry > EPSILON;
+
+        if 2.0 * rx > hx - lx || 2.0 * ry > hy - ly {
+            return self;
+        }
+
+        self.move_to((lx + rx, ly)).line_to((hx - rx, ly));
+        if rounded {
+            self.arc_to(radii, 0.0, false, true, (hx, ly + ry));
+        }
+        self.line_to((hx, hy - ry));
+        if rounded {
+            self.arc_to(radii, 0.0, false, true, (hx - rx, hy));
+        }
+        self.line_to((lx + rx, hy));
+        if rounded {
+            self.arc_to(radii, 0.0, false, true, (lx, hy - ry));
+        }
+        self.line_to((lx, ly + ry));
+        if rounded {
+            self.arc_to(radii, 0.0, false, true, (lx + rx, ly));
+        }
+        self.close().move_to(Point::new(lx, ly))
+    }
+
     /// Current possition of the builder
     pub fn position(&self) -> Point {
         self.position
