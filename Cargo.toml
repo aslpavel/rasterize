@@ -8,13 +8,13 @@ version = "0.1.0"
 default = []
 
 [dependencies]
-log = "0.4.11"
 png = {version = "0.16", optional = true}
 surface = {path = "../surface"}
 
 [dev-dependencies]
 criterion = "0.3"
 env_logger = "0.7"
+log = "0.4"
 
 [[bench]]
 harness = false

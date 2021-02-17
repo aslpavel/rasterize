@@ -1,7 +1,9 @@
+#![deny(warnings)]
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use rasterize::{
-    render::{Cubic, FLATNESS},
-    FillRule, LineCap, LineJoin, Path, StrokeStyle, SurfaceMut, Transform,
+    Cubic, Curve, FillRule, LineCap, LineJoin, Path, StrokeStyle, SurfaceMut, Transform,
+    DEFAULT_FLATNESS,
 };
 use std::{fs::File, io::Read, time::Duration};
 
@@ -50,7 +52,7 @@ fn large_path_benchmark(c: &mut Criterion) {
         b.iter_with_large_drop(|| path_str.parse::<Path>())
     });
     group.bench_function("flatten", |b| {
-        b.iter(|| path.flatten(tr, FLATNESS, true).count())
+        b.iter(|| path.flatten(tr, DEFAULT_FLATNESS, true).count())
     });
     group.bench_function("bbox", |b| b.iter(|| path.bbox(tr)));
     group.bench_function("rasterize", |b| {

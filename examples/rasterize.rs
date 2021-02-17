@@ -3,14 +3,22 @@
 
 use env_logger::Env;
 use rasterize::{
-    surf_to_ppm, timeit, Align, BBox, Curve, FillRule, LineCap, LineJoin, Path, Point, Scalar,
-    Segment, StrokeStyle, Surface, Transform,
+    surf_to_ppm, Align, BBox, Curve, FillRule, LineCap, LineJoin, Path, Point, Scalar, Segment,
+    StrokeStyle, Surface, Transform,
 };
 use std::{
     env, fmt,
     fs::File,
     io::{BufWriter, Read},
 };
+
+/// Add debug log message with time taken to execute provided function
+fn timeit<F: FnOnce() -> R, R>(msg: &str, f: F) -> R {
+    let start = std::time::Instant::now();
+    let result = f();
+    log::debug!("{} {:?}", msg, start.elapsed());
+    result
+}
 
 type Error = Box<dyn std::error::Error>;
 
