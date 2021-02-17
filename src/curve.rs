@@ -1,3 +1,5 @@
+//! All the things you need to handle bezier curves
+
 use crate::{
     cubic_solve, quadratic_solve, ArrayIter, BBox, EllipArc, Error, LineCap, LineJoin, M3x3, M4x4,
     Path, Point, Scalar, StrokeStyle, Transform, EPSILON,

@@ -11,13 +11,30 @@ use std::{
     usize,
 };
 
-/// flatness of 0.05px gives good accuracy tradeoff
+/// Default flatness used during rasterizetion.
+/// Value of 0.05px gives good accuracy tradeoff.
 pub const DEFAULT_FLATNESS: Scalar = 0.05;
 
+/// The algorithm to use to determine the inside part of a shape, when filling it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum FillRule {
+    /// Fill area with non-zero winding number
+    NonZero,
+    /// Fill area with odd winding number
+    EvenOdd,
+}
+
+/// `LineJoin` defines the shape to be used at the corners of paths when they are stroked.
+/// See [SVG specification](https://www.w3.org/TR/SVG2/painting.html#LineJoin) for more details.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum LineJoin {
+    /// Continue path segments with lines untill they intersect. But only
+    /// if `miter_length = stroke-width / sin(0.5 * eta)` is less than the miter argument.
     Miter(Scalar),
+    /// Connect path segments with straigh line.
     Bevel,
+    /// Round corner is to be used to join path segments.
+    /// The corner is a circular sector centered on the join point.
     Round,
 }
 
@@ -27,10 +44,15 @@ impl Default for LineJoin {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+/// `LineCap` specifies the shape to be used at the end of open subpaths when they are stroked.
+/// See [SVG specification](https://www.w3.org/TR/SVG2/painting.html#LineCaps) for more details.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum LineCap {
+    /// Connect path segments with straight line.
     Butt,
+    /// Add half-square to the end of the segments
     Square,
+    /// Add half-circle to the end of the segments
     Round,
 }
 
@@ -40,10 +62,14 @@ impl Default for LineCap {
     }
 }
 
+/// Style used to generate stroke
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct StrokeStyle {
+    /// Width of the stroke
     pub width: Scalar,
+    /// How to join offset segments
     pub line_join: LineJoin,
+    /// How to join segments at the ends of the path
     pub line_cap: LineCap,
 }
 
@@ -79,7 +105,8 @@ impl SubPath {
         }
     }
 
-    pub fn closed(&self) -> bool {
+    /// Whether sub-path is closed or not
+    pub fn is_closed(&self) -> bool {
         self.closed
     }
 
@@ -87,10 +114,12 @@ impl SubPath {
         &self.segments
     }
 
+    /// First segment in the sub-path
     pub fn first(&self) -> Segment {
         *self.segments.first().expect("SubPath is never emtpy")
     }
 
+    /// Last segment in the sub-path
     pub fn last(&self) -> Segment {
         *self.segments.last().expect("SubPath is never empty")
     }
@@ -119,14 +148,17 @@ impl SubPath {
             .chain(last)
     }
 
+    /// Start point of the sub-path
     pub fn start(&self) -> Point {
         self.first().start()
     }
 
+    /// End point of the sub-path
     pub fn end(&self) -> Point {
         self.last().end()
     }
 
+    /// Bounding box of the sub-path
     pub fn bbox(&self, init: Option<BBox>, tr: Transform) -> BBox {
         self.segments
             .iter()
@@ -134,18 +166,13 @@ impl SubPath {
             .expect("SubPath is never empty")
     }
 
+    /// Create new sub-path with reversed direction
     pub fn reverse(&self) -> Self {
         Self {
             segments: self.segments.iter().rev().map(|s| s.reverse()).collect(),
             closed: self.closed,
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum FillRule {
-    NonZero,
-    EvenOdd,
 }
 
 /// Collection of the SubPath treated as a signle unit
@@ -173,6 +200,7 @@ impl Path {
         Self { subpaths }
     }
 
+    /// Create empty path
     pub fn empty() -> Self {
         Self {
             subpaths: Default::default(),
@@ -209,7 +237,6 @@ impl Path {
     ///
     /// Stroked path is the path constructed from original by offsetting by `distance/2` and
     /// joinging it with the path offsetted by `-distance/2`.
-    /// Resource usefull for debugging: https://yqnn.github.io/svg-path-editor/
     pub fn stroke(&self, style: StrokeStyle) -> Path {
         let mut subpaths = Vec::new();
         for subpath in self.subpaths.iter() {
@@ -220,7 +247,7 @@ impl Path {
             }
             let mut backward = subpath.segments.iter().rev().map(Segment::reverse);
             // close subpath
-            if subpath.closed() {
+            if subpath.is_closed() {
                 let segments = stroke_close(subpath, &mut segments, style, true);
                 subpaths.extend(SubPath::new(segments, true));
             } else {
@@ -234,7 +261,7 @@ impl Path {
                 stroke_segment(&mut segments, segment, style, Segment::line_join);
             }
             // close subpath
-            if subpath.closed() {
+            if subpath.is_closed() {
                 let segments = stroke_close(subpath, &mut segments, style, false);
                 subpaths.extend(SubPath::new(segments, true));
             } else {
@@ -361,7 +388,7 @@ impl Path {
                     }
                 }
             }
-            if subpath.closed() {
+            if subpath.is_closed() {
                 out.write_all(b"Z")?;
             }
         }
@@ -459,9 +486,9 @@ pub struct PathFlattenIter<'a> {
     transform: Transform,
     flatness: Scalar,
     close: bool,
-    subpath: usize,
-    segment: usize,
-    stack: Vec<Result<Cubic, Quad>>,
+    subpath_index: usize,
+    segment_index: usize,
+    stack: Vec<Segment>,
 }
 
 impl<'a> PathFlattenIter<'a> {
@@ -471,8 +498,8 @@ impl<'a> PathFlattenIter<'a> {
             transform,
             flatness: 16.0 * flatness * flatness,
             close,
-            subpath: 0,
-            segment: 0,
+            subpath_index: 0,
+            segment_index: 0,
             stack: Default::default(),
         }
     }
@@ -484,28 +511,20 @@ impl<'a> Iterator for PathFlattenIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.stack.pop() {
-                Some(Ok(cubic)) => {
-                    if cubic.flatness() < self.flatness {
-                        return Some(Line::new(cubic.start(), cubic.end()));
+                Some(segment) => {
+                    if segment.flatness() < self.flatness {
+                        return Some(Line::new(segment.start(), segment.end()));
                     }
-                    let (c0, c1) = cubic.split();
-                    self.stack.push(Ok(c1));
-                    self.stack.push(Ok(c0));
-                }
-                Some(Err(quad)) => {
-                    if quad.flatness() < self.flatness {
-                        return Some(Line::new(quad.start(), quad.end()));
-                    }
-                    let (q0, q1) = quad.split();
-                    self.stack.push(Err(q1));
-                    self.stack.push(Err(q0));
+                    let (s0, s1) = segment.split();
+                    self.stack.push(s1.into());
+                    self.stack.push(s0.into());
                 }
                 None => {
-                    let subpath = self.path.subpaths.get(self.subpath)?;
-                    match subpath.segments().get(self.segment) {
+                    let subpath = self.path.subpaths.get(self.subpath_index)?;
+                    match subpath.segments().get(self.segment_index) {
                         None => {
-                            self.subpath += 1;
-                            self.segment = 0;
+                            self.subpath_index += 1;
+                            self.segment_index = 0;
                             if subpath.closed || self.close {
                                 let line = Line::new(subpath.end(), subpath.start())
                                     .transform(self.transform);
@@ -513,16 +532,8 @@ impl<'a> Iterator for PathFlattenIter<'a> {
                             }
                         }
                         Some(segment) => {
-                            self.segment += 1;
-                            match segment {
-                                Segment::Line(line) => return Some(line.transform(self.transform)),
-                                Segment::Quad(quad) => {
-                                    self.stack.push(Err(quad.transform(self.transform)));
-                                }
-                                Segment::Cubic(cubic) => {
-                                    self.stack.push(Ok(cubic.transform(self.transform)));
-                                }
-                            }
+                            self.segment_index += 1;
+                            self.stack.push(segment.transform(self.transform));
                         }
                     }
                 }
