@@ -387,7 +387,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let mut out = Vec::new();
-    generate_font(&mut out, "Bars", glyphs)?;
+    generate_font(&mut out, "Hatchet", glyphs)?;
     println!("{}", String::from_utf8_lossy(&out));
 
     Ok(())
