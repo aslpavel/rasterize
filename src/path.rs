@@ -1,4 +1,5 @@
 use crate::{
+    clamp,
     curve::line_offset,
     rasterize::{signed_difference_line, signed_difference_to_mask},
     Align, BBox, Cubic, Curve, EllipArc, Line, Point, Quad, Scalar, Segment, SurfaceMut,
@@ -713,21 +714,16 @@ impl PathBuilder {
 
     /// Add box with rounded corners, with current position being low-x and low-y coordinate
     pub fn rbox(&mut self, size: impl Into<Point>, radii: impl Into<Point>) -> &mut Self {
+        let init = self.position;
+        let bbox = BBox::new(self.position, self.position + size.into());
+        let Point([lx, ly]) = bbox.min();
+        let Point([hx, hy]) = bbox.max();
+
         let Point([rx, ry]) = radii.into();
-        let rx = rx.abs();
-        let ry = ry.abs();
+        let rx = clamp(rx.abs(), 0.0, hx - lx);
+        let ry = clamp(ry.abs(), 0.0, hy - ly);
         let radii = Point::new(rx, ry);
-
-        let size = size.into();
-        let lx = self.position.x();
-        let ly = self.position.y();
-        let hx = lx + size.x().abs();
-        let hy = ly + size.y().abs();
         let rounded = rx > EPSILON && ry > EPSILON;
-
-        if 2.0 * rx > hx - lx || 2.0 * ry > hy - ly {
-            return self;
-        }
 
         self.move_to((lx + rx, ly)).line_to((hx - rx, ly));
         if rounded {
@@ -745,7 +741,7 @@ impl PathBuilder {
         if rounded {
             self.arc_to(radii, 0.0, false, true, (lx + rx, ly));
         }
-        self.close().move_to(Point::new(lx, ly))
+        self.close().move_to(init)
     }
 
     /// Current possition of the builder

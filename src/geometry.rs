@@ -356,9 +356,9 @@ pub struct BBox {
 
 impl BBox {
     /// Construct bounding box which includes points `p0` and `p1`
-    pub fn new(p0: Point, p1: Point) -> Self {
-        let Point([x0, y0]) = p0;
-        let Point([x1, y1]) = p1;
+    pub fn new(p0: impl Into<Point>, p1: impl Into<Point>) -> Self {
+        let Point([x0, y0]) = p0.into();
+        let Point([x1, y1]) = p1.into();
         let (x0, x1) = if x0 <= x1 { (x0, x1) } else { (x1, x0) };
         let (y0, y1) = if y0 <= y1 { (y0, y1) } else { (y1, y0) };
         Self {
