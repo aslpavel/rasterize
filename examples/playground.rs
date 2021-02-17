@@ -1,17 +1,8 @@
-#![allow(unused_imports, dead_code)]
-use env_logger::Env;
-use rasterize::{
-    surf_to_ppm, timeit, Cubic, Curve, FillRule, Line, LineCap, LineJoin, Path, Quad, StrokeStyle,
-    SubPath, Transform,
-};
-use std::{
-    env,
-    fs::File,
-    io::{BufWriter, Read},
-};
+#![deny(warnings)]
+use rasterize::*;
+use std::fs::File;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::from_env(Env::default().default_filter_or("debug")).init();
     let path = Path::load(File::open("./paths/rust.path")?)?;
     // let path: Path = "M 0 0 L 5 8 L 9 0z".parse()?;
 
