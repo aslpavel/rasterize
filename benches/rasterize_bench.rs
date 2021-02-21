@@ -1,11 +1,17 @@
 #![deny(warnings)]
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use rasterize::{
-    Cubic, Curve, FillRule, LineCap, LineJoin, Path, StrokeStyle, SurfaceMut, Transform,
-    DEFAULT_FLATNESS,
+    ActiveEdgeRasterizer, Cubic, Curve, FillRule, LineCap, LineJoin, Path, Rasterizer,
+    SignedDifferenceRasterizer, StrokeStyle, SurfaceMut, Transform, DEFAULT_FLATNESS,
 };
 use std::{fs::File, io::Read, time::Duration};
+
+fn rasterizers() -> impl Iterator<Item = Box<dyn Rasterizer>> {
+    let r0: Box<dyn Rasterizer> = Box::new(SignedDifferenceRasterizer::default());
+    let r1: Box<dyn Rasterizer> = Box::new(ActiveEdgeRasterizer::default());
+    Some(r0).into_iter().chain(Some(r1))
+}
 
 fn curve_benchmark(c: &mut Criterion) {
     let path = Cubic::new((157.0, 67.0), (35.0, 200.0), (220.0, 260.0), (175.0, 45.0));
@@ -28,12 +34,16 @@ fn stroke_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("squirrel");
     group.throughput(Throughput::Elements(path.segments_count() as u64));
     group.bench_function("stroke", |b| b.iter_with_large_drop(|| path.stroke(style)));
-    group.bench_function("resterize stroked", |b| {
-        b.iter_with_large_drop(|| stroke.rasterize(tr, FillRule::EvenOdd))
-    });
-    group.bench_function("resterize fill", |b| {
-        b.iter_with_large_drop(|| path.rasterize(tr, FillRule::EvenOdd))
-    });
+    for rasterizer in rasterizers() {
+        let id = BenchmarkId::new("rasterize stroked", rasterizer.name());
+        group.bench_with_input(id, &rasterizer, |b, r| {
+            b.iter_with_large_drop(|| stroke.rasterize(r, tr, FillRule::EvenOdd))
+        });
+        let id = BenchmarkId::new("rasterize fill", rasterizer.name());
+        group.bench_with_input(id, &rasterizer, |b, r| {
+            b.iter_with_large_drop(|| path.rasterize(r, tr, FillRule::EvenOdd))
+        });
+    }
     group.finish()
 }
 
@@ -44,7 +54,7 @@ fn large_path_benchmark(c: &mut Criterion) {
     file.read_to_string(&mut path_str)
         .expect("failed to read path");
     let path: Path = path_str.parse().unwrap();
-    let mut surf = path.rasterize(tr, FillRule::EvenOdd);
+    let mut surf = path.rasterize(SignedDifferenceRasterizer::default(), tr, FillRule::EvenOdd);
 
     let mut group = c.benchmark_group("material-big");
     group.throughput(Throughput::Elements(path.segments_count() as u64));
@@ -55,15 +65,19 @@ fn large_path_benchmark(c: &mut Criterion) {
         b.iter(|| path.flatten(tr, DEFAULT_FLATNESS, true).count())
     });
     group.bench_function("bbox", |b| b.iter(|| path.bbox(tr)));
-    group.bench_function("rasterize", |b| {
-        b.iter_with_large_drop(|| path.rasterize(tr, FillRule::EvenOdd))
-    });
-    group.bench_function("rasterize to", |b| {
-        b.iter(|| {
-            surf.clear();
-            path.rasterize_to(tr, FillRule::EvenOdd, &mut surf);
-        })
-    });
+    for rasterizer in rasterizers() {
+        let id = BenchmarkId::new("rasterize", rasterizer.name());
+        group.bench_with_input(id, &rasterizer, |b, r| {
+            b.iter_with_large_drop(|| path.rasterize(r, tr, FillRule::EvenOdd))
+        });
+        let id = BenchmarkId::new("rasterize to", rasterizer.name());
+        group.bench_with_input(id, &rasterizer, |b, r| {
+            b.iter(|| {
+                surf.clear();
+                path.rasterize_to(r, tr, FillRule::EvenOdd, &mut surf);
+            })
+        });
+    }
     group.finish()
 }
 

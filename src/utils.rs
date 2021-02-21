@@ -304,10 +304,12 @@ pub(crate) mod tests {
     #[macro_export]
     macro_rules! assert_approx_eq {
         ( $v0:expr, $v1: expr ) => {{
-            assert!(($v0 - $v1).abs() < $crate::EPSILON, "{} != {}", $v0, $v1);
+            let (v0, v1) = ($v0, $v1);
+            assert!((v0 - v1).abs() < $crate::EPSILON, "{} != {}", v0, v1);
         }};
         ( $v0:expr, $v1: expr, $e: expr ) => {{
-            assert!(($v0 - $v1).abs() < $e, "{} != {}", $v0, $v1);
+            let (v0, v1) = ($v0, $v1);
+            assert!((v0 - v1).abs() < $e, "{} != {}", v0, v1);
         }};
     }
 

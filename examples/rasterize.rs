@@ -3,8 +3,9 @@
 
 use env_logger::Env;
 use rasterize::{
-    surf_to_ppm, Align, BBox, Curve, FillRule, LineCap, LineJoin, Path, Point, Scalar, Segment,
-    StrokeStyle, Surface, Transform,
+    surf_to_ppm, ActiveEdgeRasterizer, Align, BBox, Curve, FillRule, LineCap, LineJoin, Path,
+    Point, Rasterizer, Scalar, Segment, SignedDifferenceRasterizer, StrokeStyle, Surface,
+    Transform,
 };
 use std::{
     env, fmt,
@@ -13,10 +14,10 @@ use std::{
 };
 
 /// Add debug log message with time taken to execute provided function
-fn timeit<F: FnOnce() -> R, R>(msg: &str, f: F) -> R {
+fn timeit<F: FnOnce() -> R, R>(msg: impl AsRef<str>, f: F) -> R {
     let start = std::time::Instant::now();
     let result = f();
-    log::debug!("{} {:?}", msg, start.elapsed());
+    log::debug!("{} {:?}", msg.as_ref(), start.elapsed());
     result
 }
 
@@ -45,6 +46,7 @@ struct Args {
     outline: bool,
     width: Option<usize>,
     stroke: Option<Scalar>,
+    rasterizer: Box<dyn Rasterizer>,
 }
 
 fn parse_args() -> Result<Args, Error> {
@@ -54,6 +56,7 @@ fn parse_args() -> Result<Args, Error> {
         outline: false,
         width: None,
         stroke: None,
+        rasterizer: Box::new(SignedDifferenceRasterizer::default()),
     };
     let mut postional = 0;
     let mut args = env::args();
@@ -75,6 +78,9 @@ fn parse_args() -> Result<Args, Error> {
             "-o" => {
                 result.outline = true;
             }
+            "-a" => {
+                result.rasterizer = Box::new(ActiveEdgeRasterizer::default());
+            }
             _ => {
                 postional += 1;
                 match postional {
@@ -91,13 +97,14 @@ fn parse_args() -> Result<Args, Error> {
         );
         eprintln!("\nUSAGE:");
         eprintln!(
-            "    {} [-w <width>] [-s <stroke>] [-o] <file.path> <out.ppm>",
+            "    {} [-w <width>] [-s <stroke>] [-o] [-a] <file.path> <out.ppm>",
             cmd
         );
         eprintln!("\nARGS:");
         eprintln!("    -w <width>         width in pixels of the output image");
         eprintln!("    -s <stroke_width>  stroke path before rendering");
         eprintln!("    -o                 show outline with control points instead of filling");
+        eprintln!("    -a                 use active-edge instead of signed-difference rasterizer");
         eprintln!("    <file.path>        file containing SVG path ('-' means stdin)");
         eprintln!("    <out.ppm>          image rendered in the PPM format ('-' means stdout)");
         std::process::exit(1);
@@ -213,8 +220,9 @@ fn main() -> Result<(), Error> {
     }
 
     // rasterize path
-    let mask = timeit("[rasterize]", || {
-        path.rasterize(Transform::default(), FillRule::NonZero)
+    let rasterizer = args.rasterizer;
+    let mask = timeit(format!("[rasterize:{}]", rasterizer.name()), || {
+        path.rasterize(rasterizer, Transform::default(), FillRule::NonZero)
     });
     log::info!(
         "[dimension] width: {} height: {}",

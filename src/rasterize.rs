@@ -1,10 +1,114 @@
-use crate::{FillRule, Line, Point, Scalar, SurfaceMut, EPSILON};
-use std::cmp::min;
+//! Rasterization logic
+//!
+//! This module include two rasterizers:
+//!   - Signed difference rasterizer
+//!   - Active-Edge rasterizer
+//!
+//! ## Signed difference rasterizer
+//! It works in two steps, first going over all lines and writing signed difference
+//! (difference value represents how to adjust winding number from one pixel to another).
+//! And on the second step it goes over all pixels and accumulates winding number, and
+//! depending on the fill rule produces alpha map of the path.
+//!
+//! Features:
+//!  - this method is fast
+//!  - requires memory equal to the size of the image
+//!
+//! ## Active-Edge-Table rasterizer
+//! This method is based on the data stracture Edge-Table which keeps all lines ordered by
+//! lower y coordinate, and then scanning over all pixels line by line, once lower pixel of a
+//! line is reached line is activated and put into Active-Edge-Table, and later deactivated once
+//! once scan line convers point with the highest y coordinate.
+//!
+//! Reference: Computer graphics principles and practice (by Foley) 3.6 Filling Polygons.
+//!
+//! Features:
+//!  - this method is slower
+//!  - but requires less memory
+use crate::{
+    Curve, FillRule, Line, Path, Point, Scalar, SurfaceMut, Transform, DEFAULT_FLATNESS, EPSILON,
+};
+use std::{cmp::min, collections::VecDeque};
+
+pub trait Rasterizer {
+    fn rasterize(
+        &self,
+        path: &Path,
+        tr: Transform,
+        surf: &mut dyn SurfaceMut<Item = Scalar>,
+        fill_rule: FillRule,
+    );
+
+    fn name(&self) -> &str;
+}
+
+impl<'a, R: Rasterizer> Rasterizer for &'a R {
+    fn rasterize(
+        &self,
+        path: &Path,
+        tr: Transform,
+        surf: &mut dyn SurfaceMut<Item = Scalar>,
+        fill_rule: FillRule,
+    ) {
+        (**self).rasterize(path, tr, surf, fill_rule)
+    }
+
+    fn name(&self) -> &str {
+        (**self).name()
+    }
+}
+
+impl Rasterizer for Box<dyn Rasterizer> {
+    fn rasterize(
+        &self,
+        path: &Path,
+        tr: Transform,
+        surf: &mut dyn SurfaceMut<Item = Scalar>,
+        fill_rule: FillRule,
+    ) {
+        (**self).rasterize(path, tr, surf, fill_rule)
+    }
+
+    fn name(&self) -> &str {
+        (**self).name()
+    }
+}
+
+pub struct SignedDifferenceRasterizer {
+    flatness: Scalar,
+}
+
+impl Default for SignedDifferenceRasterizer {
+    fn default() -> Self {
+        Self {
+            flatness: DEFAULT_FLATNESS,
+        }
+    }
+}
+
+impl Rasterizer for SignedDifferenceRasterizer {
+    fn rasterize(
+        &self,
+        path: &Path,
+        tr: Transform,
+        surf: &mut dyn SurfaceMut<Item = Scalar>,
+        fill_rule: FillRule,
+    ) {
+        for line in path.flatten(tr, self.flatness, true) {
+            signed_difference_line(&mut *surf, line);
+        }
+        signed_difference_to_mask(surf, fill_rule);
+    }
+
+    fn name(&self) -> &str {
+        "signed-difference"
+    }
+}
 
 /// Update provided surface with the signed difference of the line
 ///
 /// Signed difference is a diffrence between adjacent pixels introduced by the line.
-pub(crate) fn signed_difference_line(mut surf: impl SurfaceMut<Item = Scalar>, line: Line) {
+fn signed_difference_line(mut surf: impl SurfaceMut<Item = Scalar>, line: Line) {
     // y - is a row
     // x - is a column
     let Line([p0, p1]) = line;
@@ -130,10 +234,8 @@ pub(crate) fn signed_difference_line(mut surf: impl SurfaceMut<Item = Scalar>, l
     }
 }
 
-pub(crate) fn signed_difference_to_mask(
-    mut surf: impl SurfaceMut<Item = Scalar>,
-    fill_rule: FillRule,
-) {
+/// Conver signed difference surface to a mask
+fn signed_difference_to_mask(mut surf: impl SurfaceMut<Item = Scalar>, fill_rule: FillRule) {
     let shape = surf.shape();
     let data = surf.data_mut();
     match fill_rule {
@@ -166,6 +268,353 @@ pub(crate) fn signed_difference_to_mask(
                 }
             }
         }
+    }
+}
+
+/// Active-Edge rasterizer
+///
+/// This method is based on the data stracture Edge-Table which keeps all lines ordered by
+/// lower y coordinate, and then scanning over all pixels line by line, once lower pixel of a
+/// line is reached line is activated and put into Active-Edge-Table, and later deactivated once
+/// once scan line convers point with the highest y coordinate.
+///
+/// Reference: Computer graphics principles and practice (by Foley) 3.6 Filling Polygons.
+pub struct ActiveEdgeRasterizer {
+    flatness: Scalar,
+}
+
+impl Default for ActiveEdgeRasterizer {
+    fn default() -> Self {
+        Self {
+            flatness: DEFAULT_FLATNESS,
+        }
+    }
+}
+
+impl Rasterizer for ActiveEdgeRasterizer {
+    fn rasterize(
+        &self,
+        path: &Path,
+        tr: Transform,
+        surf: &mut dyn SurfaceMut<Item = Scalar>,
+        fill_rule: FillRule,
+    ) {
+        let iter = ActiveEdgeIter::new(
+            surf.width(),
+            surf.height(),
+            fill_rule,
+            path.flatten(tr, self.flatness, true),
+        );
+        for (cell, pixel) in surf.iter_mut().zip(iter) {
+            *cell = pixel.alpha;
+        }
+    }
+
+    fn name(&self) -> &str {
+        "active-edge"
+    }
+}
+
+pub struct ActiveEdgeIter {
+    // all edges sorted by `Edge::row` in descending order
+    edge_inactive: Vec<Edge>,
+    // once scanline touches and it is activated and put into this list
+    edge_active: VecDeque<Edge>,
+    // row iterators are created for all active edges on
+    iters_inactive: Vec<EdgeRowIter>,
+    // accumulated iterator over all active row iterators
+    iters_active: EdgeAccIter,
+    // currently accumulated winding number
+    winding: Scalar,
+    // fill rule to be used
+    fill_rule: FillRule,
+    // width of the output image
+    width: usize,
+    // height of the output image
+    height: usize,
+    // current column (x - coordindate)
+    column: usize,
+    // current row (y - coordinate)
+    row: usize,
+}
+
+impl ActiveEdgeIter {
+    pub fn new(
+        width: usize,
+        height: usize,
+        fill_rule: FillRule,
+        lines: impl Iterator<Item = Line>,
+    ) -> Self {
+        let mut edge_table: Vec<_> = lines.into_iter().flat_map(Edge::new).collect();
+        edge_table.sort_by(|a, b| b.row.cmp(&a.row));
+        let mut this = Self {
+            edge_inactive: edge_table,
+            edge_active: Default::default(),
+            iters_inactive: Default::default(),
+            iters_active: EdgeAccIter::new(),
+            winding: 0.0,
+            fill_rule,
+            width,
+            height,
+            column: 0,
+            row: 0,
+        };
+        this.next_row();
+        this
+    }
+
+    /// Swith to the next row
+    fn next_row(&mut self) {
+        // clear all iterators
+        self.iters_inactive.clear();
+        self.iters_active.clear();
+
+        // create new row iterators for all active edges
+        for _ in 0..self.edge_active.len() {
+            if let Some(edge) = self.edge_active.pop_front() {
+                if let Some((edge, iter)) = edge.next_row() {
+                    self.iters_inactive.push(iter);
+                    self.edge_active.push_back(edge);
+                }
+            }
+        }
+
+        // activate new edges
+        while let Some(edge) = self.edge_inactive.pop() {
+            if edge.row <= self.row {
+                if let Some((edge, iter)) = edge.next_row() {
+                    self.iters_inactive.push(iter);
+                    self.edge_active.push_back(edge);
+                }
+            } else {
+                self.edge_inactive.push(edge);
+                break;
+            }
+        }
+
+        // sort iterator by column
+        self.iters_inactive.sort_by(|a, b| b.column.cmp(&a.column));
+    }
+}
+
+pub struct Pixel {
+    pub x: usize,
+    pub y: usize,
+    pub alpha: Scalar,
+}
+
+impl Iterator for ActiveEdgeIter {
+    type Item = Pixel;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.row > self.height {
+            return None;
+        }
+        // find activated iterator
+        while let Some(iter) = self.iters_inactive.pop() {
+            if iter.column <= self.column {
+                self.iters_active.push(iter);
+            } else {
+                self.iters_inactive.push(iter);
+                break;
+            }
+        }
+        self.winding += self.iters_active.next().unwrap_or(0.0);
+        let pixel = Pixel {
+            x: self.column,
+            y: self.row,
+            alpha: self.fill_rule.alpha_from_winding(self.winding),
+        };
+        self.column += 1;
+        if self.column >= self.width {
+            self.column = 0;
+            self.row += 1;
+            self.winding = 0.0;
+            self.next_row();
+        }
+        Some(pixel)
+    }
+}
+
+#[inline]
+fn next_ceil(value: Scalar) -> Scalar {
+    value.floor() + 1.0
+}
+
+/// Edge represents unconsumed part of the line segments
+///
+/// `Edge::line` is always directed from point with lower to higher `y` coordinate.
+#[derive(Debug)]
+struct Edge {
+    // unconsumed part of the line segment
+    line: Line,
+    // `dx/dy` slope of the edge
+    dxdy: Scalar,
+    // `dy/dx` slope of the edge, it empty for vertial lines
+    dydx: Option<Scalar>,
+    // `1.0` if edge is going from lower to higher `y`, `-1.0` otherwise
+    dir: Scalar,
+    // first row that will be effected by this edge
+    row: usize,
+}
+
+impl Edge {
+    /// Create edge from the line
+    ///
+    /// Returns constructed `Edge` and lowest row effected by it.
+    fn new(line: Line) -> Option<Self> {
+        let Line([p0, p1]) = line;
+        if (p0.y() - p1.y()).abs() < EPSILON {
+            // horizontal lines have no effect
+            return None;
+        }
+        let (dir, p0, p1) = if p0.y() <= p1.y() {
+            (1.0, p0, p1)
+        } else {
+            (-1.0, p1, p0)
+        };
+        let dxdy = (p1.x() - p0.x()) / (p1.y() - p0.y());
+        let dydx = (dxdy.abs() > EPSILON).then(|| dxdy.recip());
+        // throw away part with negative `y`
+        let p0 = if p0.y() < 0.0 {
+            Point::new(p0.x() - p0.y() * dxdy, 0.0)
+        } else {
+            p0
+        };
+        Some(Self {
+            line: Line::new(p0, p1),
+            dxdy,
+            dydx,
+            dir,
+            row: p0.y().floor() as usize,
+        })
+    }
+
+    /// Split edge into row iterator and reminder of the edge not convered by
+    /// the row iterator.
+    fn next_row(self) -> Option<(Edge, EdgeRowIter)> {
+        EdgeRowIter::new(self)
+    }
+}
+
+/// Iterator that calculates winding difference introduced by the line
+///
+/// This iterator is activated once rasterizer reaches `EdgeRowIter::column`,
+/// and for each subsequent pixel `EdgeRowIter::next` is called, which returns
+/// winding difference introduce by the line.
+#[derive(Debug)]
+struct EdgeRowIter {
+    // line segment that will effect winding number of current
+    line: Option<Line>,
+    // difference introduced by previous pixel
+    reminder: Option<Scalar>,
+    // `dy/dx` slope of the line
+    dydx: Option<Scalar>,
+    // first effected column
+    column: usize,
+    // direction of the line
+    dir: Scalar,
+}
+
+impl EdgeRowIter {
+    fn new(mut edge: Edge) -> Option<(Edge, Self)> {
+        let Line([p0, p1]) = edge.line;
+        if p1.y() - p0.y() < EPSILON {
+            // edge is fully consumed and should be removed
+            return None;
+        }
+
+        // intersection with lower edge of the next row
+        let y_split = next_ceil(p0.y()).min(p1.y());
+        let x_split = p0.x() + edge.dxdy * (y_split - p0.y());
+        let p_split = Point::new(x_split, y_split);
+
+        // reduce the size of the edge
+        edge.line = Line::new(p_split, p1);
+
+        let (dir, line) = if p0.x() <= p_split.x() {
+            (edge.dir, Line::new(p0, p_split))
+        } else {
+            (-edge.dir, Line::new(p_split, p0))
+        };
+        let iter = Self {
+            line: Some(line),
+            reminder: None,
+            dydx: edge.dydx,
+            column: line.start().x() as usize,
+            dir,
+        };
+        Some((edge, iter))
+    }
+}
+
+impl Iterator for EdgeRowIter {
+    type Item = Scalar;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(Line([p0, p1])) = self.line.take() {
+            let x_ceil = next_ceil(p0.x());
+            let x = x_ceil.min(p1.x());
+            let h = match self.dydx {
+                Some(dydx) => dydx * (x - p0.x()),
+                None => next_ceil(p0.y()).min(p1.y()) - p0.y(),
+            };
+            let y = p0.y() + h;
+            let s0 = (2.0 * x_ceil - x - p0.x()) * h / 2.0;
+            let s1 = h - s0;
+            if p1.x() > x {
+                self.line = Some(Line::new((x, y), p1));
+            }
+            let s_prev = self.reminder.replace(self.dir * s1).unwrap_or(0.0);
+            Some(self.dir * s0 + s_prev)
+        } else {
+            self.reminder.take()
+        }
+    }
+}
+
+/// Accumulator iterator
+///
+/// Sums all values returned by sub-iterators and returns it as an item.
+struct EdgeAccIter {
+    iters: VecDeque<EdgeRowIter>,
+}
+
+impl EdgeAccIter {
+    fn new() -> Self {
+        Self {
+            iters: Default::default(),
+        }
+    }
+
+    // push new row iterator
+    fn push(&mut self, iter: EdgeRowIter) {
+        self.iters.push_back(iter)
+    }
+
+    // remove all row iterator
+    fn clear(&mut self) {
+        self.iters.clear()
+    }
+}
+
+impl Iterator for EdgeAccIter {
+    type Item = Scalar;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.iters.is_empty() {
+            return None;
+        }
+        let mut acc = 0.0;
+        for _ in 0..self.iters.len() {
+            if let Some(mut iter) = self.iters.pop_front() {
+                if let Some(value) = iter.next() {
+                    acc += value;
+                    self.iters.push_back(iter);
+                }
+            }
+        }
+        Some(acc)
     }
 }
 
@@ -229,5 +678,55 @@ mod tests {
         assert_approx_eq!(*surf.get(1, 0).unwrap(), 3.0 / 8.0);
         assert_approx_eq!(*surf.get(1, 1).unwrap(), 3.0 / 8.0);
         surf.clear();
+    }
+
+    #[test]
+    fn test_edge_iter() {
+        let line = Line::new((0.0, 0.0), (6.0, 2.0));
+        let edge = Edge::new(line).unwrap();
+        assert_eq!(edge.row, 0);
+        // first row
+        let (edge, mut iter) = edge.next_row().unwrap();
+        assert_eq!(iter.column, 0);
+        assert_approx_eq!(iter.next().unwrap(), 1.0 / 6.0);
+        assert_approx_eq!(iter.next().unwrap(), 2.0 / 6.0);
+        assert_approx_eq!(iter.next().unwrap(), 2.0 / 6.0);
+        assert_approx_eq!(iter.next().unwrap(), 1.0 / 6.0);
+        assert!(iter.next().is_none());
+        // second row
+        let (edge, iter) = edge.next_row().unwrap();
+        assert_eq!(iter.column, 3);
+        assert_approx_eq!(iter.sum::<Scalar>(), 1.0);
+        // should not return next row
+        assert!(edge.next_row().is_none());
+
+        let line = Line::new((1.0, 1.0), (4.0, 0.0));
+        let edge = Edge::new(line).unwrap();
+        assert_eq!(edge.row, 0);
+        // first row
+        let (edge, mut iter) = edge.next_row().unwrap();
+        assert_eq!(iter.column, 1);
+        assert_approx_eq!(iter.next().unwrap(), -1.0 / 6.0);
+        assert_approx_eq!(iter.next().unwrap(), -2.0 / 6.0);
+        assert_approx_eq!(iter.next().unwrap(), -2.0 / 6.0);
+        assert_approx_eq!(iter.next().unwrap(), -1.0 / 6.0);
+        // shoud not return next row
+        assert!(edge.next_row().is_none());
+
+        // vertical line
+        let line = Line::new((0.5, 0.5), (0.5, 1.5));
+        let edge = Edge::new(line).unwrap();
+        assert_eq!(edge.row, 0);
+        // first row
+        let (edge, mut iter) = edge.next_row().unwrap();
+        assert_eq!(iter.column, 0);
+        assert_approx_eq!(iter.next().unwrap(), 1.0 / 4.0);
+        assert_approx_eq!(iter.next().unwrap(), 1.0 / 4.0);
+        assert!(iter.next().is_none());
+        // second row
+        let (edge, iter) = edge.next_row().unwrap();
+        assert_approx_eq!(iter.sum::<Scalar>(), 0.5);
+        // should not return next row
+        assert!(edge.next_row().is_none());
     }
 }

@@ -14,6 +14,9 @@ mod path;
 mod rasterize;
 mod utils;
 
+pub use crate::rasterize::{
+    ActiveEdgeIter, ActiveEdgeRasterizer, Pixel, Rasterizer, SignedDifferenceRasterizer,
+};
 pub use curve::{
     Cubic, Curve, CurveExtremities, CurveFlattenIter, CurveRoots, Line, Quad, Segment,
 };

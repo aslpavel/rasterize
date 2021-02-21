@@ -1,9 +1,6 @@
 use crate::{
-    clamp,
-    curve::line_offset,
-    rasterize::{signed_difference_line, signed_difference_to_mask},
-    Align, BBox, Cubic, Curve, EllipArc, Line, Point, Quad, Scalar, Segment, SurfaceMut,
-    SurfaceOwned, Transform, EPSILON,
+    clamp, curve::line_offset, rasterize::Rasterizer, Align, BBox, Cubic, Curve, EllipArc, Line,
+    Point, Quad, Scalar, Segment, SurfaceMut, SurfaceOwned, Transform, EPSILON,
 };
 use std::{
     fmt,
@@ -23,6 +20,24 @@ pub enum FillRule {
     NonZero,
     /// Fill area with odd winding number
     EvenOdd,
+}
+
+impl FillRule {
+    pub fn alpha_from_winding(&self, winding: Scalar) -> Scalar {
+        match self {
+            FillRule::EvenOdd => ((winding + 1.0).rem_euclid(2.0) - 1.0).abs(),
+            FillRule::NonZero => {
+                let value = winding.abs();
+                if value >= 1.0 {
+                    1.0
+                } else if value < 1e-6 {
+                    0.0
+                } else {
+                    value
+                }
+            }
+        }
+    }
 }
 
 /// `LineJoin` defines the shape to be used at the corners of paths when they are stroked.
@@ -308,14 +323,12 @@ impl Path {
     /// to contain zeros.
     pub fn rasterize_to<S: SurfaceMut<Item = Scalar>>(
         &self,
+        rasterizer: impl Rasterizer,
         tr: Transform,
         fill_rule: FillRule,
         mut surf: S,
     ) -> S {
-        for line in self.flatten(tr, DEFAULT_FLATNESS, true) {
-            signed_difference_line(&mut surf, line);
-        }
-        signed_difference_to_mask(&mut surf, fill_rule);
+        rasterizer.rasterize(self, tr, &mut surf, fill_rule);
         surf
     }
 
@@ -324,6 +337,7 @@ impl Path {
     /// Path is rescaled and centered appropriately to fit into a provided surface.
     pub fn rasterize_fit<S: SurfaceMut<Item = Scalar>>(
         &self,
+        rasterizer: impl Rasterizer,
         tr: Transform,
         fill_rule: FillRule,
         align: Align,
@@ -341,13 +355,18 @@ impl Path {
             Point::new((surf.width() - 1) as Scalar, (surf.height() - 1) as Scalar),
         );
         let tr = Transform::fit(src_bbox, dst_bbox, align) * tr;
-        self.rasterize_to(tr, fill_rule, surf)
+        self.rasterize_to(rasterizer, tr, fill_rule, surf)
     }
 
     /// Rasteraize mask for the path into an allocated surface.
     ///
     /// Surface of required size will be allocated.
-    pub fn rasterize(&self, tr: Transform, fill_rule: FillRule) -> SurfaceOwned<Scalar> {
+    pub fn rasterize(
+        &self,
+        rasterizer: impl Rasterizer,
+        tr: Transform,
+        fill_rule: FillRule,
+    ) -> SurfaceOwned<Scalar> {
         let bbox = match self.bbox(tr) {
             Some(bbox) => bbox,
             None => return SurfaceOwned::new(0, 0),
@@ -357,7 +376,7 @@ impl Path {
         let height = (bbox.height() + 2.0).ceil() as usize;
         let surf = SurfaceOwned::new(height, width);
         let shift = Transform::default().translate(1.0 - bbox.x(), 1.0 - bbox.y());
-        self.rasterize_to(shift * tr, fill_rule, surf)
+        self.rasterize_to(rasterizer, shift * tr, fill_rule, surf)
     }
 
     /// Save path in SVG path format.
@@ -517,8 +536,8 @@ impl<'a> Iterator for PathFlattenIter<'a> {
                         return Some(Line::new(segment.start(), segment.end()));
                     }
                     let (s0, s1) = segment.split();
-                    self.stack.push(s1.into());
-                    self.stack.push(s0.into());
+                    self.stack.push(s1);
+                    self.stack.push(s0);
                 }
                 None => {
                     let subpath = self.path.subpaths.get(self.subpath_index)?;
@@ -578,7 +597,7 @@ impl PathBuilder {
             subpath,
             mut subpaths,
             ..
-        } = std::mem::replace(self, Default::default());
+        } = std::mem::take(self);
         subpaths.extend(SubPath::new(subpath, false));
         Path::new(subpaths)
     }
@@ -1030,7 +1049,7 @@ impl<'a> PathParser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{assert_approx_eq, Surface, PI};
+    use crate::{assert_approx_eq, SignedDifferenceRasterizer, Surface, PI};
 
     #[test]
     fn test_bbox() {
@@ -1148,6 +1167,7 @@ mod tests {
     #[test]
     fn test_fill_rule() -> Result<(), Error> {
         let tr = Transform::default();
+        let rasterizer = SignedDifferenceRasterizer::default();
         let path: Path = r#"
             M50,0 21,90 98,35 2,35 79,90z
             M110,0 h90 v90 h-90z
@@ -1161,14 +1181,14 @@ mod tests {
         let x1 = 150; // middle of the first box
         let x2 = 250; // middle of the second box
 
-        let surf = path.rasterize(tr, FillRule::EvenOdd);
+        let surf = path.rasterize(&rasterizer, tr, FillRule::EvenOdd);
         assert_approx_eq!(surf.get(y, x0).unwrap(), 0.0);
         assert_approx_eq!(surf.get(y, x1).unwrap(), 0.0);
         assert_approx_eq!(surf.get(y, x2).unwrap(), 0.0);
         let area = surf.iter().sum::<Scalar>();
         assert_approx_eq!(area, 13130.0, 1.0);
 
-        let surf = path.rasterize(tr, FillRule::NonZero);
+        let surf = path.rasterize(&rasterizer, tr, FillRule::NonZero);
         assert_approx_eq!(surf.get(y, x0).unwrap(), 1.0);
         assert_approx_eq!(surf.get(y, x1).unwrap(), 1.0);
         assert_approx_eq!(surf.get(y, x2).unwrap(), 0.0);
