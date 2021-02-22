@@ -317,7 +317,7 @@ impl Rasterizer for ActiveEdgeRasterizer {
 
 pub struct ActiveEdgeIter {
     // all edges sorted by `Edge::row` in descending order
-    edge_inactive: Vec<Edge>,
+    edge_inactive: Vec<Vec<Edge>>,
     // once scanline touches and it is activated and put into this list
     edge_active: VecDeque<Edge>,
     // row iterators are created for all active edges on
@@ -345,8 +345,16 @@ impl ActiveEdgeIter {
         fill_rule: FillRule,
         lines: impl Iterator<Item = Line>,
     ) -> Self {
-        let mut edge_table: Vec<_> = lines.into_iter().flat_map(Edge::new).collect();
-        edge_table.sort_by(|a, b| b.row.cmp(&a.row));
+        let mut edge_table: Vec<Vec<Edge>> = Vec::new();
+        edge_table.resize_with(height, Default::default);
+        for line in lines {
+            if let Some(edge) = Edge::new(line) {
+                if edge.row >= height {
+                    continue;
+                }
+                edge_table[height - edge.row - 1].push(edge);
+            }
+        }
         let mut this = Self {
             edge_inactive: edge_table,
             edge_active: Default::default(),
@@ -380,20 +388,18 @@ impl ActiveEdgeIter {
         }
 
         // activate new edges
-        while let Some(edge) = self.edge_inactive.pop() {
-            if edge.row <= self.row {
+        if let Some(edges) = self.edge_inactive.pop() {
+            for edge in edges {
                 if let Some((edge, iter)) = edge.next_row() {
                     self.iters_inactive.push(iter);
                     self.edge_active.push_back(edge);
                 }
-            } else {
-                self.edge_inactive.push(edge);
-                break;
             }
         }
 
         // sort iterator by column
-        self.iters_inactive.sort_by(|a, b| b.column.cmp(&a.column));
+        self.iters_inactive
+            .sort_unstable_by(|a, b| b.column.cmp(&a.column));
     }
 }
 
