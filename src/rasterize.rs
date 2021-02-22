@@ -299,14 +299,15 @@ impl Rasterizer for ActiveEdgeRasterizer {
         surf: &mut dyn SurfaceMut<Item = Scalar>,
         fill_rule: FillRule,
     ) {
-        let iter = ActiveEdgeIter::new(
-            surf.width(),
-            surf.height(),
+        let shape = surf.shape();
+        let data = surf.data_mut();
+        for pixel in ActiveEdgeIter::new(
+            shape.width,
+            shape.height,
             fill_rule,
             path.flatten(tr, self.flatness, true),
-        );
-        for (cell, pixel) in surf.iter_mut().zip(iter) {
-            *cell = pixel.alpha;
+        ) {
+            data[shape.offset(pixel.y, pixel.x)] = pixel.alpha;
         }
     }
 
@@ -403,6 +404,7 @@ impl ActiveEdgeIter {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Pixel {
     pub x: usize,
     pub y: usize,
@@ -413,32 +415,60 @@ impl Iterator for ActiveEdgeIter {
     type Item = Pixel;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.row > self.height {
-            return None;
-        }
-        // find activated iterator
-        while let Some(iter) = self.iters_inactive.pop() {
-            if iter.column <= self.column {
-                self.iters_active.push(iter);
-            } else {
-                self.iters_inactive.push(iter);
-                break;
+        loop {
+            if self.row > self.height {
+                return None;
             }
+
+            // find activated iterators
+            while let Some(iter) = self.iters_inactive.pop() {
+                if iter.column <= self.column {
+                    self.iters_active.push(iter);
+                } else {
+                    self.iters_inactive.push(iter);
+                    break;
+                }
+            }
+
+            // progress active row iterators
+            match self.iters_active.next() {
+                Some(winding_delta) => self.winding += winding_delta,
+                None if self.winding.abs() < 1e-6 => {
+                    // skip forward to the first activated iterator
+                    match self.iters_inactive.last() {
+                        Some(iter) if iter.column < self.width => {
+                            self.column = iter.column;
+                        }
+                        _ => {
+                            self.column = 0;
+                            self.row += 1;
+                            self.winding = 0.0;
+                            self.next_row();
+                        }
+                    }
+                    continue;
+                }
+                None => {}
+            }
+
+            // self.winding += self.iters_active.next().unwrap_or(0.0);
+            let pixel = Pixel {
+                x: self.column,
+                y: self.row,
+                alpha: self.fill_rule.alpha_from_winding(self.winding),
+            };
+
+            // update postion
+            self.column += 1;
+            if self.column >= self.width {
+                self.column = 0;
+                self.row += 1;
+                self.winding = 0.0;
+                self.next_row();
+            }
+
+            return Some(pixel);
         }
-        self.winding += self.iters_active.next().unwrap_or(0.0);
-        let pixel = Pixel {
-            x: self.column,
-            y: self.row,
-            alpha: self.fill_rule.alpha_from_winding(self.winding),
-        };
-        self.column += 1;
-        if self.column >= self.width {
-            self.column = 0;
-            self.row += 1;
-            self.winding = 0.0;
-            self.next_row();
-        }
-        Some(pixel)
     }
 }
 
@@ -474,6 +504,7 @@ impl Edge {
             // horizontal lines have no effect
             return None;
         }
+        // order from lower to higher y coordinate
         let (dir, p0, p1) = if p0.y() <= p1.y() {
             (1.0, p0, p1)
         } else {
