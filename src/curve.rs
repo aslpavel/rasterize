@@ -1302,7 +1302,7 @@ mod tests {
 
     #[test]
     fn test_polyline_offset() {
-        let dist = -(2.0f64).sqrt();
+        let dist = -(2.0 as Scalar).sqrt();
 
         let p0 = Point::new(1.0, 0.0);
         let r0 = Point::new(0.0, 1.0);

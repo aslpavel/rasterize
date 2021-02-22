@@ -21,7 +21,7 @@ pub use curve::{
     Cubic, Curve, CurveExtremities, CurveFlattenIter, CurveRoots, Line, Quad, Segment,
 };
 pub use ellipse::EllipArc;
-pub use geometry::{scalar_fmt, Align, BBox, Point, Scalar, Transform, EPSILON, PI};
+pub use geometry::{scalar_fmt, Align, BBox, Point, Scalar, Transform, EPSILON, EPSILON_SQRT, PI};
 pub use path::{
     Error, FillRule, LineCap, LineJoin, Path, PathBuilder, StrokeStyle, SubPath, DEFAULT_FLATNESS,
 };

@@ -6,6 +6,7 @@ use std::{
 
 pub type Scalar = f64;
 pub const EPSILON: f64 = std::f64::EPSILON;
+pub const EPSILON_SQRT: f64 = 1.4901161193847656e-08;
 pub const PI: f64 = std::f64::consts::PI;
 
 /// Format floats in a compact way suitable for SVG path
@@ -17,7 +18,7 @@ pub fn scalar_fmt(f: &mut fmt::Formatter<'_>, value: Scalar) -> fmt::Result {
         write!(f, "{:.3e}", value)
     } else {
         let ten: Scalar = 10.0;
-        let round = ten.powi(4 - (value_abs.trunc() + 1.0).log10().ceil() as i32);
+        let round = ten.powi(6 - (value_abs.trunc() + 1.0).log10().ceil() as i32);
         write!(f, "{}", (value * round).round() / round)
     }
 }

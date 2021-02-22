@@ -27,6 +27,7 @@
 //!  - but requires less memory
 use crate::{
     Curve, FillRule, Line, Path, Point, Scalar, SurfaceMut, Transform, DEFAULT_FLATNESS, EPSILON,
+    EPSILON_SQRT,
 };
 use std::{cmp::min, collections::VecDeque};
 
@@ -433,7 +434,7 @@ impl Iterator for ActiveEdgeIter {
             // progress active row iterators
             match self.iters_active.next() {
                 Some(winding_delta) => self.winding += winding_delta,
-                None if self.winding.abs() < 1e-6 => {
+                None if self.winding.abs() < EPSILON_SQRT => {
                     // skip forward to the first activated iterator
                     match self.iters_inactive.last() {
                         Some(iter) if iter.column < self.width => {
@@ -510,8 +511,10 @@ impl Edge {
         } else {
             (-1.0, p1, p0)
         };
-        let dxdy = (p1.x() - p0.x()) / (p1.y() - p0.y());
-        let dydx = (dxdy.abs() > EPSILON).then(|| dxdy.recip());
+        let dx = p1.x() - p0.x();
+        let dy = p1.y() - p0.y();
+        let dxdy = dx / dy;
+        let dydx = (dxdy.abs() > EPSILON_SQRT).then(|| dy / dx);
         // throw away part with negative `y`
         let p0 = if p0.y() < 0.0 {
             Point::new(p0.x() - p0.y() * dxdy, 0.0)
@@ -764,6 +767,16 @@ mod tests {
         let (edge, iter) = edge.next_row().unwrap();
         assert_approx_eq!(iter.sum::<Scalar>(), 0.5);
         // should not return next row
+        assert!(edge.next_row().is_none());
+
+        let line = Line::new((0.5, 0.2), (0.5 + EPSILON_SQRT, 0.7));
+        let edge = Edge::new(line).unwrap();
+        assert_eq!(edge.row, 0);
+        let (edge, mut iter) = edge.next_row().unwrap();
+        assert_eq!(iter.column, 0);
+        assert_approx_eq!(iter.next().unwrap(), 1.0 / 4.0, 1e-6);
+        assert_approx_eq!(iter.next().unwrap(), 1.0 / 4.0, 1e-6);
+        assert!(iter.next().is_none());
         assert!(edge.next_row().is_none());
     }
 }
