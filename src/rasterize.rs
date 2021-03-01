@@ -779,4 +779,37 @@ mod tests {
         assert!(iter.next().is_none());
         assert!(edge.next_row().is_none());
     }
+
+    #[test]
+    fn test_fill_rule() {
+        let tr = Transform::default();
+        let rasterizer = SignedDifferenceRasterizer::default();
+        let path: Path = r#"
+            M50,0 21,90 98,35 2,35 79,90z
+            M110,0 h90 v90 h-90z
+            M130,20 h50 v50 h-50 z
+            M210,0  h90 v90 h-90 z
+            M230,20 v50 h50 v-50 z
+        "#
+        .parse()
+        .expect("failed to parse path");
+        let y = 50;
+        let x0 = 50; // middle of the star
+        let x1 = 150; // middle of the first box
+        let x2 = 250; // middle of the second box
+
+        let surf = path.rasterize(&rasterizer, tr, FillRule::EvenOdd);
+        assert_approx_eq!(surf.get(y, x0).unwrap(), 0.0);
+        assert_approx_eq!(surf.get(y, x1).unwrap(), 0.0);
+        assert_approx_eq!(surf.get(y, x2).unwrap(), 0.0);
+        let area = surf.iter().sum::<Scalar>();
+        assert_approx_eq!(area, 13130.0, 1.0);
+
+        let surf = path.rasterize(&rasterizer, tr, FillRule::NonZero);
+        assert_approx_eq!(surf.get(y, x0).unwrap(), 1.0);
+        assert_approx_eq!(surf.get(y, x1).unwrap(), 1.0);
+        assert_approx_eq!(surf.get(y, x2).unwrap(), 0.0);
+        let area = surf.iter().sum::<Scalar>();
+        assert_approx_eq!(area, 16492.5, 1.0);
+    }
 }

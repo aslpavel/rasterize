@@ -6,7 +6,7 @@ use std::{
 
 pub type Scalar = f64;
 pub const EPSILON: f64 = std::f64::EPSILON;
-pub const EPSILON_SQRT: f64 = 1.4901161193847656e-08;
+pub const EPSILON_SQRT: f64 = 1.490_116_119_384_765_6e-8;
 pub const PI: f64 = std::f64::consts::PI;
 
 /// Format floats in a compact way suitable for SVG path

@@ -4,7 +4,7 @@ use crate::{
 };
 use std::{
     fmt,
-    io::{Read, Write},
+    io::{Cursor, Read, Write},
     str::FromStr,
     usize,
 };
@@ -423,10 +423,8 @@ impl Path {
     }
 
     /// Load path from SVG path representation
-    pub fn load(mut input: impl Read) -> std::io::Result<Self> {
-        let mut buffer = Vec::new();
-        input.read_to_end(&mut buffer)?;
-        let parser = PathParser::new(&buffer);
+    pub fn load(input: impl Read) -> std::io::Result<Self> {
+        let parser = PathParser::new(input);
         let mut builder = PathBuilder::new();
         parser.parse(&mut builder)?;
         Ok(builder.build())
@@ -774,16 +772,17 @@ impl FromStr for Path {
 
     fn from_str(text: &str) -> Result<Path, Self::Err> {
         let mut builder = PathBuilder::new();
-        let parser = PathParser::new(text.as_ref());
+        let parser = PathParser::new(Cursor::new(text));
         parser.parse(&mut builder)?;
         Ok(builder.build())
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug)]
 pub enum Error {
-    ParseError { reason: String, offset: usize },
+    ParseError { reason: String },
     ConvertionError { reason: String },
+    IOError(std::io::Error),
 }
 
 impl fmt::Display for Error {
@@ -792,31 +791,43 @@ impl fmt::Display for Error {
     }
 }
 
+impl From<std::io::Error> for Error {
+    fn from(error: std::io::Error) -> Self {
+        Self::IOError(error)
+    }
+}
+
 impl From<Error> for std::io::Error {
     fn from(error: Error) -> Self {
-        Self::new(std::io::ErrorKind::InvalidData, error)
+        match error {
+            Error::IOError(error) => error,
+            _ => Self::new(std::io::ErrorKind::InvalidData, error),
+        }
     }
 }
 
 impl std::error::Error for Error {}
 
 #[derive(Debug)]
-pub struct PathParser<'a> {
-    // text containing unparsed path
-    text: &'a [u8],
-    // current offset in the text
-    offset: usize,
+pub struct PathParser<I> {
+    // input containing unparsed SVG path
+    input: I,
+    // read but not consumed input
+    input_buffer: Vec<u8>,
+    // parser buffer
+    parse_buffer: Vec<u8>,
     // previous command
     prev_cmd: Option<u8>,
-    // current position from which next curve will start
+    // current position from which next relative curve will start
     position: Point,
 }
 
-impl<'a> PathParser<'a> {
-    fn new(text: &'a [u8]) -> PathParser<'a> {
+impl<I: Read> PathParser<I> {
+    fn new(input: I) -> Self {
         Self {
-            text,
-            offset: 0,
+            input,
+            input_buffer: Default::default(),
+            parse_buffer: Default::default(),
             prev_cmd: None,
             position: Point::new(0.0, 0.0),
         }
@@ -825,97 +836,97 @@ impl<'a> PathParser<'a> {
     /// Error construction helper
     fn error<S: Into<String>>(&self, reason: S) -> Error {
         Error::ParseError {
-            offset: self.offset,
             reason: reason.into(),
         }
     }
 
-    /// Byte at the current position
-    fn current(&self) -> Result<u8, Error> {
-        match self.text.get(self.offset) {
-            Some(byte) => Ok(*byte),
-            None => Err(self.error("unexpected end of input")),
+    fn parse_byte(&mut self) -> Result<Option<u8>, Error> {
+        match self.input_buffer.pop() {
+            None => {
+                let mut byte = [0; 1];
+                if self.input.read(&mut byte)? != 0 {
+                    Ok(Some(byte[0]))
+                } else {
+                    Ok(None)
+                }
+            }
+            byte => Ok(byte),
         }
     }
 
-    /// Advance current position by `count` bytes
-    fn advance(&mut self, count: usize) {
-        self.offset += count;
+    // read input while `pred` predicate is true, consumed input is stored in `Self::buffer`
+    fn parse_while(&mut self, mut pred: impl FnMut(u8) -> bool) -> Result<usize, Error> {
+        let mut count = 0;
+        loop {
+            let byte = match self.parse_byte()? {
+                None => break,
+                Some(byte) => byte,
+            };
+            if !pred(byte) {
+                self.input_buffer.push(byte);
+                break;
+            }
+            count += 1;
+            self.parse_buffer.push(byte);
+        }
+        Ok(count)
     }
 
-    /// Check if end of file is reached
-    fn is_eof(&self) -> bool {
-        self.offset >= self.text.len()
+    fn parse_once(&mut self, pred: impl FnOnce(u8) -> bool) -> Result<bool, Error> {
+        let byte = match self.parse_byte()? {
+            None => return Ok(false),
+            Some(byte) => byte,
+        };
+        if pred(byte) {
+            self.parse_buffer.push(byte);
+            Ok(true)
+        } else {
+            self.input_buffer.push(byte);
+            Ok(false)
+        }
     }
 
     /// Consume insignificant separators
-    fn parse_separators(&mut self) {
-        while !self.is_eof() {
-            match self.text[self.offset] {
-                b' ' | b'\t' | b'\r' | b'\n' | b',' => {
-                    self.offset += 1;
-                }
-                _ => break,
-            }
-        }
-    }
-
-    /// Check if byte under the cursor is a digit and advance
-    fn parse_digits(&mut self) -> Result<bool, Error> {
-        let mut found = false;
+    fn parse_separators(&mut self) -> Result<(), Error> {
         loop {
-            match self.current() {
-                Ok(b'0'..=b'9') => {
-                    self.advance(1);
-                    found = true;
-                }
-                _ => return Ok(found),
+            let byte = match self.parse_byte()? {
+                None => break,
+                Some(byte) => byte,
+            };
+            if !matches!(byte, b' ' | b'\t' | b'\r' | b'\n' | b',') {
+                self.input_buffer.push(byte);
+                break;
             }
-        }
-    }
-
-    /// Consume `+|-` sign
-    fn parse_sign(&mut self) -> Result<(), Error> {
-        match self.current()? {
-            b'-' | b'+' => {
-                self.advance(1);
-            }
-            _ => (),
         }
         Ok(())
     }
 
-    /// Parse single scalar
     fn parse_scalar(&mut self) -> Result<Scalar, Error> {
-        self.parse_separators();
-        let start = self.offset;
-        self.parse_sign()?;
-        let whole = self.parse_digits()?;
-        if !self.is_eof() {
-            let fraction = match self.current()? {
-                b'.' => {
-                    self.advance(1);
-                    self.parse_digits()?
-                }
-                _ => false,
-            };
-            if !whole && !fraction {
-                return Err(self.error("failed to parse scalar"));
-            }
-            match self.current()? {
-                b'e' | b'E' => {
-                    self.advance(1);
-                    self.parse_sign()?;
-                    if !self.parse_digits()? {
-                        return Err(self.error("failed to parse scalar"));
-                    }
-                }
-                _ => (),
+        self.parse_separators()?;
+
+        self.parse_buffer.clear();
+        self.parse_once(|byte| matches!(byte, b'-' | b'+'))?;
+        let whole = self.parse_while(|byte| matches!(byte, b'0'..=b'9'))?;
+        let frac = if self.parse_once(|byte| matches!(byte, b'.'))? {
+            self.parse_while(|byte| matches!(byte, b'0'..=b'9'))?
+        } else {
+            0
+        };
+        if whole + frac == 0 {
+            return Err(self.error("failed to parse scalar"));
+        }
+        if self.parse_once(|byte| matches!(byte, b'e' | b'E'))? {
+            self.parse_once(|byte| matches!(byte, b'-' | b'+'))?;
+            if self.parse_while(|byte| matches!(byte, b'0'..=b'9'))? == 0 {
+                return Err(self.error("scalar exponent part is empty"));
             }
         }
+
         // unwrap is safe here since we have validated content
-        let scalar_str = std::str::from_utf8(&self.text[start..self.offset]).unwrap();
+        let scalar_str = std::str::from_utf8(self.parse_buffer.as_ref()).unwrap();
         let scalar = Scalar::from_str(scalar_str).unwrap();
+
+        self.parse_buffer.clear();
         Ok(scalar)
     }
 
@@ -936,27 +947,26 @@ impl<'a> PathParser<'a> {
 
     /// Parse SVG flag `0|1` used by elliptic arc command
     fn parse_flag(&mut self) -> Result<bool, Error> {
-        self.parse_separators();
-        match self.current()? {
-            b'0' => {
-                self.advance(1);
-                Ok(false)
+        self.parse_separators()?;
+        match self.parse_byte()? {
+            Some(b'0') => Ok(false),
+            Some(b'1') => Ok(true),
+            byte => {
+                self.input_buffer.extend(byte);
+                Err(self.error("failed to parse flag"))
             }
-            b'1' => {
-                self.advance(1);
-                Ok(true)
-            }
-            _ => Err(self.error("failed to parse flag")),
         }
     }
 
     /// Parse SVG command
-    fn parse_cmd(&mut self) -> Result<u8, Error> {
-        let cmd = self.current()?;
+    fn parse_cmd(&mut self) -> Result<Option<u8>, Error> {
+        let cmd = match self.parse_byte()? {
+            None => return Ok(None),
+            Some(cmd) => cmd,
+        };
         match cmd {
             b'M' | b'm' | b'L' | b'l' | b'V' | b'v' | b'H' | b'h' | b'C' | b'c' | b'S' | b's'
             | b'Q' | b'q' | b'T' | b't' | b'A' | b'a' | b'Z' | b'z' => {
-                self.advance(1);
                 self.prev_cmd = if cmd == b'm' {
                     Some(b'l')
                 } else if cmd == b'M' {
@@ -966,24 +976,27 @@ impl<'a> PathParser<'a> {
                 } else {
                     Some(cmd)
                 };
-                Ok(cmd)
+                Ok(Some(cmd))
             }
-            _ => match self.prev_cmd {
-                Some(cmd) => Ok(cmd),
-                None => Err(self.error("failed to parse path cmd")),
-            },
+            byte => {
+                self.input_buffer.push(byte);
+                match self.prev_cmd {
+                    Some(cmd) => Ok(Some(cmd)),
+                    None => Err(self.error("failed to parse path cmd")),
+                }
+            }
         }
     }
 
     /// Parse SVG path and apply changes to the path builder.
     fn parse(mut self, builder: &mut PathBuilder) -> Result<(), Error> {
         loop {
-            self.parse_separators();
-            if self.is_eof() {
-                break;
-            }
+            self.parse_separators()?;
+            let cmd = match self.parse_cmd()? {
+                None => break,
+                Some(cmd) => cmd,
+            };
             self.position = builder.position();
-            let cmd = self.parse_cmd()?;
             match cmd {
                 b'M' | b'm' => {
                     builder.move_to(self.parse_point()?);
@@ -1049,7 +1062,11 @@ impl<'a> PathParser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{assert_approx_eq, SignedDifferenceRasterizer, Surface, PI};
+    use crate::{assert_approx_eq, PI};
+
+    fn assert_path_eq(p0: &Path, p1: &Path) {
+        assert_eq!(format!("{:?}", p0), format!("{:?}", p1));
+    }
 
     #[test]
     fn test_bbox() {
@@ -1072,6 +1089,7 @@ mod tests {
 
     #[test]
     fn test_path_parse() -> Result<(), Error> {
+        // complicated path
         let path: Path = SQUIRREL.parse()?;
         let reference = Path::builder()
             .move_to((12.0, 1.0))
@@ -1105,7 +1123,7 @@ mod tests {
             .cubic_to((3.0, 5.78), (2.78, 6.0), (2.5, 6.0))
             .close()
             .build();
-        assert_eq!(format!("{:?}", path), format!("{:?}", reference));
+        assert_path_eq(&path, &reference);
 
         let path: Path = " M0,0L1-1L1,0ZL0,1 L1,1Z ".parse()?;
         let reference = Path::new(vec![
@@ -1126,7 +1144,19 @@ mod tests {
             )
             .unwrap(),
         ]);
-        assert_eq!(format!("{:?}", path), format!("{:?}", reference));
+        assert_path_eq(&path, &reference);
+
+        let reference = Path::builder()
+            .move_to((0.5, -3.0))
+            .line_to((-11.0, -0.11))
+            .build();
+        // unseparated scalars, implicit line segment
+        let p1: Path = "M.5-3-11-.11".parse()?;
+        // other spaces, implicit relative line segment
+        let p2: Path = " m.5,-3 -11.5\n2.89 ".parse()?;
+        assert_path_eq(&reference, &p1);
+        assert_path_eq(&reference, &p2);
+
         Ok(())
     }
 
@@ -1136,7 +1166,7 @@ mod tests {
         let mut path_save = Vec::new();
         path.save(&mut path_save)?;
         let path_load = Path::load(std::io::Cursor::new(path_save))?;
-        assert_eq!(format!("{:?}", path), format!("{:?}", path_load));
+        assert_path_eq(&path, &path_load);
         Ok(())
     }
 
@@ -1161,40 +1191,6 @@ mod tests {
             assert!(l0.start().is_close_to(l1.start()));
             assert!(l0.end().is_close_to(l1.end()));
         }
-        Ok(())
-    }
-
-    #[test]
-    fn test_fill_rule() -> Result<(), Error> {
-        let tr = Transform::default();
-        let rasterizer = SignedDifferenceRasterizer::default();
-        let path: Path = r#"
-            M50,0 21,90 98,35 2,35 79,90z
-            M110,0 h90 v90 h-90z
-            M130,20 h50 v50 h-50 z
-            M210,0  h90 v90 h-90 z
-            M230,20 v50 h50 v-50 z
-        "#
-        .parse()?;
-        let y = 50;
-        let x0 = 50; // middle of the star
-        let x1 = 150; // middle of the first box
-        let x2 = 250; // middle of the second box
-
-        let surf = path.rasterize(&rasterizer, tr, FillRule::EvenOdd);
-        assert_approx_eq!(surf.get(y, x0).unwrap(), 0.0);
-        assert_approx_eq!(surf.get(y, x1).unwrap(), 0.0);
-        assert_approx_eq!(surf.get(y, x2).unwrap(), 0.0);
-        let area = surf.iter().sum::<Scalar>();
-        assert_approx_eq!(area, 13130.0, 1.0);
-
-        let surf = path.rasterize(&rasterizer, tr, FillRule::NonZero);
-        assert_approx_eq!(surf.get(y, x0).unwrap(), 1.0);
-        assert_approx_eq!(surf.get(y, x1).unwrap(), 1.0);
-        assert_approx_eq!(surf.get(y, x2).unwrap(), 0.0);
-        let area = surf.iter().sum::<Scalar>();
-        assert_approx_eq!(area, 16492.5, 1.0);
-
         Ok(())
     }
 }
