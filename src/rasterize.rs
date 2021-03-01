@@ -452,7 +452,6 @@ impl Iterator for ActiveEdgeIter {
                 None => {}
             }
 
-            // self.winding += self.iters_active.next().unwrap_or(0.0);
             let pixel = Pixel {
                 x: self.column,
                 y: self.row,

@@ -852,24 +852,16 @@ mod tests {
         assert_path_eq(&path, &reference);
 
         let path: Path = " M0,0L1-1L1,0ZL0,1 L1,1Z ".parse()?;
-        let reference = Path::new(vec![
-            SubPath::new(
-                vec![
-                    Line::new((0.0, 0.0), (1.0, -1.0)).into(),
-                    Line::new((1.0, -1.0), (1.0, 0.0)).into(),
-                ],
-                true,
-            )
-            .unwrap(),
-            SubPath::new(
-                vec![
-                    Line::new((0.0, 0.0), (0.0, 1.0)).into(),
-                    Line::new((0.0, 1.0), (1.0, 1.0)).into(),
-                ],
-                true,
-            )
-            .unwrap(),
-        ]);
+        let reference = Path::builder()
+            .move_to((0.0, 0.0))
+            .line_to((1.0, -1.0))
+            .line_to((1.0, 0.0))
+            .close()
+            .move_to((0.0, 0.0))
+            .line_to((0.0, 1.0))
+            .line_to((1.0, 1.0))
+            .close()
+            .build();
         assert_path_eq(&path, &reference);
 
         let reference = Path::builder()
