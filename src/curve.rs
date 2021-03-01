@@ -1,10 +1,10 @@
 //! All the things you need to handle bezier curves
 
 use crate::{
-    cubic_solve, quadratic_solve, ArrayIter, BBox, EllipArc, LineCap, LineJoin, M3x3, M4x4, Path,
-    Point, SVGPathParserError, Scalar, StrokeStyle, Transform, EPSILON,
+    cubic_solve, quadratic_solve, ArrayIter, BBox, EllipArc, LineCap, LineJoin, M3x3, M4x4, Point,
+    SVGPathCmd, SVGPathParser, SVGPathParserError, Scalar, StrokeStyle, Transform, EPSILON,
 };
-use std::{fmt, str::FromStr};
+use std::{fmt, io::Cursor, str::FromStr};
 
 pub type CurveRoots = ArrayIter<[Option<Scalar>; 3]>;
 pub type CurveExtremities = ArrayIter<[Option<Scalar>; 6]>;
@@ -995,11 +995,24 @@ impl FromStr for Segment {
     type Err = SVGPathParserError;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
-        let path = Path::from_str(text)?;
-        path.subpaths()
-            .get(0)
-            .map(|sp| sp.first())
-            .ok_or(SVGPathParserError::UnexpectedSegmentType)
+        use SVGPathCmd::*;
+        let mut iter = SVGPathParser::new(Cursor::new(text));
+        match [
+            iter.next().transpose()?,
+            iter.next().transpose()?,
+            iter.next().transpose()?,
+        ] {
+            [Some(MoveTo(p0)), Some(curve), None] => {
+                let segment: Segment = match curve {
+                    LineTo(p1) => Line::new(p0, p1).into(),
+                    QuadTo(p1, p2) => Quad::new(p0, p1, p2).into(),
+                    CubicTo(p1, p2, p3) => Cubic::new(p0, p1, p2, p3).into(),
+                    _ => return Err(SVGPathParserError::UnexpectedSegmentType),
+                };
+                Ok(segment)
+            }
+            _ => Err(SVGPathParserError::UnexpectedSegmentType),
+        }
     }
 }
 
@@ -1348,10 +1361,10 @@ mod tests {
 
     #[test]
     fn test_roots() {
-        let l = Line::new((0.0, -1.0), (2.0, 1.0));
+        let l: Line = "M0-1 2 1".parse().unwrap();
         assert_eq!(l.roots().collect::<Vec<_>>(), vec![0.5]);
 
-        let q = Quad::new((0.0, -2.0), (7.0, 6.0), (6.0, -4.0));
+        let q: Quad = "M0-2Q7,6 6-4".parse().unwrap();
         assert_eq!(
             q.roots().collect::<Vec<_>>(),
             vec![0.73841681234051, 0.15047207654837882]
