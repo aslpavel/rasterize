@@ -1,6 +1,7 @@
 use crate::{
     clamp, curve::line_offset, rasterize::Rasterizer, Align, BBox, Cubic, Curve, EllipArc, Line,
-    Point, Quad, Scalar, Segment, SurfaceMut, SurfaceOwned, Transform, EPSILON,
+    Point, Quad, SVGPathParser, SVGPathParserError, Scalar, Segment, SurfaceMut, SurfaceOwned,
+    Transform, EPSILON,
 };
 use std::{
     fmt,
@@ -379,6 +380,13 @@ impl Path {
         self.rasterize_to(rasterizer, shift * tr, fill_rule, surf)
     }
 
+    /// Convert path to SVG path representation
+    pub fn to_svg_path(&self) -> String {
+        let mut output = Vec::new();
+        self.save(&mut output).expect("failed in memory write");
+        String::from_utf8(output).expect("path save internal error")
+    }
+
     /// Save path in SVG path format.
     pub fn save(&self, mut out: impl Write) -> std::io::Result<()> {
         for subpath in self.subpaths.iter() {
@@ -415,18 +423,12 @@ impl Path {
         Ok(())
     }
 
-    /// Convert path to SVG path representation
-    pub fn to_svg_path(&self) -> String {
-        let mut output = Vec::new();
-        self.save(&mut output).expect("failed in memory write");
-        String::from_utf8(output).expect("path save internal error")
-    }
-
     /// Load path from SVG path representation
     pub fn load(input: impl Read) -> std::io::Result<Self> {
-        let parser = PathParser::new(input);
         let mut builder = PathBuilder::new();
-        parser.parse(&mut builder)?;
+        for cmd in SVGPathParser::new(input) {
+            cmd?.apply(&mut builder)
+        }
         Ok(builder.build())
     }
 }
@@ -601,9 +603,13 @@ impl PathBuilder {
     }
 
     /// Extend path from string, which is specified in the same format as SVGs path element.
-    pub fn append_svg_path(&mut self, string: impl AsRef<[u8]>) -> Result<&mut Self, Error> {
-        let parser = PathParser::new(string.as_ref());
-        parser.parse(self)?;
+    pub fn append_svg_path(
+        &mut self,
+        string: impl AsRef<[u8]>,
+    ) -> Result<&mut Self, SVGPathParserError> {
+        for cmd in SVGPathParser::new(Cursor::new(string)) {
+            cmd?.apply(self);
+        }
         Ok(self)
     }
 
@@ -768,294 +774,14 @@ impl PathBuilder {
 }
 
 impl FromStr for Path {
-    type Err = Error;
+    type Err = SVGPathParserError;
 
     fn from_str(text: &str) -> Result<Path, Self::Err> {
         let mut builder = PathBuilder::new();
-        let parser = PathParser::new(Cursor::new(text));
-        parser.parse(&mut builder)?;
+        for cmd in SVGPathParser::new(Cursor::new(text)) {
+            cmd?.apply(&mut builder);
+        }
         Ok(builder.build())
-    }
-}
-
-#[derive(Debug)]
-pub enum Error {
-    ParseError { reason: String },
-    ConvertionError { reason: String },
-    IOError(std::io::Error),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(error: std::io::Error) -> Self {
-        Self::IOError(error)
-    }
-}
-
-impl From<Error> for std::io::Error {
-    fn from(error: Error) -> Self {
-        match error {
-            Error::IOError(error) => error,
-            _ => Self::new(std::io::ErrorKind::InvalidData, error),
-        }
-    }
-}
-
-impl std::error::Error for Error {}
-
-#[derive(Debug)]
-pub struct PathParser<I> {
-    // input containing unparsed SVG path
-    input: I,
-    // read but not consumed input
-    input_buffer: Vec<u8>,
-    // parser buffer
-    parse_buffer: Vec<u8>,
-    // previous command
-    prev_cmd: Option<u8>,
-    // current position from which next relative curve will start
-    position: Point,
-}
-
-impl<I: Read> PathParser<I> {
-    fn new(input: I) -> Self {
-        Self {
-            input,
-            input_buffer: Default::default(),
-            parse_buffer: Default::default(),
-            prev_cmd: None,
-            position: Point::new(0.0, 0.0),
-        }
-    }
-
-    /// Error construction helper
-    fn error<S: Into<String>>(&self, reason: S) -> Error {
-        Error::ParseError {
-            reason: reason.into(),
-        }
-    }
-
-    fn parse_byte(&mut self) -> Result<Option<u8>, Error> {
-        match self.input_buffer.pop() {
-            None => {
-                let mut byte = [0; 1];
-                if self.input.read(&mut byte)? != 0 {
-                    Ok(Some(byte[0]))
-                } else {
-                    Ok(None)
-                }
-            }
-            byte => Ok(byte),
-        }
-    }
-
-    // read input while `pred` predicate is true, consumed input is stored in `Self::buffer`
-    fn parse_while(&mut self, mut pred: impl FnMut(u8) -> bool) -> Result<usize, Error> {
-        let mut count = 0;
-        loop {
-            let byte = match self.parse_byte()? {
-                None => break,
-                Some(byte) => byte,
-            };
-            if !pred(byte) {
-                self.input_buffer.push(byte);
-                break;
-            }
-            count += 1;
-            self.parse_buffer.push(byte);
-        }
-        Ok(count)
-    }
-
-    fn parse_once(&mut self, pred: impl FnOnce(u8) -> bool) -> Result<bool, Error> {
-        let byte = match self.parse_byte()? {
-            None => return Ok(false),
-            Some(byte) => byte,
-        };
-        if pred(byte) {
-            self.parse_buffer.push(byte);
-            Ok(true)
-        } else {
-            self.input_buffer.push(byte);
-            Ok(false)
-        }
-    }
-
-    /// Consume insignificant separators
-    fn parse_separators(&mut self) -> Result<(), Error> {
-        loop {
-            let byte = match self.parse_byte()? {
-                None => break,
-                Some(byte) => byte,
-            };
-            if !matches!(byte, b' ' | b'\t' | b'\r' | b'\n' | b',') {
-                self.input_buffer.push(byte);
-                break;
-            }
-        }
-        Ok(())
-    }
-
-    fn parse_scalar(&mut self) -> Result<Scalar, Error> {
-        self.parse_separators()?;
-
-        self.parse_buffer.clear();
-        self.parse_once(|byte| matches!(byte, b'-' | b'+'))?;
-        let whole = self.parse_while(|byte| matches!(byte, b'0'..=b'9'))?;
-        let frac = if self.parse_once(|byte| matches!(byte, b'.'))? {
-            self.parse_while(|byte| matches!(byte, b'0'..=b'9'))?
-        } else {
-            0
-        };
-        if whole + frac == 0 {
-            return Err(self.error("failed to parse scalar"));
-        }
-        if self.parse_once(|byte| matches!(byte, b'e' | b'E'))? {
-            self.parse_once(|byte| matches!(byte, b'-' | b'+'))?;
-            if self.parse_while(|byte| matches!(byte, b'0'..=b'9'))? == 0 {
-                return Err(self.error("scalar exponent part is empty"));
-            }
-        }
-
-        // unwrap is safe here since we have validated content
-        let scalar_str = std::str::from_utf8(self.parse_buffer.as_ref()).unwrap();
-        let scalar = Scalar::from_str(scalar_str).unwrap();
-
-        self.parse_buffer.clear();
-        Ok(scalar)
-    }
-
-    /// Parse pair of scalars and convert it to a point
-    fn parse_point(&mut self) -> Result<Point, Error> {
-        let x = self.parse_scalar()?;
-        let y = self.parse_scalar()?;
-        let is_relative = match self.prev_cmd {
-            Some(cmd) => cmd.is_ascii_lowercase(),
-            None => false,
-        };
-        if is_relative {
-            Ok(Point([x, y]) + self.position)
-        } else {
-            Ok(Point([x, y]))
-        }
-    }
-
-    /// Parse SVG flag `0|1` used by elliptic arc command
-    fn parse_flag(&mut self) -> Result<bool, Error> {
-        self.parse_separators()?;
-        match self.parse_byte()? {
-            Some(b'0') => Ok(false),
-            Some(b'1') => Ok(true),
-            byte => {
-                self.input_buffer.extend(byte);
-                Err(self.error("failed to parse flag"))
-            }
-        }
-    }
-
-    /// Parse SVG command
-    fn parse_cmd(&mut self) -> Result<Option<u8>, Error> {
-        let cmd = match self.parse_byte()? {
-            None => return Ok(None),
-            Some(cmd) => cmd,
-        };
-        match cmd {
-            b'M' | b'm' | b'L' | b'l' | b'V' | b'v' | b'H' | b'h' | b'C' | b'c' | b'S' | b's'
-            | b'Q' | b'q' | b'T' | b't' | b'A' | b'a' | b'Z' | b'z' => {
-                self.prev_cmd = if cmd == b'm' {
-                    Some(b'l')
-                } else if cmd == b'M' {
-                    Some(b'L')
-                } else if cmd == b'Z' || cmd == b'z' {
-                    None
-                } else {
-                    Some(cmd)
-                };
-                Ok(Some(cmd))
-            }
-            byte => {
-                self.input_buffer.push(byte);
-                match self.prev_cmd {
-                    Some(cmd) => Ok(Some(cmd)),
-                    None => Err(self.error("failed to parse path cmd")),
-                }
-            }
-        }
-    }
-
-    /// Parse SVG path and apply changes to the path builder.
-    fn parse(mut self, builder: &mut PathBuilder) -> Result<(), Error> {
-        loop {
-            self.parse_separators()?;
-            let cmd = match self.parse_cmd()? {
-                None => break,
-                Some(cmd) => cmd,
-            };
-            self.position = builder.position();
-            match cmd {
-                b'M' | b'm' => {
-                    builder.move_to(self.parse_point()?);
-                }
-                b'L' | b'l' => {
-                    builder.line_to(self.parse_point()?);
-                }
-                b'V' | b'v' => {
-                    let y = self.parse_scalar()?;
-                    let p0 = builder.position();
-                    let p1 = if cmd == b'v' {
-                        Point::new(p0.x(), p0.y() + y)
-                    } else {
-                        Point::new(p0.x(), y)
-                    };
-                    builder.line_to(p1);
-                }
-                b'H' | b'h' => {
-                    let x = self.parse_scalar()?;
-                    let p0 = builder.position();
-                    let p1 = if cmd == b'h' {
-                        Point::new(p0.x() + x, p0.y())
-                    } else {
-                        Point::new(x, p0.y())
-                    };
-                    builder.line_to(p1);
-                }
-                b'Q' | b'q' => {
-                    builder.quad_to(self.parse_point()?, self.parse_point()?);
-                }
-                b'T' | b't' => {
-                    builder.quad_smooth_to(self.parse_point()?);
-                }
-                b'C' | b'c' => {
-                    builder.cubic_to(
-                        self.parse_point()?,
-                        self.parse_point()?,
-                        self.parse_point()?,
-                    );
-                }
-                b'S' | b's' => {
-                    builder.cubic_smooth_to(self.parse_point()?, self.parse_point()?);
-                }
-                b'A' | b'a' => {
-                    let rx = self.parse_scalar()?;
-                    let ry = self.parse_scalar()?;
-                    let x_axis_rot = self.parse_scalar()?;
-                    let large_flag = self.parse_flag()?;
-                    let sweep_flag = self.parse_flag()?;
-                    let dst = self.parse_point()?;
-                    builder.arc_to((rx, ry), x_axis_rot, large_flag, sweep_flag, dst);
-                }
-                b'Z' | b'z' => {
-                    builder.close();
-                }
-                _ => unreachable!(),
-            }
-        }
-        Ok(())
     }
 }
 
@@ -1088,7 +814,7 @@ mod tests {
     "#;
 
     #[test]
-    fn test_path_parse() -> Result<(), Error> {
+    fn test_path_parse() -> Result<(), SVGPathParserError> {
         // complicated path
         let path: Path = SQUIRREL.parse()?;
         let reference = Path::builder()
@@ -1171,7 +897,7 @@ mod tests {
     }
 
     #[test]
-    fn test_flatten() -> Result<(), Error> {
+    fn test_flatten() -> Result<(), SVGPathParserError> {
         let path: Path = SQUIRREL.parse()?;
         let tr = Transform::default()
             .rotate(PI / 3.0)

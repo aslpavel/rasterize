@@ -1,8 +1,8 @@
 //! All the things you need to handle bezier curves
 
 use crate::{
-    cubic_solve, quadratic_solve, ArrayIter, BBox, EllipArc, Error, LineCap, LineJoin, M3x3, M4x4,
-    Path, Point, Scalar, StrokeStyle, Transform, EPSILON,
+    cubic_solve, quadratic_solve, ArrayIter, BBox, EllipArc, LineCap, LineJoin, M3x3, M4x4, Path,
+    Point, SVGPathParserError, Scalar, StrokeStyle, Transform, EPSILON,
 };
 use std::{fmt, str::FromStr};
 
@@ -238,13 +238,13 @@ impl Curve for Line {
 }
 
 impl FromStr for Line {
-    type Err = Error;
+    type Err = SVGPathParserError;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         let segment = Segment::from_str(text)?;
-        segment.to_line().ok_or_else(|| Error::ConvertionError {
-            reason: "first element of the path is not a line".to_string(),
-        })
+        segment
+            .to_line()
+            .ok_or(SVGPathParserError::UnexpectedSegmentType)
     }
 }
 
@@ -473,13 +473,13 @@ impl Curve for Quad {
 }
 
 impl FromStr for Quad {
-    type Err = Error;
+    type Err = SVGPathParserError;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         let segment = Segment::from_str(text)?;
-        segment.to_quad().ok_or_else(|| Error::ConvertionError {
-            reason: "first element of the path is not a quad".to_string(),
-        })
+        segment
+            .to_quad()
+            .ok_or(SVGPathParserError::UnexpectedSegmentType)
     }
 }
 
@@ -789,13 +789,13 @@ impl From<Quad> for Cubic {
 }
 
 impl FromStr for Cubic {
-    type Err = Error;
+    type Err = SVGPathParserError;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         let segment = Segment::from_str(text)?;
-        segment.to_cubic().ok_or_else(|| Error::ConvertionError {
-            reason: "first element of the path is not a cubic".to_string(),
-        })
+        segment
+            .to_cubic()
+            .ok_or(SVGPathParserError::UnexpectedSegmentType)
     }
 }
 
@@ -992,16 +992,14 @@ impl fmt::Debug for Segment {
 }
 
 impl FromStr for Segment {
-    type Err = Error;
+    type Err = SVGPathParserError;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         let path = Path::from_str(text)?;
         path.subpaths()
             .get(0)
             .map(|sp| sp.first())
-            .ok_or_else(|| Error::ConvertionError {
-                reason: "Empty path can not be converted to a segment".to_string(),
-            })
+            .ok_or(SVGPathParserError::UnexpectedSegmentType)
     }
 }
 

@@ -12,6 +12,7 @@ mod ellipse;
 mod geometry;
 mod path;
 mod rasterize;
+mod svg;
 mod utils;
 
 pub use crate::rasterize::{
@@ -23,8 +24,9 @@ pub use curve::{
 pub use ellipse::EllipArc;
 pub use geometry::{scalar_fmt, Align, BBox, Point, Scalar, Transform, EPSILON, EPSILON_SQRT, PI};
 pub use path::{
-    Error, FillRule, LineCap, LineJoin, Path, PathBuilder, StrokeStyle, SubPath, DEFAULT_FLATNESS,
+    FillRule, LineCap, LineJoin, Path, PathBuilder, StrokeStyle, SubPath, DEFAULT_FLATNESS,
 };
+pub use svg::{SVGPathCmd, SVGPathParser, SVGPathParserError};
 use utils::{clamp, cubic_solve, quadratic_solve, ArrayIter, M3x3, M4x4};
 
 use std::io::Write;

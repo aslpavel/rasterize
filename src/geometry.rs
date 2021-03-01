@@ -138,6 +138,13 @@ impl From<(Scalar, Scalar)> for Point {
     }
 }
 
+impl<'a> From<&'a Point> for Point {
+    fn from(point: &'a Point) -> Self {
+        let Self([x, y]) = point;
+        Self([*x, *y])
+    }
+}
+
 impl Mul<&Point> for Scalar {
     type Output = Point;
 
