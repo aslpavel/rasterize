@@ -64,8 +64,6 @@ pub struct SVGPathParser<I> {
     input: I,
     // read but not consumed input
     input_buffer: Option<u8>,
-    // parser buffer
-    parse_buffer: Vec<u8>,
     // previous operation
     prev_op: Option<u8>,
     // previous command (used to determine smooth points)
@@ -81,7 +79,6 @@ impl<I: Read> SVGPathParser<I> {
         Self {
             input,
             input_buffer: None,
-            parse_buffer: Default::default(),
             prev_op: None,
             prev_cmd: None,
             position: Point::new(0.0, 0.0),
@@ -113,6 +110,7 @@ impl<I: Read> SVGPathParser<I> {
     fn parse_while(
         &mut self,
         mut pred: impl FnMut(u8) -> bool,
+        mut proc: impl FnMut(u8),
     ) -> Result<usize, SVGPathParserError> {
         let mut count = 0;
         loop {
@@ -125,19 +123,23 @@ impl<I: Read> SVGPathParser<I> {
                 break;
             }
             count += 1;
-            self.parse_buffer.push(byte);
+            proc(byte);
         }
         Ok(count)
     }
 
     // consume at most one byte from the input, if predicate returns true
-    fn parse_once(&mut self, pred: impl FnOnce(u8) -> bool) -> Result<bool, SVGPathParserError> {
+    fn parse_once(
+        &mut self,
+        pred: impl FnOnce(u8) -> bool,
+        proc: impl FnOnce(u8),
+    ) -> Result<bool, SVGPathParserError> {
         let byte = match self.parse_byte()? {
             None => return Ok(false),
             Some(byte) => byte,
         };
         if pred(byte) {
-            self.parse_buffer.push(byte);
+            proc(byte);
             Ok(true)
         } else {
             self.unparse_byte(byte);
@@ -164,30 +166,66 @@ impl<I: Read> SVGPathParser<I> {
     fn parse_scalar(&mut self) -> Result<Scalar, SVGPathParserError> {
         self.parse_separators()?;
 
-        self.parse_buffer.clear();
-        self.parse_once(|byte| matches!(byte, b'-' | b'+'))?;
-        let whole = self.parse_while(|byte| matches!(byte, b'0'..=b'9'))?;
-        let frac = if self.parse_once(|byte| matches!(byte, b'.'))? {
-            self.parse_while(|byte| matches!(byte, b'0'..=b'9'))?
+        let mut mantissa: i64 = 0;
+        let mut exponent: i64 = 0;
+        let mut sign = 1;
+
+        fn push_digit(value: &mut i64, byte: u8) {
+            let digit = byte - b'0';
+            *value = value.wrapping_mul(10).wrapping_add(digit as i64);
+        }
+
+        self.parse_once(
+            |byte| matches!(byte, b'-' | b'+'),
+            |byte| {
+                if byte == b'-' {
+                    sign = -1
+                }
+            },
+        )?;
+        let whole = self.parse_while(
+            |byte| matches!(byte, b'0'..=b'9'),
+            |byte| push_digit(&mut mantissa, byte),
+        )?;
+        let frac = if self.parse_once(|byte| matches!(byte, b'.'), |_| {})? {
+            self.parse_while(
+                |byte| matches!(byte, b'0'..=b'9'),
+                |byte| {
+                    push_digit(&mut mantissa, byte);
+                    exponent -= 1;
+                },
+            )?
         } else {
             0
         };
+        mantissa *= sign;
+
         if whole + frac == 0 {
             return Err(SVGPathParserError::InvalidScalar);
         }
-        if self.parse_once(|byte| matches!(byte, b'e' | b'E'))? {
-            self.parse_once(|byte| matches!(byte, b'-' | b'+'))?;
-            if self.parse_while(|byte| matches!(byte, b'0'..=b'9'))? == 0 {
+
+        if self.parse_once(|byte| matches!(byte, b'e' | b'E'), |_| {})? {
+            let mut sci: i64 = 0;
+            let mut sci_sign = 1;
+            self.parse_once(
+                |byte| matches!(byte, b'-' | b'+'),
+                |byte| {
+                    if byte == b'-' {
+                        sci_sign = -1
+                    }
+                },
+            )?;
+            if self.parse_while(
+                |byte| matches!(byte, b'0'..=b'9'),
+                |byte| push_digit(&mut sci, byte),
+            )? == 0
+            {
                 return Err(SVGPathParserError::InvalidScalar);
             }
+            exponent = exponent.wrapping_add(sci_sign * sci)
         }
 
-        // unwrap is safe here since we have validated content
-        let scalar_str = std::str::from_utf8(self.parse_buffer.as_ref()).unwrap();
-        let scalar = scalar_str.parse().unwrap();
-
-        self.parse_buffer.clear();
-        Ok(scalar)
+        Ok((mantissa as Scalar) * 10f64.powi(exponent as i32))
     }
 
     // parse pair of scalars and convert it to a point
@@ -370,3 +408,22 @@ impl From<SVGPathParserError> for std::io::Error {
 }
 
 impl std::error::Error for SVGPathParserError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assert_approx_eq;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_parse_scalar() -> Result<(), SVGPathParserError> {
+        let mut parser = SVGPathParser::new(Cursor::new("1 .22e0 0.32 3.21e-3 -1.24 1e4"));
+        assert_approx_eq!(parser.parse_scalar()?, 1.0);
+        assert_approx_eq!(parser.parse_scalar()?, 0.22);
+        assert_approx_eq!(parser.parse_scalar()?, 0.32);
+        assert_approx_eq!(parser.parse_scalar()?, 3.21e-3);
+        assert_approx_eq!(parser.parse_scalar()?, -1.24);
+        assert_approx_eq!(parser.parse_scalar()?, 1e4);
+        Ok(())
+    }
+}
