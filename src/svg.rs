@@ -63,7 +63,7 @@ pub struct SVGPathParser<I> {
     // input containing unparsed SVG path
     input: I,
     // read but not consumed input
-    input_buffer: Vec<u8>,
+    input_buffer: Option<u8>,
     // parser buffer
     parse_buffer: Vec<u8>,
     // previous operation
@@ -80,7 +80,7 @@ impl<I: Read> SVGPathParser<I> {
     pub fn new(input: I) -> Self {
         Self {
             input,
-            input_buffer: Default::default(),
+            input_buffer: None,
             parse_buffer: Default::default(),
             prev_op: None,
             prev_cmd: None,
@@ -91,7 +91,7 @@ impl<I: Read> SVGPathParser<I> {
 
     // consume single byte from the input
     fn parse_byte(&mut self) -> Result<Option<u8>, SVGPathParserError> {
-        match self.input_buffer.pop() {
+        match self.input_buffer.take() {
             None => {
                 let mut byte = [0; 1];
                 if self.input.read(&mut byte)? != 0 {
@@ -102,6 +102,11 @@ impl<I: Read> SVGPathParser<I> {
             }
             byte => Ok(byte),
         }
+    }
+
+    fn unparse_byte(&mut self, byte: u8) {
+        debug_assert!(self.input_buffer.is_none());
+        self.input_buffer = Some(byte);
     }
 
     // consume input while `pred` predicate is true, consumed input is stored in `Self::buffer`
@@ -116,7 +121,7 @@ impl<I: Read> SVGPathParser<I> {
                 Some(byte) => byte,
             };
             if !pred(byte) {
-                self.input_buffer.push(byte);
+                self.unparse_byte(byte);
                 break;
             }
             count += 1;
@@ -135,7 +140,7 @@ impl<I: Read> SVGPathParser<I> {
             self.parse_buffer.push(byte);
             Ok(true)
         } else {
-            self.input_buffer.push(byte);
+            self.unparse_byte(byte);
             Ok(false)
         }
     }
@@ -148,7 +153,7 @@ impl<I: Read> SVGPathParser<I> {
                 Some(byte) => byte,
             };
             if !matches!(byte, b' ' | b'\t' | b'\r' | b'\n' | b',') {
-                self.input_buffer.push(byte);
+                self.unparse_byte(byte);
                 break;
             }
         }
@@ -207,7 +212,9 @@ impl<I: Read> SVGPathParser<I> {
             Some(b'0') => Ok(false),
             Some(b'1') => Ok(true),
             byte => {
-                self.input_buffer.extend(byte);
+                if let Some(byte) = byte {
+                    self.unparse_byte(byte);
+                }
                 Err(SVGPathParserError::InvalidFlag)
             }
         }
@@ -234,7 +241,7 @@ impl<I: Read> SVGPathParser<I> {
                 Ok(Some(op))
             }
             byte => {
-                self.input_buffer.push(byte);
+                self.unparse_byte(byte);
                 match self.prev_op {
                     Some(op) => Ok(Some(op)),
                     None => Err(SVGPathParserError::InvalidCmd(op)),
