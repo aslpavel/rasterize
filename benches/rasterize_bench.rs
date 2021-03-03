@@ -1,11 +1,15 @@
 #![deny(warnings)]
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use rasterize::{
-    ActiveEdgeRasterizer, Cubic, Curve, FillRule, LineCap, LineJoin, Path, Rasterizer,
-    SignedDifferenceRasterizer, StrokeStyle, SurfaceMut, Transform, DEFAULT_FLATNESS,
+use rasterize::*;
+use std::{
+    fs::File,
+    io::{Cursor, Read},
+    time::Duration,
 };
-use std::{fs::File, io::Read, time::Duration};
+
+const SQUIRREL_FILE: &str = "paths/squirrel.path";
+const MATERIAL_FILE: &str = "paths/material-big.path";
 
 fn rasterizers() -> impl Iterator<Item = Box<dyn Rasterizer>> {
     let r0: Box<dyn Rasterizer> = Box::new(SignedDifferenceRasterizer::default());
@@ -21,7 +25,7 @@ fn curve_benchmark(c: &mut Criterion) {
 }
 
 fn stroke_benchmark(c: &mut Criterion) {
-    let mut file = File::open("paths/squirrel.path").expect("failed to open path");
+    let mut file = File::open(SQUIRREL_FILE).expect("failed to open path");
     let path = Path::load(&mut file).expect("failed to load path");
     let tr = Transform::default();
     let style = StrokeStyle {
@@ -50,7 +54,7 @@ fn stroke_benchmark(c: &mut Criterion) {
 fn large_path_benchmark(c: &mut Criterion) {
     let tr = Transform::default();
     let mut path_str = String::new();
-    let mut file = File::open("paths/material-big.path").expect("failed to open a path");
+    let mut file = File::open(MATERIAL_FILE).expect("failed to open a path");
     file.read_to_string(&mut path_str)
         .expect("failed to read path");
     let path: Path = path_str.parse().unwrap();
@@ -58,6 +62,9 @@ fn large_path_benchmark(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("material-big");
     group.throughput(Throughput::Elements(path.segments_count() as u64));
+    group.bench_function("parse-only", |b| {
+        b.iter(|| SVGPathParser::new(Cursor::new(path_str.as_str())).count())
+    });
     group.bench_function("parse", |b| {
         b.iter_with_large_drop(|| path_str.parse::<Path>())
     });

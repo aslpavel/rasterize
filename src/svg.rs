@@ -225,7 +225,7 @@ impl<I: Read> SVGPathParser<I> {
             exponent = exponent.wrapping_add(sci_sign * sci)
         }
 
-        Ok((mantissa as Scalar) * 10f64.powi(exponent as i32))
+        Ok((mantissa as Scalar) * (10.0 as Scalar).powi(exponent as i32))
     }
 
     // parse pair of scalars and convert it to a point
