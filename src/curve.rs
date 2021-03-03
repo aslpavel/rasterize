@@ -6,7 +6,9 @@ use crate::{
 };
 use std::{fmt, io::Cursor, str::FromStr};
 
+/// Iterator containing curve roots
 pub type CurveRoots = ArrayIter<[Option<Scalar>; 3]>;
+/// Iterator containing curve extremities
 pub type CurveExtremities = ArrayIter<[Option<Scalar>; 6]>;
 
 /// Set of operations common to all bezier curves.
@@ -64,6 +66,7 @@ pub trait Curve: Sized + Into<Segment> {
     fn extremities(&self) -> CurveExtremities;
 }
 
+/// Iterator over line segments aproximating curve segment
 pub struct CurveFlattenIter {
     flatness: Scalar,
     stack: Vec<Segment>,
@@ -273,11 +276,13 @@ const QI: M3x3 = M3x3([
 /// Polynimial form:
 /// `(1 - t) ^ 2 * p0 + 2 * (1 - t) * t * p1 + t ^ 2 * p2`
 /// Matrix from:
+/// ```text
 ///             ┌          ┐ ┌    ┐
 /// ┌         ┐ │  1  0  0 │ │ p0 │
 /// │ 1 t t^2 │ │ -2  2  0 │ │ p1 │
 /// └         ┘ │  1 -2  1 │ │ p2 │
 ///             └          ┘ └    ┘
+/// ```
 #[derive(Clone, Copy, PartialEq)]
 pub struct Quad(pub [Point; 3]);
 
@@ -289,14 +294,17 @@ impl fmt::Debug for Quad {
 }
 
 impl Quad {
+    /// Create new quadratic bezier curve
     pub fn new(p0: impl Into<Point>, p1: impl Into<Point>, p2: impl Into<Point>) -> Self {
         Self([p0.into(), p1.into(), p2.into()])
     }
 
+    /// Points defining quadratic bezier curve
     pub fn points(&self) -> [Point; 3] {
         self.0
     }
 
+    /// Tanget lines at the ends of the quadratic bezier curve
     pub fn ends(&self) -> (Line, Line) {
         let Self([p0, p1, p2]) = *self;
         let start = Line::new(p0, p1);
@@ -326,12 +334,13 @@ impl Curve for Quad {
     ///
     /// Line can be represented as bezier2 curve, if `p1 = (p0 + p2) / 2.0`.
     /// Grouping polynomial coofficients:
+    /// ```text
     ///     q(t) = t^2 p2 + 2 (1 - t) t p1 + (1 - t)^2 p0
     ///     l(t) = t^2 p2 + (1 - t) t (p0 + p2) + (1 - t)^2 p0
     ///     d(t) = |q(t) - l(t)| = (1 - t) t |2 * p1 - p0 - p2|
     ///     f    = 1 / 4 * | 2 p1 - p0 - p2 |
     ///     f^2  = 1/16 |2 * p1 - p0 - p2|^2
-    ///
+    /// ```
     fn flatness(&self) -> Scalar {
         let Self([p0, p1, p2]) = *self;
         let Point([x, y]) = 2.0 * p1 - p0 - p2;
@@ -510,12 +519,14 @@ const CI: M4x4 = M4x4([
 /// Polynimial form:
 /// `(1 - t) ^ 3 * p0 + 3 * (1 - t) ^ 2 * t * p1 + 3 * (1 - t) * t ^ 2 * p2 + t ^ 3 * p3`
 /// Matrix from:
+/// ```text
 ///                 ┌             ┐ ┌    ┐
 /// ┌             ┐ │  1  0  0  0 │ │ p0 │
 /// │ 1 t t^2 t^3 │ │ -3  3  0  0 │ │ p1 │
 /// └             ┘ │  3 -6  3  0 │ │ p2 │
 ///                 │ -1  3 -3  1 │ │ p3 │
 ///                 └             ┘ └    ┘
+/// ```
 #[derive(Clone, Copy, PartialEq)]
 pub struct Cubic(pub [Point; 4]);
 
@@ -527,6 +538,7 @@ impl fmt::Debug for Cubic {
 }
 
 impl Cubic {
+    /// Create new cubic bezier curve
     pub fn new(
         p0: impl Into<Point>,
         p1: impl Into<Point>,
@@ -536,10 +548,12 @@ impl Cubic {
         Self([p0.into(), p1.into(), p2.into(), p3.into()])
     }
 
+    /// Points defining cubic bezier curve
     pub fn points(&self) -> [Point; 4] {
         self.0
     }
 
+    /// Taget lines at the ends of cubic bezier curve
     pub fn ends(&self) -> (Line, Line) {
         let ps = self.points();
         let mut start = 0;
@@ -668,13 +682,15 @@ impl Curve for Cubic {
         // Given curve as C(t) = [1 t t^2 t^3] M C
         // we can change parameter t -> a + (b - a) * t which will produced desired curve
         // it is possible to decompose it as
+        // ```text
         //                 ┌                                       ┐
         // ┌             ┐ │  1  a       a^2         a^3           │
         // │ 1 t t^2 t^3 │ │  0  (b - a) 2*a*(b - a) 3*a^2*(b - a) │ = [1 t t^2 t^3] T
         // └             ┘ │  0  0       (b - a)^2   3*a*(b - a)^2 │
         //                 │  0  0       0           (b - a)^3     │
         //                 └                                       ┘
-        // we can convert it back to desired curve by C[a, b](t) = [1 t t^2 t^3] C (CI T C) P
+        // ```
+        // we can convert it back to desired curve by `C[a, b](t) = [1 t t^2 t^3] C (CI T C) P`
         let Self([p0, p1, p2, p3]) = self;
         let ba = b - a;
         #[rustfmt::skip]

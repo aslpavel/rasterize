@@ -391,7 +391,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let offset = '0' as u32;
     for index in 0..11 {
         let mut path = generate_bar(
-            index as f64 / 10.0,
+            index as Scalar / 10.0,
             BBox::new((0.0, 0.0), (460.0, 1200.0)),
             70.0,
             Point::new(50.0, 50.0),
@@ -413,7 +413,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .enumerate()
     {
         let mut path = generate_bar(
-            index as f64 / 10.0,
+            index as Scalar / 10.0,
             BBox::new((0.0, 0.0), (460.0, 1200.0)),
             70.0,
             Point::new(50.0, 50.0),

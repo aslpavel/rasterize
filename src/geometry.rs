@@ -4,9 +4,13 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
+/// Scalar type
 pub type Scalar = f64;
+/// Epsilon value
 pub const EPSILON: f64 = std::f64::EPSILON;
+/// Square root of the epsilon value
 pub const EPSILON_SQRT: f64 = 1.490_116_119_384_765_6e-8;
+/// Mathematical pi constant
 pub const PI: f64 = std::f64::consts::PI;
 
 /// Format floats in a compact way suitable for SVG path
@@ -221,7 +225,7 @@ pub enum Align {
 
 /// 2D affine transformation
 ///
-/// Stored as an array [m00, m01, m02, m10, m11, m12] but semantically corresponds to
+/// Stored as an array [m00, m01, m02, m10, m11, m12], semantically corresponds to
 /// a matrix:
 /// ┌             ┐
 /// │ m00 m01 m02 │

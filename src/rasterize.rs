@@ -31,7 +31,10 @@ use crate::{
 };
 use std::{cmp::min, collections::VecDeque};
 
+/// Basic rasterizer interface
 pub trait Rasterizer {
+    /// Rasterize provided path with transformation applied, and
+    /// specified fill rule.
     fn rasterize(
         &self,
         path: &Path,
@@ -40,6 +43,7 @@ pub trait Rasterizer {
         fill_rule: FillRule,
     );
 
+    /// Name of the rasterizer (usefull for debugging)
     fn name(&self) -> &str;
 }
 
@@ -75,6 +79,7 @@ impl Rasterizer for Box<dyn Rasterizer> {
     }
 }
 
+/// Signed difference based rasterizer
 pub struct SignedDifferenceRasterizer {
     flatness: Scalar,
 }
@@ -317,6 +322,7 @@ impl Rasterizer for ActiveEdgeRasterizer {
     }
 }
 
+/// Iterator over rasterized pixels, by active-edge rasterizer
 pub struct ActiveEdgeIter {
     // all edges sorted by `Edge::row` in descending order
     edge_inactive: Vec<Vec<Edge>>,
@@ -405,10 +411,14 @@ impl ActiveEdgeIter {
     }
 }
 
+/// Rasterized pixel
 #[derive(Debug, Clone, Copy)]
 pub struct Pixel {
+    /// x-axis coordinate
     pub x: usize,
+    /// y-axis coordinate
     pub y: usize,
+    /// alpha value of the pixel
     pub alpha: Scalar,
 }
 

@@ -101,6 +101,7 @@ impl<I: Read> SVGPathParser<I> {
         }
     }
 
+    // put byte into input buffer, at most one byte is cached
     fn unparse_byte(&mut self, byte: u8) {
         debug_assert!(self.input_buffer.is_none());
         self.input_buffer = Some(byte);
@@ -230,16 +231,10 @@ impl<I: Read> SVGPathParser<I> {
 
     // parse pair of scalars and convert it to a point
     fn parse_point(&mut self) -> Result<Point, SVGPathParserError> {
-        let x = self.parse_scalar()?;
-        let y = self.parse_scalar()?;
-        let is_relative = match self.prev_op {
-            Some(cmd) => cmd.is_ascii_lowercase(),
-            None => false,
-        };
-        if is_relative {
-            Ok(Point([x, y]) + self.position)
-        } else {
-            Ok(Point([x, y]))
+        let point = Point::new(self.parse_scalar()?, self.parse_scalar()?);
+        match self.prev_op {
+            Some(cmd) if cmd.is_ascii_lowercase() => Ok(point + self.position),
+            _ => Ok(point),
         }
     }
 
@@ -377,12 +372,18 @@ impl<I: Read> Iterator for SVGPathParser<I> {
     }
 }
 
+/// Error while parsing path in the SVG format
 #[derive(Debug)]
 pub enum SVGPathParserError {
+    /// Failed to parse SVG command
     InvalidCmd(u8),
+    /// Failed to parse scalar value
     InvalidScalar,
+    /// Failed to parse flag value
     InvalidFlag,
+    /// Unexpected segment type found while parsing curve segment
     UnexpectedSegmentType,
+    /// IO error propagated while reading input stream
     IOError(std::io::Error),
 }
 
@@ -417,7 +418,7 @@ mod tests {
 
     #[test]
     fn test_parse_scalar() -> Result<(), SVGPathParserError> {
-        let mut parser = SVGPathParser::new(Cursor::new("1 .22e0 0.32 3.21e-3 -1.24 1e4"));
+        let mut parser = SVGPathParser::new(Cursor::new("1 .22e0.32 3.21e-3-1.24 1e4"));
         assert_approx_eq!(parser.parse_scalar()?, 1.0);
         assert_approx_eq!(parser.parse_scalar()?, 0.22);
         assert_approx_eq!(parser.parse_scalar()?, 0.32);
