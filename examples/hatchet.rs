@@ -328,10 +328,28 @@ fn generate_bar(
     path
 }
 
+fn generate_charging(bbox: BBox) -> Path {
+    Path::builder()
+        .move_to((bbox.x() + bbox.width() * 0.6, bbox.y()))
+        .line_to((
+            bbox.x() + bbox.width() * 0.6,
+            bbox.y() + bbox.height() * 0.4,
+        ))
+        .line_to((bbox.x() + bbox.width(), bbox.y() + bbox.height() * 0.4))
+        .line_to((bbox.x() + bbox.width() * 0.4, bbox.y() + bbox.height()))
+        .line_to((
+            bbox.x() + bbox.width() * 0.4,
+            bbox.y() + bbox.height() * 0.6,
+        ))
+        .line_to((bbox.x(), bbox.y() + bbox.height() * 0.6))
+        .close()
+        .build()
+}
+
 struct Glyph {
     path: Path,
     name: String,
-    unicode: char,
+    unicode: String,
 }
 
 fn generate_font(
@@ -366,8 +384,10 @@ fn generate_font(
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut glyphs = Vec::new();
     let tr = Transform::default().translate(0.0, 1000.0).scale(1.0, -1.0);
+    let mut glyphs = Vec::new();
+
+    // bars
     let offset = '0' as u32;
     for index in 0..11 {
         let mut path = generate_bar(
@@ -382,7 +402,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         glyphs.push(Glyph {
             path,
             name: format!("bar-{}", index),
-            unicode: std::char::from_u32(offset + index).unwrap(),
+            unicode: std::char::from_u32(offset + index).unwrap().to_string(),
+        });
+    }
+
+    // bars charging
+    let charging = generate_charging(BBox::new((100.0, 100.0), (360.0, 1100.0)));
+    for (index, unicode) in [";", "&lt;", "=", "&gt;", "?", "@", "A", "B", "C", "D", "E"]
+        .iter()
+        .enumerate()
+    {
+        let mut path = generate_bar(
+            index as f64 / 10.0,
+            BBox::new((0.0, 0.0), (460.0, 1200.0)),
+            70.0,
+            Point::new(50.0, 50.0),
+            Line::new((0.0, 0.0), (70.0, 70.0)),
+            0.3,
+        );
+        path.extend(charging.clone());
+        path.transform(tr);
+        glyphs.push(Glyph {
+            path,
+            name: format!("bar-charging-{}", index),
+            unicode: unicode.to_string(),
         });
     }
 
