@@ -1,6 +1,6 @@
 use crate::{
-    clamp, curve::line_offset, rasterize::Rasterizer, Align, BBox, Cubic, Curve, EllipArc, Line,
-    Point, Quad, SVGPathParser, SVGPathParserError, Scalar, Segment, SurfaceMut, SurfaceOwned,
+    clamp, curve::line_offset, rasterize::Rasterizer, Align, BBox, Cubic, Curve, EllipArc,
+    ImageMut, ImageOwned, Line, Point, Quad, SVGPathParser, SVGPathParserError, Scalar, Segment,
     Transform, EPSILON,
 };
 use std::{
@@ -193,7 +193,7 @@ impl SubPath {
 }
 
 /// Collection of the SubPath treated as a signle unit
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Default)]
 pub struct Path {
     subpaths: Vec<SubPath>,
 }
@@ -318,48 +318,48 @@ impl Path {
         }
     }
 
-    /// Rasterize mast for the path in into a provided surface.
+    /// Rasterize mast for the path in into a provided image.
     ///
-    /// Everything that is outside of the surface will be cropped. Surface is assumed
+    /// Everything that is outside of the image will be cropped. Image is assumed
     /// to contain zeros.
-    pub fn rasterize_to<S: SurfaceMut<Item = Scalar>>(
+    pub fn rasterize_to<I: ImageMut<Pixel = Scalar>>(
         &self,
         rasterizer: impl Rasterizer,
         tr: Transform,
         fill_rule: FillRule,
-        mut surf: S,
-    ) -> S {
-        rasterizer.rasterize(self, tr, &mut surf, fill_rule);
-        surf
+        mut img: I,
+    ) -> I {
+        rasterizer.rasterize(self, tr, &mut img, fill_rule);
+        img
     }
 
-    /// Rasterize fitted mask for the path into a provided sruface.
+    /// Rasterize fitted mask for the path into a provided image.
     ///
-    /// Path is rescaled and centered appropriately to fit into a provided surface.
-    pub fn rasterize_fit<S: SurfaceMut<Item = Scalar>>(
+    /// Path is rescaled and centered appropriately to fit into a provided image.
+    pub fn rasterize_fit<I: ImageMut<Pixel = Scalar>>(
         &self,
         rasterizer: impl Rasterizer,
         tr: Transform,
         fill_rule: FillRule,
         align: Align,
-        surf: S,
-    ) -> S {
-        if surf.height() < 3 || surf.height() < 3 {
-            return surf;
+        img: I,
+    ) -> I {
+        if img.height() < 3 || img.height() < 3 {
+            return img;
         }
         let src_bbox = match self.bbox(tr) {
             Some(bbox) if bbox.width() > 0.0 && bbox.height() > 0.0 => bbox,
-            _ => return surf,
+            _ => return img,
         };
         let dst_bbox = BBox::new(
             Point::new(1.0, 1.0),
-            Point::new((surf.width() - 1) as Scalar, (surf.height() - 1) as Scalar),
+            Point::new((img.width() - 1) as Scalar, (img.height() - 1) as Scalar),
         );
         let tr = Transform::fit(src_bbox, dst_bbox, align) * tr;
-        self.rasterize_to(rasterizer, tr, fill_rule, surf)
+        self.rasterize_to(rasterizer, tr, fill_rule, img)
     }
 
-    /// Rasteraize mask for the path into an allocated surface.
+    /// Rasteraize mask for the path into an allocated image.
     ///
     /// Surface of required size will be allocated.
     pub fn rasterize(
@@ -367,17 +367,17 @@ impl Path {
         rasterizer: impl Rasterizer,
         tr: Transform,
         fill_rule: FillRule,
-    ) -> SurfaceOwned<Scalar> {
+    ) -> ImageOwned<Scalar> {
         let bbox = match self.bbox(tr) {
             Some(bbox) => bbox,
-            None => return SurfaceOwned::new(0, 0),
+            None => return ImageOwned::new_default(0, 0),
         };
         // one pixel border to account for anti-aliasing
         let width = (bbox.width() + 2.0).ceil() as usize;
         let height = (bbox.height() + 2.0).ceil() as usize;
-        let surf = SurfaceOwned::new(height, width);
+        let img = ImageOwned::new_default(height, width);
         let shift = Transform::default().translate(1.0 - bbox.x(), 1.0 - bbox.y());
-        self.rasterize_to(rasterizer, shift * tr, fill_rule, surf)
+        self.rasterize_to(rasterizer, shift * tr, fill_rule, img)
     }
 
     /// Convert path to SVG path representation

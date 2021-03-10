@@ -26,10 +26,16 @@
 //!  - this method is slower
 //!  - but requires less memory
 use crate::{
-    Curve, FillRule, Line, Path, Point, Scalar, SurfaceMut, Transform, DEFAULT_FLATNESS, EPSILON,
-    EPSILON_SQRT,
+    Curve, FillRule, ImageMut, ImageOwned, Line, Path, Point, Scalar, Transform, DEFAULT_FLATNESS,
+    EPSILON, EPSILON_SQRT,
 };
 use std::{cmp::min, collections::VecDeque};
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Size {
+    pub width: usize,
+    pub height: usize,
+}
 
 /// Basic rasterizer interface
 pub trait Rasterizer {
@@ -39,9 +45,18 @@ pub trait Rasterizer {
         &self,
         path: &Path,
         tr: Transform,
-        surf: &mut dyn SurfaceMut<Item = Scalar>,
+        img: &mut dyn ImageMut<Pixel = Scalar>,
         fill_rule: FillRule,
     );
+
+    /// Iterator over rasterized pixels
+    fn rasterize_iter(
+        &self,
+        path: &Path,
+        tr: Transform,
+        size: Size,
+        fill_rule: FillRule,
+    ) -> Box<dyn Iterator<Item = Pixel> + '_>;
 
     /// Name of the rasterizer (usefull for debugging)
     fn name(&self) -> &str;
@@ -52,10 +67,20 @@ impl<'a, R: Rasterizer> Rasterizer for &'a R {
         &self,
         path: &Path,
         tr: Transform,
-        surf: &mut dyn SurfaceMut<Item = Scalar>,
+        img: &mut dyn ImageMut<Pixel = Scalar>,
         fill_rule: FillRule,
     ) {
-        (**self).rasterize(path, tr, surf, fill_rule)
+        (**self).rasterize(path, tr, img, fill_rule)
+    }
+
+    fn rasterize_iter(
+        &self,
+        path: &Path,
+        tr: Transform,
+        size: Size,
+        fill_rule: FillRule,
+    ) -> Box<dyn Iterator<Item = Pixel> + '_> {
+        (**self).rasterize_iter(path, tr, size, fill_rule)
     }
 
     fn name(&self) -> &str {
@@ -68,10 +93,20 @@ impl Rasterizer for Box<dyn Rasterizer> {
         &self,
         path: &Path,
         tr: Transform,
-        surf: &mut dyn SurfaceMut<Item = Scalar>,
+        img: &mut dyn ImageMut<Pixel = Scalar>,
         fill_rule: FillRule,
     ) {
-        (**self).rasterize(path, tr, surf, fill_rule)
+        (**self).rasterize(path, tr, img, fill_rule)
+    }
+
+    fn rasterize_iter(
+        &self,
+        path: &Path,
+        tr: Transform,
+        size: Size,
+        fill_rule: FillRule,
+    ) -> Box<dyn Iterator<Item = Pixel> + '_> {
+        (**self).rasterize_iter(path, tr, size, fill_rule)
     }
 
     fn name(&self) -> &str {
@@ -97,13 +132,51 @@ impl Rasterizer for SignedDifferenceRasterizer {
         &self,
         path: &Path,
         tr: Transform,
-        surf: &mut dyn SurfaceMut<Item = Scalar>,
+        img: &mut dyn ImageMut<Pixel = Scalar>,
         fill_rule: FillRule,
     ) {
+        let mut img = img.as_mut();
         for line in path.flatten(tr, self.flatness, true) {
-            signed_difference_line(&mut *surf, line);
+            signed_difference_line(&mut img, line);
         }
-        signed_difference_to_mask(surf, fill_rule);
+        signed_difference_to_mask(img, fill_rule);
+    }
+
+    fn rasterize_iter(
+        &self,
+        path: &Path,
+        tr: Transform,
+        size: Size,
+        fill_rule: FillRule,
+    ) -> Box<dyn Iterator<Item = Pixel> + '_> {
+        if size.width == 0 || size.height == 0 {
+            return Box::new(std::iter::empty());
+        }
+        let mut img = ImageOwned::new_default(size.height, size.width);
+        for line in path.flatten(tr, self.flatness, true) {
+            signed_difference_line(&mut img, line);
+        }
+        self.rasterize(path, tr, &mut img, fill_rule);
+        let mut winding = 0.0;
+        let iter = img
+            .to_vec()
+            .into_iter()
+            .enumerate()
+            .filter_map(move |(index, winding_diff)| {
+                let y = index / size.width;
+                let x = index - y * size.width;
+                if x == 0 {
+                    winding = 0.0;
+                }
+                winding += winding_diff;
+                let alpha = fill_rule.alpha_from_winding(winding);
+                if alpha.abs() < EPSILON {
+                    None
+                } else {
+                    Some(Pixel { x, y, alpha })
+                }
+            });
+        Box::new(iter)
     }
 
     fn name(&self) -> &str {
@@ -111,17 +184,17 @@ impl Rasterizer for SignedDifferenceRasterizer {
     }
 }
 
-/// Update provided surface with the signed difference of the line
+/// Update provided image with the signed difference of the line
 ///
 /// Signed difference is a diffrence between adjacent pixels introduced by the line.
-fn signed_difference_line(mut surf: impl SurfaceMut<Item = Scalar>, line: Line) {
+fn signed_difference_line(mut img: impl ImageMut<Pixel = Scalar>, line: Line) {
     // y - is a row
     // x - is a column
     let Line([p0, p1]) = line;
 
-    // handle lines that are intersecting `x == surf.width()`
-    // - just throw away part that has x > surf.width for all points
-    let width = surf.width() as Scalar - 1.0;
+    // handle lines that are intersecting `x == img.width()`
+    // - just throw away part that has `x > img.width()` for all points
+    let width = img.width() as Scalar - 1.0;
     let line = if p0.x() > width || p1.x() > width {
         if p0.x() > width && p1.x() > width {
             Line::new((width - 0.001, p0.y()), (width - 0.001, p1.y()))
@@ -160,15 +233,15 @@ fn signed_difference_line(mut surf: impl SurfaceMut<Item = Scalar>, line: Line) 
             )
         };
         // signed difference by the line left of `x == 0.0`
-        signed_difference_line(surf.view_mut(.., ..), vertical);
+        signed_difference_line(img.as_mut(), vertical);
         line
     } else {
         line
     };
 
     let Line([p0, p1]) = line;
-    let shape = surf.shape();
-    let data = surf.data_mut();
+    let shape = img.shape();
+    let data = img.data_mut();
     let stride = shape.col_stride;
 
     if (p0.y() - p1.y()).abs() < EPSILON {
@@ -240,10 +313,10 @@ fn signed_difference_line(mut surf: impl SurfaceMut<Item = Scalar>, line: Line) 
     }
 }
 
-/// Conver signed difference surface to a mask
-fn signed_difference_to_mask(mut surf: impl SurfaceMut<Item = Scalar>, fill_rule: FillRule) {
-    let shape = surf.shape();
-    let data = surf.data_mut();
+/// Conver signed difference image to a mask
+fn signed_difference_to_mask(mut img: impl ImageMut<Pixel = Scalar>, fill_rule: FillRule) {
+    let shape = img.shape();
+    let data = img.data_mut();
     match fill_rule {
         FillRule::NonZero => {
             for y in 0..shape.height {
@@ -302,19 +375,35 @@ impl Rasterizer for ActiveEdgeRasterizer {
         &self,
         path: &Path,
         tr: Transform,
-        surf: &mut dyn SurfaceMut<Item = Scalar>,
+        img: &mut dyn ImageMut<Pixel = Scalar>,
         fill_rule: FillRule,
     ) {
-        let shape = surf.shape();
-        let data = surf.data_mut();
+        let shape = img.shape();
+        let data = img.data_mut();
         for pixel in ActiveEdgeIter::new(
-            shape.width,
-            shape.height,
+            Size {
+                width: shape.width,
+                height: shape.height,
+            },
             fill_rule,
             path.flatten(tr, self.flatness, true),
         ) {
             data[shape.offset(pixel.y, pixel.x)] = pixel.alpha;
         }
+    }
+
+    fn rasterize_iter(
+        &self,
+        path: &Path,
+        tr: Transform,
+        size: Size,
+        fill_rule: FillRule,
+    ) -> Box<dyn Iterator<Item = Pixel> + '_> {
+        Box::new(ActiveEdgeIter::new(
+            size,
+            fill_rule,
+            path.flatten(tr, self.flatness, true),
+        ))
     }
 
     fn name(&self) -> &str {
@@ -336,10 +425,8 @@ pub struct ActiveEdgeIter {
     winding: Scalar,
     // fill rule to be used
     fill_rule: FillRule,
-    // width of the output image
-    width: usize,
-    // height of the output image
-    height: usize,
+    // size of the output image
+    size: Size,
     // current column (x - coordindate)
     column: usize,
     // current row (y - coordinate)
@@ -347,20 +434,15 @@ pub struct ActiveEdgeIter {
 }
 
 impl ActiveEdgeIter {
-    pub fn new(
-        width: usize,
-        height: usize,
-        fill_rule: FillRule,
-        lines: impl Iterator<Item = Line>,
-    ) -> Self {
+    pub fn new(size: Size, fill_rule: FillRule, lines: impl Iterator<Item = Line>) -> Self {
         let mut edge_table: Vec<Vec<Edge>> = Vec::new();
-        edge_table.resize_with(height, Default::default);
+        edge_table.resize_with(size.height, Default::default);
         for line in lines {
             if let Some(edge) = Edge::new(line) {
-                if edge.row >= height {
+                if edge.row >= size.height {
                     continue;
                 }
-                edge_table[height - edge.row - 1].push(edge);
+                edge_table[size.height - edge.row - 1].push(edge);
             }
         }
         let mut this = Self {
@@ -370,8 +452,7 @@ impl ActiveEdgeIter {
             iters_active: EdgeAccIter::new(),
             winding: 0.0,
             fill_rule,
-            width,
-            height,
+            size,
             column: 0,
             row: 0,
         };
@@ -427,7 +508,7 @@ impl Iterator for ActiveEdgeIter {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if self.row > self.height {
+            if self.row > self.size.height {
                 return None;
             }
 
@@ -447,7 +528,7 @@ impl Iterator for ActiveEdgeIter {
                 None if self.winding.abs() < EPSILON_SQRT => {
                     // skip forward to the first activated iterator
                     match self.iters_inactive.last() {
-                        Some(iter) if iter.column < self.width => {
+                        Some(iter) if iter.column < self.size.width => {
                             self.column = iter.column;
                         }
                         _ => {
@@ -470,7 +551,7 @@ impl Iterator for ActiveEdgeIter {
 
             // update postion
             self.column += 1;
-            if self.column >= self.width {
+            if self.column >= self.size.width {
                 self.column = 0;
                 self.row += 1;
                 self.winding = 0.0;
@@ -670,63 +751,63 @@ impl Iterator for EdgeAccIter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{assert_approx_eq, Surface, SurfaceOwned};
+    use crate::{assert_approx_eq, Image};
 
     #[test]
     fn test_signed_difference_line() {
-        let mut surf = SurfaceOwned::new(2, 5);
+        let mut img = ImageOwned::new_default(2, 5);
 
         // line convers many columns but just one row
-        signed_difference_line(&mut surf, Line::new((0.5, 1.0), (3.5, 0.0)));
+        signed_difference_line(&mut img, Line::new((0.5, 1.0), (3.5, 0.0)));
         // covered areas per-pixel
         let a0 = (0.5 * (1.0 / 6.0)) / 2.0;
         let a1 = ((1.0 / 6.0) + (3.0 / 6.0)) / 2.0;
         let a2 = ((3.0 / 6.0) + (5.0 / 6.0)) / 2.0;
-        assert_approx_eq!(*surf.get(0, 0).unwrap(), -a0);
-        assert_approx_eq!(*surf.get(0, 1).unwrap(), a0 - a1);
-        assert_approx_eq!(*surf.get(0, 2).unwrap(), a1 - a2);
-        assert_approx_eq!(*surf.get(0, 3).unwrap(), a0 - a1);
-        assert_approx_eq!(*surf.get(0, 4).unwrap(), -a0);
+        assert_approx_eq!(*img.get(0, 0).unwrap(), -a0);
+        assert_approx_eq!(*img.get(0, 1).unwrap(), a0 - a1);
+        assert_approx_eq!(*img.get(0, 2).unwrap(), a1 - a2);
+        assert_approx_eq!(*img.get(0, 3).unwrap(), a0 - a1);
+        assert_approx_eq!(*img.get(0, 4).unwrap(), -a0);
         // total difference
-        let a: Scalar = surf.iter().sum();
+        let a: Scalar = img.iter().sum();
         assert_approx_eq!(a, -1.0);
-        surf.clear();
+        img.clear();
 
         // out of bound line (intersects x = 0.0)
-        signed_difference_line(&mut surf, Line::new((-1.0, 0.0), (1.0, 1.0)));
-        assert_approx_eq!(*surf.get(0, 0).unwrap(), 3.0 / 4.0);
-        assert_approx_eq!(*surf.get(0, 1).unwrap(), 1.0 / 4.0);
-        surf.clear();
+        signed_difference_line(&mut img, Line::new((-1.0, 0.0), (1.0, 1.0)));
+        assert_approx_eq!(*img.get(0, 0).unwrap(), 3.0 / 4.0);
+        assert_approx_eq!(*img.get(0, 1).unwrap(), 1.0 / 4.0);
+        img.clear();
 
         // multiple rows diag
-        signed_difference_line(&mut surf, Line::new((0.0, -0.5), (2.0, 1.5)));
-        assert_approx_eq!(*surf.get(0, 0).unwrap(), 1.0 / 8.0);
-        assert_approx_eq!(*surf.get(0, 1).unwrap(), 1.0 - 2.0 / 8.0);
-        assert_approx_eq!(*surf.get(0, 2).unwrap(), 1.0 / 8.0);
-        assert_approx_eq!(*surf.get(1, 1).unwrap(), 1.0 / 8.0);
-        assert_approx_eq!(*surf.get(1, 2).unwrap(), 0.5 - 1.0 / 8.0);
-        surf.clear();
+        signed_difference_line(&mut img, Line::new((0.0, -0.5), (2.0, 1.5)));
+        assert_approx_eq!(*img.get(0, 0).unwrap(), 1.0 / 8.0);
+        assert_approx_eq!(*img.get(0, 1).unwrap(), 1.0 - 2.0 / 8.0);
+        assert_approx_eq!(*img.get(0, 2).unwrap(), 1.0 / 8.0);
+        assert_approx_eq!(*img.get(1, 1).unwrap(), 1.0 / 8.0);
+        assert_approx_eq!(*img.get(1, 2).unwrap(), 0.5 - 1.0 / 8.0);
+        img.clear();
 
         // only two pixels covered
-        signed_difference_line(&mut surf, Line::new((0.1, 0.1), (1.9, 0.9)));
-        assert_approx_eq!(*surf.get(0, 0).unwrap(), 0.18);
-        assert_approx_eq!(*surf.get(0, 1).unwrap(), 0.44);
-        assert_approx_eq!(*surf.get(0, 2).unwrap(), 0.18);
-        surf.clear();
+        signed_difference_line(&mut img, Line::new((0.1, 0.1), (1.9, 0.9)));
+        assert_approx_eq!(*img.get(0, 0).unwrap(), 0.18);
+        assert_approx_eq!(*img.get(0, 1).unwrap(), 0.44);
+        assert_approx_eq!(*img.get(0, 2).unwrap(), 0.18);
+        img.clear();
 
         // single pixel covered
-        signed_difference_line(&mut surf, Line::new((0.1, 0.1), (0.9, 0.9)));
-        assert_approx_eq!(*surf.get(0, 0).unwrap(), 0.4);
-        assert_approx_eq!(*surf.get(0, 1).unwrap(), 0.8 - 0.4);
-        surf.clear();
+        signed_difference_line(&mut img, Line::new((0.1, 0.1), (0.9, 0.9)));
+        assert_approx_eq!(*img.get(0, 0).unwrap(), 0.4);
+        assert_approx_eq!(*img.get(0, 1).unwrap(), 0.8 - 0.4);
+        img.clear();
 
         // multiple rows vertical
-        signed_difference_line(&mut surf, Line::new((0.5, 0.5), (0.5, 1.75)));
-        assert_approx_eq!(*surf.get(0, 0).unwrap(), 1.0 / 4.0);
-        assert_approx_eq!(*surf.get(0, 1).unwrap(), 1.0 / 4.0);
-        assert_approx_eq!(*surf.get(1, 0).unwrap(), 3.0 / 8.0);
-        assert_approx_eq!(*surf.get(1, 1).unwrap(), 3.0 / 8.0);
-        surf.clear();
+        signed_difference_line(&mut img, Line::new((0.5, 0.5), (0.5, 1.75)));
+        assert_approx_eq!(*img.get(0, 0).unwrap(), 1.0 / 4.0);
+        assert_approx_eq!(*img.get(0, 1).unwrap(), 1.0 / 4.0);
+        assert_approx_eq!(*img.get(1, 0).unwrap(), 3.0 / 8.0);
+        assert_approx_eq!(*img.get(1, 1).unwrap(), 3.0 / 8.0);
+        img.clear();
     }
 
     #[test]
@@ -807,18 +888,18 @@ mod tests {
         let x1 = 150; // middle of the first box
         let x2 = 250; // middle of the second box
 
-        let surf = path.rasterize(&rasterizer, tr, FillRule::EvenOdd);
-        assert_approx_eq!(surf.get(y, x0).unwrap(), 0.0);
-        assert_approx_eq!(surf.get(y, x1).unwrap(), 0.0);
-        assert_approx_eq!(surf.get(y, x2).unwrap(), 0.0);
-        let area = surf.iter().sum::<Scalar>();
+        let img = path.rasterize(&rasterizer, tr, FillRule::EvenOdd);
+        assert_approx_eq!(img.get(y, x0).unwrap(), 0.0);
+        assert_approx_eq!(img.get(y, x1).unwrap(), 0.0);
+        assert_approx_eq!(img.get(y, x2).unwrap(), 0.0);
+        let area = img.iter().sum::<Scalar>();
         assert_approx_eq!(area, 13130.0, 1.0);
 
-        let surf = path.rasterize(&rasterizer, tr, FillRule::NonZero);
-        assert_approx_eq!(surf.get(y, x0).unwrap(), 1.0);
-        assert_approx_eq!(surf.get(y, x1).unwrap(), 1.0);
-        assert_approx_eq!(surf.get(y, x2).unwrap(), 0.0);
-        let area = surf.iter().sum::<Scalar>();
+        let img = path.rasterize(&rasterizer, tr, FillRule::NonZero);
+        assert_approx_eq!(img.get(y, x0).unwrap(), 1.0);
+        assert_approx_eq!(img.get(y, x1).unwrap(), 1.0);
+        assert_approx_eq!(img.get(y, x2).unwrap(), 0.0);
+        let area = img.iter().sum::<Scalar>();
         assert_approx_eq!(area, 16492.5, 1.0);
     }
 }

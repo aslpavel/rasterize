@@ -9,7 +9,6 @@ default = []
 
 [dependencies]
 png = {version = "0.16", optional = true}
-surface = {path = "../surface"}
 
 [dev-dependencies]
 criterion = "0.3"

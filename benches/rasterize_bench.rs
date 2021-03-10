@@ -58,7 +58,7 @@ fn large_path_benchmark(c: &mut Criterion) {
     file.read_to_string(&mut path_str)
         .expect("failed to read path");
     let path: Path = path_str.parse().unwrap();
-    let mut surf = path.rasterize(SignedDifferenceRasterizer::default(), tr, FillRule::EvenOdd);
+    let mut img = path.rasterize(SignedDifferenceRasterizer::default(), tr, FillRule::EvenOdd);
 
     let mut group = c.benchmark_group("material-big");
     group.throughput(Throughput::Elements(path.segments_count() as u64));
@@ -80,8 +80,8 @@ fn large_path_benchmark(c: &mut Criterion) {
         let id = BenchmarkId::new("rasterize to", rasterizer.name());
         group.bench_with_input(id, &rasterizer, |b, r| {
             b.iter(|| {
-                surf.clear();
-                path.rasterize_to(r, tr, FillRule::EvenOdd, &mut surf);
+                img.clear();
+                path.rasterize_to(r, tr, FillRule::EvenOdd, &mut img);
             })
         });
     }

@@ -3,9 +3,8 @@
 
 use env_logger::Env;
 use rasterize::{
-    surf_to_ppm, ActiveEdgeRasterizer, Align, BBox, Curve, FillRule, LineCap, LineJoin, Path,
-    Point, Rasterizer, Scalar, Segment, SignedDifferenceRasterizer, StrokeStyle, Surface,
-    Transform,
+    img_to_ppm, ActiveEdgeRasterizer, Align, BBox, Curve, FillRule, Image, LineCap, LineJoin, Path,
+    Point, Rasterizer, Scalar, Segment, SignedDifferenceRasterizer, StrokeStyle, Transform,
 };
 use std::{
     env, fmt,
@@ -233,9 +232,9 @@ fn main() -> Result<(), Error> {
     // save
     if args.output_file != "-" {
         let mut image = BufWriter::new(File::create(args.output_file)?);
-        timeit("[save:ppm]", || surf_to_ppm(&mask, &mut image))?;
+        timeit("[save:ppm]", || img_to_ppm(&mask, &mut image))?;
     } else {
-        timeit("[save:ppm]", || surf_to_ppm(&mask, std::io::stdout()))?;
+        timeit("[save:ppm]", || img_to_ppm(&mask, std::io::stdout()))?;
     }
 
     Ok(())

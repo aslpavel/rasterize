@@ -49,7 +49,7 @@ impl Point {
 
     /// Get `x` component of the point
     #[inline]
-    pub fn x(&self) -> Scalar {
+    pub fn x(self) -> Scalar {
         self.0[0]
     }
 
