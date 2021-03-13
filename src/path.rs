@@ -1,5 +1,5 @@
 use crate::{
-    clamp, curve::line_offset, rasterize::Rasterizer, Align, BBox, Cubic, Curve, EllipArc,
+    clamp, curve::line_offset, rasterize::Rasterizer, Align, BBox, Color, Cubic, Curve, EllipArc,
     ImageMut, ImageOwned, Line, Point, Quad, SVGPathParser, SVGPathParserError, Scalar, Segment,
     Transform, EPSILON,
 };
@@ -38,6 +38,12 @@ impl FillRule {
                 }
             }
         }
+    }
+}
+
+impl Default for FillRule {
+    fn default() -> Self {
+        FillRule::NonZero
     }
 }
 
@@ -318,32 +324,62 @@ impl Path {
         }
     }
 
+    pub fn fill<R, I>(
+        &self,
+        rasterizer: R,
+        tr: Transform,
+        fill_rule: FillRule,
+        color: I::Pixel,
+        mut img: I,
+    ) -> I
+    where
+        R: Rasterizer,
+        I: ImageMut,
+        I::Pixel: Color,
+    {
+        let shape = img.shape();
+        let data = img.data_mut();
+        for pixel in rasterizer.mask_iter(self, tr, shape.size(), fill_rule) {
+            let dst = &mut data[shape.offset(pixel.y, pixel.x)];
+            *dst = dst.blend_over(&color.with_alpha(pixel.alpha));
+        }
+        img
+    }
+
     /// Rasterize mast for the path in into a provided image.
     ///
     /// Everything that is outside of the image will be cropped. Image is assumed
     /// to contain zeros.
-    pub fn rasterize_to<I: ImageMut<Pixel = Scalar>>(
+    pub fn rasterize_to<R, I>(
         &self,
-        rasterizer: impl Rasterizer,
+        rasterizer: R,
         tr: Transform,
         fill_rule: FillRule,
         mut img: I,
-    ) -> I {
-        rasterizer.rasterize(self, tr, &mut img, fill_rule);
+    ) -> I
+    where
+        R: Rasterizer,
+        I: ImageMut<Pixel = Scalar>,
+    {
+        rasterizer.mask(self, tr, &mut img, fill_rule);
         img
     }
 
     /// Rasterize fitted mask for the path into a provided image.
     ///
     /// Path is rescaled and centered appropriately to fit into a provided image.
-    pub fn rasterize_fit<I: ImageMut<Pixel = Scalar>>(
+    pub fn rasterize_fit<R, I>(
         &self,
-        rasterizer: impl Rasterizer,
+        rasterizer: R,
         tr: Transform,
         fill_rule: FillRule,
         align: Align,
         img: I,
-    ) -> I {
+    ) -> I
+    where
+        R: Rasterizer,
+        I: ImageMut<Pixel = Scalar>,
+    {
         if img.height() < 3 || img.height() < 3 {
             return img;
         }
@@ -383,12 +419,13 @@ impl Path {
     /// Convert path to SVG path representation
     pub fn to_svg_path(&self) -> String {
         let mut output = Vec::new();
-        self.save(&mut output).expect("failed in memory write");
+        self.write_svg_path(&mut output)
+            .expect("failed in memory write");
         String::from_utf8(output).expect("path save internal error")
     }
 
     /// Save path in SVG path format.
-    pub fn save(&self, mut out: impl Write) -> std::io::Result<()> {
+    pub fn write_svg_path(&self, mut out: impl Write) -> std::io::Result<()> {
         for subpath in self.subpaths.iter() {
             write!(&mut out, "M{:?} ", subpath.start())?;
             let mut segment_type: Option<u8> = None;
@@ -424,7 +461,7 @@ impl Path {
     }
 
     /// Load path from SVG path representation
-    pub fn load(input: impl Read) -> std::io::Result<Self> {
+    pub fn read_svg_path(input: impl Read) -> std::io::Result<Self> {
         let mut builder = PathBuilder::new();
         for cmd in SVGPathParser::new(input) {
             cmd?.apply(&mut builder)
@@ -882,8 +919,8 @@ mod tests {
     fn test_save_load() -> std::io::Result<()> {
         let path: Path = SQUIRREL.parse()?;
         let mut path_save = Vec::new();
-        path.save(&mut path_save)?;
-        let path_load = Path::load(std::io::Cursor::new(path_save))?;
+        path.write_svg_path(&mut path_save)?;
+        let path_load = Path::read_svg_path(std::io::Cursor::new(path_save))?;
         assert_path_eq(&path, &path_load);
         Ok(())
     }

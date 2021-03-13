@@ -3,8 +3,8 @@
 
 use env_logger::Env;
 use rasterize::{
-    img_to_ppm, ActiveEdgeRasterizer, Align, BBox, Curve, FillRule, Image, LineCap, LineJoin, Path,
-    Point, Rasterizer, Scalar, Segment, SignedDifferenceRasterizer, StrokeStyle, Transform,
+    ActiveEdgeRasterizer, Align, BBox, Curve, FillRule, Image, LineCap, LineJoin, Path, Point,
+    Rasterizer, Scalar, Segment, SignedDifferenceRasterizer, StrokeStyle, Transform,
 };
 use std::{
     env, fmt,
@@ -96,7 +96,7 @@ fn parse_args() -> Result<Args, Error> {
         );
         eprintln!("\nUSAGE:");
         eprintln!(
-            "    {} [-w <width>] [-s <stroke>] [-o] [-a] <file.path> <out.ppm>",
+            "    {} [-w <width>] [-s <stroke>] [-o] [-a] <file.path> <out.bmp>",
             cmd
         );
         eprintln!("\nARGS:");
@@ -105,7 +105,7 @@ fn parse_args() -> Result<Args, Error> {
         eprintln!("    -o                 show outline with control points instead of filling");
         eprintln!("    -a                 use active-edge instead of signed-difference rasterizer");
         eprintln!("    <file.path>        file containing SVG path ('-' means stdin)");
-        eprintln!("    <out.ppm>          image rendered in the PPM format ('-' means stdout)");
+        eprintln!("    <out.bmp>          image rendered in the BMP format ('-' means stdout)");
         std::process::exit(1);
     }
     Ok(result)
@@ -232,9 +232,9 @@ fn main() -> Result<(), Error> {
     // save
     if args.output_file != "-" {
         let mut image = BufWriter::new(File::create(args.output_file)?);
-        timeit("[save:ppm]", || img_to_ppm(&mask, &mut image))?;
+        timeit("[save:bmp]", || mask.write_bmp(&mut image))?;
     } else {
-        timeit("[save:ppm]", || img_to_ppm(&mask, std::io::stdout()))?;
+        timeit("[save:bmp]", || mask.write_bmp(std::io::stdout()))?;
     }
 
     Ok(())

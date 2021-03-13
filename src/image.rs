@@ -1,5 +1,5 @@
-use crate::Size;
-use std::sync::Arc;
+use crate::{Color, Size};
+use std::{io::Write, sync::Arc};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Shape {
@@ -38,16 +38,21 @@ impl Shape {
 }
 
 pub trait Image {
+    /// Pixel type
     type Pixel;
 
+    /// Data containing image
     fn data(&self) -> &[Self::Pixel];
 
+    /// Shape of the image
     fn shape(&self) -> Shape;
 
+    /// Image width
     fn width(&self) -> usize {
         self.shape().width
     }
 
+    /// Image height
     fn height(&self) -> usize {
         self.shape().height
     }
@@ -64,12 +69,96 @@ pub trait Image {
         }
     }
 
+    /// Iterate over pixels
     fn iter(&self) -> ImageIter<'_, Self::Pixel> {
         ImageIter {
             index: 0,
             shape: self.shape(),
             data: self.data(),
         }
+    }
+
+    /// Write image in PPM format
+    fn write_ppm<W>(&self, mut out: W) -> Result<(), std::io::Error>
+    where
+        W: Write,
+        Self::Pixel: Color,
+        Self: Sized,
+    {
+        write!(out, "P6 {} {} 255 ", self.width(), self.height())?;
+        for color in self.iter() {
+            out.write_all(&color.to_rgb())?;
+        }
+        Ok(())
+    }
+
+    /// Write image in BMP format
+    fn write_bmp<W>(&self, mut out: W) -> Result<(), std::io::Error>
+    where
+        W: Write,
+        Self::Pixel: Color,
+        Self: Sized,
+    {
+        const BMP_HEADER_SIZE: u32 = 14;
+        const DIB_HEADER_SIZE: u32 = 108;
+
+        let data_offset = BMP_HEADER_SIZE + DIB_HEADER_SIZE;
+        let data_size = (self.width() * self.height() * 4) as u32;
+
+        // BMP File Header
+        write!(out, "BM")?;
+        out.write_all(&(data_size + data_offset).to_le_bytes())?; // file size
+        out.write_all(&[0; 4])?; // reserved
+        out.write_all(&data_offset.to_le_bytes())?; // image data offset
+
+        // [BITMAPV4HEADER](https://docs.microsoft.com/en-us/windows/win32/api/wingdi/ns-wingdi-bitmapv4header)
+        out.write_all(&DIB_HEADER_SIZE.to_le_bytes())?; // DIB header size
+        out.write_all(&(self.width() as u32).to_le_bytes())?; // image width
+        out.write_all(&(self.height() as u32).to_le_bytes())?; // image height
+        out.write_all(&[0x01, 0x00])?; // planes
+        out.write_all(&[0x20, 0x00])?; // 32 bits per pixel
+        out.write_all(&[0x03, 0x00, 0x00, 0x00])?; // BI_BITFIELDS format
+        out.write_all(&data_size.to_le_bytes())?; // image data size
+        out.write_all(&[0x13, 0x0B, 0x00, 0x00])?; // horizontal print resolution (2835 = 72dpi)
+        out.write_all(&[0x13, 0x0B, 0x00, 0x00])?; // vertical print resolution (2835 = 72dpi)
+        out.write_all(&[0x00; 8])?; // palette colors are not used
+        out.write_all(&[0xFF, 0x00, 0x00, 0x00])?; // blue mask
+        out.write_all(&[0x00, 0xFF, 0x00, 0x00])?; // green mask
+        out.write_all(&[0x00, 0x00, 0xFF, 0x00])?; // red mask
+        out.write_all(&[0x00, 0x00, 0x00, 0xFF])?; // alpha mask
+        out.write_all(&[0x42, 0x47, 0x52, 0x73])?; // sRGB color space
+        out.write_all(&[0x00; 48])?; // not used
+
+        let data = self.data();
+        let shape = self.shape();
+        for row in (0..shape.height).into_iter().rev() {
+            for col in 0..shape.width {
+                let color = &data[shape.offset(row, col)];
+                out.write_all(&color.to_rgba())?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Write image in PNG format
+    #[cfg(feature = "png")]
+    fn write_png<W>(&self, out: W) -> Result<(), png::EncodingError>
+    where
+        W: Write,
+        Self::Pixel: Color,
+        Self: Sized,
+    {
+        let mut encoder = png::Encoder::new(out, self.width() as u32, self.height() as u32);
+        encoder.set_color(png::ColorType::RGBA);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header()?;
+        let mut stream_writer = writer.stream_writer();
+        for color in self.iter() {
+            stream_writer.write_all(&color.to_rgba())?;
+        }
+        stream_writer.flush()?;
+        Ok(())
     }
 }
 

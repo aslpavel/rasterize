@@ -39,9 +39,9 @@ pub struct Size {
 
 /// Basic rasterizer interface
 pub trait Rasterizer {
-    /// Rasterize provided path with transformation applied, and
+    /// Rasterize provided path as mask with transformation applied, and
     /// specified fill rule.
-    fn rasterize(
+    fn mask(
         &self,
         path: &Path,
         tr: Transform,
@@ -49,8 +49,8 @@ pub trait Rasterizer {
         fill_rule: FillRule,
     );
 
-    /// Iterator over rasterized pixels
-    fn rasterize_iter(
+    /// Iterator over rasterized mask pixels
+    fn mask_iter(
         &self,
         path: &Path,
         tr: Transform,
@@ -63,24 +63,24 @@ pub trait Rasterizer {
 }
 
 impl<'a, R: Rasterizer> Rasterizer for &'a R {
-    fn rasterize(
+    fn mask(
         &self,
         path: &Path,
         tr: Transform,
         img: &mut dyn ImageMut<Pixel = Scalar>,
         fill_rule: FillRule,
     ) {
-        (**self).rasterize(path, tr, img, fill_rule)
+        (**self).mask(path, tr, img, fill_rule)
     }
 
-    fn rasterize_iter(
+    fn mask_iter(
         &self,
         path: &Path,
         tr: Transform,
         size: Size,
         fill_rule: FillRule,
     ) -> Box<dyn Iterator<Item = Pixel> + '_> {
-        (**self).rasterize_iter(path, tr, size, fill_rule)
+        (**self).mask_iter(path, tr, size, fill_rule)
     }
 
     fn name(&self) -> &str {
@@ -89,24 +89,24 @@ impl<'a, R: Rasterizer> Rasterizer for &'a R {
 }
 
 impl Rasterizer for Box<dyn Rasterizer> {
-    fn rasterize(
+    fn mask(
         &self,
         path: &Path,
         tr: Transform,
         img: &mut dyn ImageMut<Pixel = Scalar>,
         fill_rule: FillRule,
     ) {
-        (**self).rasterize(path, tr, img, fill_rule)
+        (**self).mask(path, tr, img, fill_rule)
     }
 
-    fn rasterize_iter(
+    fn mask_iter(
         &self,
         path: &Path,
         tr: Transform,
         size: Size,
         fill_rule: FillRule,
     ) -> Box<dyn Iterator<Item = Pixel> + '_> {
-        (**self).rasterize_iter(path, tr, size, fill_rule)
+        (**self).mask_iter(path, tr, size, fill_rule)
     }
 
     fn name(&self) -> &str {
@@ -128,7 +128,7 @@ impl Default for SignedDifferenceRasterizer {
 }
 
 impl Rasterizer for SignedDifferenceRasterizer {
-    fn rasterize(
+    fn mask(
         &self,
         path: &Path,
         tr: Transform,
@@ -142,7 +142,7 @@ impl Rasterizer for SignedDifferenceRasterizer {
         signed_difference_to_mask(img, fill_rule);
     }
 
-    fn rasterize_iter(
+    fn mask_iter(
         &self,
         path: &Path,
         tr: Transform,
@@ -156,7 +156,6 @@ impl Rasterizer for SignedDifferenceRasterizer {
         for line in path.flatten(tr, self.flatness, true) {
             signed_difference_line(&mut img, line);
         }
-        self.rasterize(path, tr, &mut img, fill_rule);
         let mut winding = 0.0;
         let iter = img
             .to_vec()
@@ -371,7 +370,7 @@ impl Default for ActiveEdgeRasterizer {
 }
 
 impl Rasterizer for ActiveEdgeRasterizer {
-    fn rasterize(
+    fn mask(
         &self,
         path: &Path,
         tr: Transform,
@@ -392,7 +391,7 @@ impl Rasterizer for ActiveEdgeRasterizer {
         }
     }
 
-    fn rasterize_iter(
+    fn mask_iter(
         &self,
         path: &Path,
         tr: Transform,
