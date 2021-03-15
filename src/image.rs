@@ -47,6 +47,11 @@ pub trait Image {
     /// Shape of the image
     fn shape(&self) -> Shape;
 
+    /// Image size
+    fn size(&self) -> Size {
+        self.shape().size()
+    }
+
     /// Image width
     fn width(&self) -> usize {
         self.shape().width
@@ -272,28 +277,28 @@ impl<P> ImageOwned<P> {
         Self { shape, data }
     }
 
-    pub fn new_default(height: usize, width: usize) -> Self
+    pub fn new_default(size: Size) -> Self
     where
         P: Default,
     {
-        Self::new_with(height, width, |_, _| Default::default())
+        Self::new_with(size, |_, _| Default::default())
     }
 
-    pub fn new_with<F>(height: usize, width: usize, mut f: F) -> Self
+    pub fn new_with<F>(size: Size, mut f: F) -> Self
     where
         F: FnMut(usize, usize) -> P,
     {
-        let mut data = Vec::with_capacity(height * width);
-        for row in 0..height {
-            for col in 0..width {
+        let mut data = Vec::with_capacity(size.height * size.width);
+        for row in 0..size.height {
+            for col in 0..size.width {
                 data.push(f(row, col))
             }
         }
         Self {
             shape: Shape {
-                width,
-                height,
-                row_stride: width,
+                width: size.width,
+                height: size.height,
+                row_stride: size.width,
                 col_stride: 1,
             },
             data,

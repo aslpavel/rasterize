@@ -26,12 +26,12 @@
 //!  - this method is slower
 //!  - but requires less memory
 use crate::{
-    Curve, FillRule, ImageMut, ImageOwned, Line, Path, Point, Scalar, Transform, DEFAULT_FLATNESS,
-    EPSILON, EPSILON_SQRT,
+    Color, Curve, FillRule, ImageMut, ImageOwned, Line, Path, Point, Scalar, Transform,
+    DEFAULT_FLATNESS, EPSILON, EPSILON_SQRT,
 };
 use std::{cmp::min, collections::VecDeque};
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Size {
     pub width: usize,
     pub height: usize,
@@ -60,6 +60,29 @@ pub trait Rasterizer {
 
     /// Name of the rasterizer (usefull for debugging)
     fn name(&self) -> &str;
+
+    /// Fill path with the provided color
+    fn fill<I>(
+        &self,
+        path: &Path,
+        tr: Transform,
+        fill_rule: FillRule,
+        color: I::Pixel,
+        mut img: I,
+    ) -> I
+    where
+        Self: Sized,
+        I: ImageMut,
+        I::Pixel: Color,
+    {
+        let shape = img.shape();
+        let data = img.data_mut();
+        for pixel in self.mask_iter(path, tr, shape.size(), fill_rule) {
+            let dst = &mut data[shape.offset(pixel.y, pixel.x)];
+            *dst = dst.blend_over(&color.with_alpha(pixel.alpha));
+        }
+        img
+    }
 }
 
 impl<'a, R: Rasterizer> Rasterizer for &'a R {
@@ -152,7 +175,7 @@ impl Rasterizer for SignedDifferenceRasterizer {
         if size.width == 0 || size.height == 0 {
             return Box::new(std::iter::empty());
         }
-        let mut img = ImageOwned::new_default(size.height, size.width);
+        let mut img = ImageOwned::new_default(size);
         for line in path.flatten(tr, self.flatness, true) {
             signed_difference_line(&mut img, line);
         }
@@ -754,7 +777,10 @@ mod tests {
 
     #[test]
     fn test_signed_difference_line() {
-        let mut img = ImageOwned::new_default(2, 5);
+        let mut img = ImageOwned::new_default(Size {
+            height: 2,
+            width: 5,
+        });
 
         // line convers many columns but just one row
         signed_difference_line(&mut img, Line::new((0.5, 1.0), (3.5, 0.0)));
@@ -872,7 +898,6 @@ mod tests {
     #[test]
     fn test_fill_rule() {
         let tr = Transform::default();
-        let rasterizer = SignedDifferenceRasterizer::default();
         let path: Path = r#"
             M50,0 21,90 98,35 2,35 79,90z
             M110,0 h90 v90 h-90z
@@ -882,23 +907,32 @@ mod tests {
         "#
         .parse()
         .expect("failed to parse path");
+        let (size, tr, _) = path.size(tr).expect("path is empty");
+        let mut img = ImageOwned::new_default(size);
+
         let y = 50;
         let x0 = 50; // middle of the star
         let x1 = 150; // middle of the first box
         let x2 = 250; // middle of the second box
 
-        let img = path.rasterize(&rasterizer, tr, FillRule::EvenOdd);
-        assert_approx_eq!(img.get(y, x0).unwrap(), 0.0);
-        assert_approx_eq!(img.get(y, x1).unwrap(), 0.0);
-        assert_approx_eq!(img.get(y, x2).unwrap(), 0.0);
-        let area = img.iter().sum::<Scalar>();
-        assert_approx_eq!(area, 13130.0, 1.0);
+        let r0: Box<dyn Rasterizer> = Box::new(SignedDifferenceRasterizer::default());
+        let r1: Box<dyn Rasterizer> = Box::new(ActiveEdgeRasterizer::default());
+        for rasterizer in &[r0, r1] {
+            img.clear();
+            path.mask(&rasterizer, tr, FillRule::EvenOdd, &mut img);
+            assert_approx_eq!(img.get(y, x0).unwrap(), 0.0, 1e-6);
+            assert_approx_eq!(img.get(y, x1).unwrap(), 0.0, 1e-6);
+            assert_approx_eq!(img.get(y, x2).unwrap(), 0.0, 1e-6);
+            let area = img.iter().sum::<Scalar>();
+            assert_approx_eq!(area, 13130.0, 1.0);
 
-        let img = path.rasterize(&rasterizer, tr, FillRule::NonZero);
-        assert_approx_eq!(img.get(y, x0).unwrap(), 1.0);
-        assert_approx_eq!(img.get(y, x1).unwrap(), 1.0);
-        assert_approx_eq!(img.get(y, x2).unwrap(), 0.0);
-        let area = img.iter().sum::<Scalar>();
-        assert_approx_eq!(area, 16492.5, 1.0);
+            img.clear();
+            path.mask(&rasterizer, tr, FillRule::NonZero, &mut img);
+            assert_approx_eq!(img.get(y, x0).unwrap(), 1.0, 1e-6);
+            assert_approx_eq!(img.get(y, x1).unwrap(), 1.0, 1e-6);
+            assert_approx_eq!(img.get(y, x2).unwrap(), 0.0, 1e-6);
+            let area = img.iter().sum::<Scalar>();
+            assert_approx_eq!(area, 16492.5, 1.0);
+        }
     }
 }

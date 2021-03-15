@@ -1,4 +1,4 @@
-use crate::{clamp, Line};
+use crate::{clamp, Line, Size};
 use std::{
     fmt,
     ops::{Add, Div, Mul, Sub},
@@ -328,7 +328,7 @@ impl Transform {
     }
 
     /// Find transformation that is requred to fit `src` box into `dst`.
-    pub fn fit(src: BBox, dst: BBox, align: Align) -> Transform {
+    pub fn fit_bbox(src: BBox, dst: BBox, align: Align) -> Transform {
         let scale = (dst.height() / src.height()).min(dst.width() / src.width());
         let base = Transform::default()
             .translate(dst.x(), dst.y())
@@ -346,6 +346,19 @@ impl Transform {
             ),
         };
         align * base
+    }
+
+    /// Calculate transformation needed to fit source bounding box to provided size image
+    pub fn fit_size(src: BBox, size: Size, align: Align) -> Transform {
+        let dst = if size.width < 3 || size.height < 3 {
+            BBox::new((0.0, 0.0), (size.width as Scalar, size.height as Scalar))
+        } else {
+            BBox::new(
+                (1.0, 1.0),
+                ((size.width - 1) as Scalar, (size.height - 1) as Scalar),
+            )
+        };
+        Transform::fit_bbox(src, dst, align)
     }
 }
 
@@ -540,26 +553,26 @@ mod tests {
         let s2 = BBox::new(Point::new(1.0, 1.0), Point::new(2.0, 1.5));
         let d = BBox::new(Point::new(3.0, 5.0), Point::new(13.0, 15.0));
 
-        let tr0 = Transform::fit(s0, d, Align::Mid);
+        let tr0 = Transform::fit_bbox(s0, d, Align::Mid);
         assert!(tr0.apply(s0.min).is_close_to(d.min));
         assert!(tr0.apply(s0.max).is_close_to(d.max));
 
-        let tr1 = Transform::fit(s1, d, Align::Min);
+        let tr1 = Transform::fit_bbox(s1, d, Align::Min);
         assert!(tr1.apply(s1.min).is_close_to(d.min));
         assert!(tr1.apply(s1.max).is_close_to(Point::new(8.0, 15.0)));
 
-        let tr2 = Transform::fit(s2, d, Align::Max);
+        let tr2 = Transform::fit_bbox(s2, d, Align::Max);
         assert!(tr2.apply(s2.max).is_close_to(d.max));
         assert!(tr2.apply(s2.min).is_close_to(Point::new(3.0, 10.0)));
 
-        let tr3 = Transform::fit(s1, d, Align::Mid);
+        let tr3 = Transform::fit_bbox(s1, d, Align::Mid);
         assert!(tr3
             .apply((s1.min + s1.max) / 2.0)
             .is_close_to((d.min + d.max) / 2.0));
         assert!(tr3.apply(s1.min).is_close_to(Point::new(5.5, 5.0)));
         assert!(tr3.apply(s1.max).is_close_to(Point::new(10.5, 15.0)));
 
-        let tr4 = Transform::fit(s2, d, Align::Mid);
+        let tr4 = Transform::fit_bbox(s2, d, Align::Mid);
         assert!(tr4
             .apply((s2.min + s2.max) / 2.0)
             .is_close_to((d.min + d.max) / 2.0));

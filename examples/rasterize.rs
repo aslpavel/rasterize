@@ -3,8 +3,8 @@
 
 use env_logger::Env;
 use rasterize::{
-    ActiveEdgeRasterizer, Align, BBox, Curve, FillRule, Image, LineCap, LineJoin, Path, Point,
-    Rasterizer, Scalar, Segment, SignedDifferenceRasterizer, StrokeStyle, Transform,
+    ActiveEdgeRasterizer, Align, BBox, Curve, FillRule, Image, ImageOwned, LineCap, LineJoin, Path,
+    Point, Rasterizer, Scalar, Segment, SignedDifferenceRasterizer, StrokeStyle, Transform,
 };
 use std::{
     env, fmt,
@@ -187,7 +187,7 @@ fn main() -> Result<(), Error> {
     let mut path = path_load(args.input_file)?;
 
     // resize if needed
-    match args.width {
+    let tr = match args.width {
         Some(width) if width > 2 => {
             let src_bbox = path
                 .bbox(Transform::default())
@@ -195,10 +195,10 @@ fn main() -> Result<(), Error> {
             let width = width as Scalar;
             let height = src_bbox.height() * width / src_bbox.width();
             let dst_bbox = BBox::new(Point::new(1.0, 1.0), Point::new(width - 1.0, height - 1.0));
-            path.transform(Transform::fit(src_bbox, dst_bbox, Align::Mid));
+            Transform::fit_bbox(src_bbox, dst_bbox, Align::Mid)
         }
-        _ => (),
-    }
+        _ => Transform::default(),
+    };
 
     // stroke
     log::info!("[path::segments_count] {}", path.segments_count());
@@ -220,8 +220,10 @@ fn main() -> Result<(), Error> {
 
     // rasterize path
     let rasterizer = args.rasterizer;
+    let (size, tr, _) = path.size(tr).expect("path is empty");
+    let img = timeit("[allocate]", || ImageOwned::new_default(size));
     let mask = timeit(format!("[rasterize:{}]", rasterizer.name()), || {
-        path.rasterize(rasterizer, Transform::default(), FillRule::NonZero)
+        path.mask(rasterizer, tr, FillRule::NonZero, img)
     });
     log::info!(
         "[dimension] width: {} height: {}",

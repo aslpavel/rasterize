@@ -1,6 +1,6 @@
 use crate::{
-    clamp, curve::line_offset, rasterize::Rasterizer, Align, BBox, Color, Cubic, Curve, EllipArc,
-    ImageMut, ImageOwned, Line, Point, Quad, SVGPathParser, SVGPathParserError, Scalar, Segment,
+    clamp, curve::line_offset, rasterize::Rasterizer, BBox, Color, Cubic, Curve, EllipArc,
+    ImageMut, Line, Point, Quad, SVGPathParser, SVGPathParserError, Scalar, Segment, Size,
     Transform, EPSILON,
 };
 use std::{
@@ -317,6 +317,26 @@ impl Path {
             .fold(None, |bbox, subpath| Some(subpath.bbox(bbox, tr)))
     }
 
+    /// Calclulate size of the image required to render the path
+    ///
+    /// Returns:
+    ///   - Size of the image
+    ///   - Transformation required
+    ///   - Position of lowest x and y point of the image
+    pub fn size(&self, tr: Transform) -> Option<(Size, Transform, Point)> {
+        let bbox = self.bbox(tr)?;
+        let Point([min_x, min_y]) = bbox.min();
+        let Point([max_x, max_y]) = bbox.max();
+        let min = Point::new(min_x.floor() - 1.0, min_y.floor() - 1.0);
+        let max = Point::new(max_x.ceil() + 1.0, max_y.ceil() + 1.0);
+        let size = Size {
+            width: (max.x() - min.x()).round() as usize,
+            height: (max.y() - min.y()).round() as usize,
+        };
+        let shift = Transform::default().translate(1.0 - min_x, 1.0 - min_y);
+        Some((size, shift * tr, min))
+    }
+
     /// Rreverse order and direction of all segments
     pub fn reverse(&self) -> Self {
         Self {
@@ -324,96 +344,34 @@ impl Path {
         }
     }
 
+    /// Fill path with the provided color
     pub fn fill<R, I>(
         &self,
         rasterizer: R,
         tr: Transform,
         fill_rule: FillRule,
         color: I::Pixel,
-        mut img: I,
+        img: I,
     ) -> I
     where
         R: Rasterizer,
         I: ImageMut,
         I::Pixel: Color,
     {
-        let shape = img.shape();
-        let data = img.data_mut();
-        for pixel in rasterizer.mask_iter(self, tr, shape.size(), fill_rule) {
-            let dst = &mut data[shape.offset(pixel.y, pixel.x)];
-            *dst = dst.blend_over(&color.with_alpha(pixel.alpha));
-        }
-        img
+        rasterizer.fill(self, tr, fill_rule, color, img)
     }
 
     /// Rasterize mast for the path in into a provided image.
     ///
     /// Everything that is outside of the image will be cropped. Image is assumed
     /// to contain zeros.
-    pub fn rasterize_to<R, I>(
-        &self,
-        rasterizer: R,
-        tr: Transform,
-        fill_rule: FillRule,
-        mut img: I,
-    ) -> I
+    pub fn mask<R, I>(&self, rasterizer: R, tr: Transform, fill_rule: FillRule, mut img: I) -> I
     where
         R: Rasterizer,
         I: ImageMut<Pixel = Scalar>,
     {
         rasterizer.mask(self, tr, &mut img, fill_rule);
         img
-    }
-
-    /// Rasterize fitted mask for the path into a provided image.
-    ///
-    /// Path is rescaled and centered appropriately to fit into a provided image.
-    pub fn rasterize_fit<R, I>(
-        &self,
-        rasterizer: R,
-        tr: Transform,
-        fill_rule: FillRule,
-        align: Align,
-        img: I,
-    ) -> I
-    where
-        R: Rasterizer,
-        I: ImageMut<Pixel = Scalar>,
-    {
-        if img.height() < 3 || img.height() < 3 {
-            return img;
-        }
-        let src_bbox = match self.bbox(tr) {
-            Some(bbox) if bbox.width() > 0.0 && bbox.height() > 0.0 => bbox,
-            _ => return img,
-        };
-        let dst_bbox = BBox::new(
-            Point::new(1.0, 1.0),
-            Point::new((img.width() - 1) as Scalar, (img.height() - 1) as Scalar),
-        );
-        let tr = Transform::fit(src_bbox, dst_bbox, align) * tr;
-        self.rasterize_to(rasterizer, tr, fill_rule, img)
-    }
-
-    /// Rasteraize mask for the path into an allocated image.
-    ///
-    /// Surface of required size will be allocated.
-    pub fn rasterize(
-        &self,
-        rasterizer: impl Rasterizer,
-        tr: Transform,
-        fill_rule: FillRule,
-    ) -> ImageOwned<Scalar> {
-        let bbox = match self.bbox(tr) {
-            Some(bbox) => bbox,
-            None => return ImageOwned::new_default(0, 0),
-        };
-        // one pixel border to account for anti-aliasing
-        let width = (bbox.width() + 2.0).ceil() as usize;
-        let height = (bbox.height() + 2.0).ceil() as usize;
-        let img = ImageOwned::new_default(height, width);
-        let shift = Transform::default().translate(1.0 - bbox.x(), 1.0 - bbox.y());
-        self.rasterize_to(rasterizer, shift * tr, fill_rule, img)
     }
 
     /// Convert path to SVG path representation
