@@ -1,7 +1,9 @@
-use crate::Scalar;
+use crate::{Point, Scalar};
 use std::{
     fmt,
     ops::{Add, Mul},
+    rc::Rc,
+    sync::Arc,
 };
 
 pub trait Color {
@@ -17,6 +19,34 @@ pub trait Color {
     {
         let [r, g, b, _] = self.to_rgba();
         [r, g, b]
+    }
+}
+
+pub trait Brush {
+    fn at(&self, point: Point) -> LinColor;
+}
+
+impl<'a, P: Brush> Brush for &'a P {
+    fn at(&self, point: Point) -> LinColor {
+        (**self).at(point)
+    }
+}
+
+impl Brush for Box<dyn Brush> {
+    fn at(&self, point: Point) -> LinColor {
+        (**self).at(point)
+    }
+}
+
+impl Brush for Rc<dyn Brush> {
+    fn at(&self, point: Point) -> LinColor {
+        (**self).at(point)
+    }
+}
+
+impl Brush for Arc<dyn Brush> {
+    fn at(&self, point: Point) -> LinColor {
+        (**self).at(point)
     }
 }
 
@@ -146,6 +176,12 @@ impl Color for LinColor {
 
     fn with_alpha(&self, alpha: Scalar) -> Self {
         *self * (alpha as f32)
+    }
+}
+
+impl Brush for LinColor {
+    fn at(&self, _: Point) -> LinColor {
+        *self
     }
 }
 

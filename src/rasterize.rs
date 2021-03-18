@@ -26,8 +26,8 @@
 //!  - this method is slower
 //!  - but requires less memory
 use crate::{
-    Color, Curve, FillRule, ImageMut, ImageOwned, Line, Path, Point, Scalar, Transform,
-    DEFAULT_FLATNESS, EPSILON, EPSILON_SQRT,
+    Brush, Color, Curve, FillRule, ImageMut, ImageOwned, LinColor, Line, Path, Point, Scalar,
+    Transform, DEFAULT_FLATNESS, EPSILON, EPSILON_SQRT,
 };
 use std::{cmp::min, collections::VecDeque};
 
@@ -39,6 +39,9 @@ pub struct Size {
 
 /// Basic rasterizer interface
 pub trait Rasterizer {
+    /// Name of the rasterizer (usefull for debugging)
+    fn name(&self) -> &str;
+
     /// Rasterize provided path as mask with transformation applied, and
     /// specified fill rule.
     fn mask(
@@ -58,30 +61,22 @@ pub trait Rasterizer {
         fill_rule: FillRule,
     ) -> Box<dyn Iterator<Item = Pixel> + '_>;
 
-    /// Name of the rasterizer (usefull for debugging)
-    fn name(&self) -> &str;
-
-    /// Fill path with the provided color
-    fn fill<I>(
+    /// Fill path with the provided brush
+    fn fill(
         &self,
         path: &Path,
         tr: Transform,
         fill_rule: FillRule,
-        color: I::Pixel,
-        mut img: I,
-    ) -> I
-    where
-        Self: Sized,
-        I: ImageMut,
-        I::Pixel: Color,
-    {
+        brush: &dyn Brush,
+        img: &mut dyn ImageMut<Pixel = LinColor>,
+    ) {
         let shape = img.shape();
         let data = img.data_mut();
         for pixel in self.mask_iter(path, tr, shape.size(), fill_rule) {
             let dst = &mut data[shape.offset(pixel.y, pixel.x)];
+            let color = brush.at(Point::new(pixel.x as Scalar + 0.5, pixel.y as Scalar + 0.5));
             *dst = dst.blend_over(&color.with_alpha(pixel.alpha));
         }
-        img
     }
 }
 

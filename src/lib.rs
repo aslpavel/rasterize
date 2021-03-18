@@ -20,7 +20,7 @@ mod utils;
 pub use crate::rasterize::{
     ActiveEdgeIter, ActiveEdgeRasterizer, Pixel, Rasterizer, SignedDifferenceRasterizer, Size,
 };
-pub use color::{Color, ColorU8, LinColor};
+pub use color::{Brush, Color, ColorU8, LinColor};
 pub use curve::{
     Cubic, Curve, CurveExtremities, CurveFlattenIter, CurveRoots, Line, Quad, Segment,
 };
