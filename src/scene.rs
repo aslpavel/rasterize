@@ -105,7 +105,8 @@ impl Scene {
 
     pub fn render(&self, rasterizer: &dyn Rasterizer, tr: Transform, view: BBox) -> Layer {
         let mut layer = Layer::new(view);
-        self.render_rec(rasterizer, &mut layer, tr, None);
+        let align = Transform::new_translate(-(layer.x() as Scalar), -(layer.y() as Scalar));
+        self.render_rec(rasterizer, &mut layer, align * tr, None);
         layer
     }
 

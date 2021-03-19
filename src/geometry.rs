@@ -242,6 +242,17 @@ impl Default for Transform {
 }
 
 impl Transform {
+    pub fn new(
+        m00: Scalar,
+        m01: Scalar,
+        m02: Scalar,
+        m10: Scalar,
+        m11: Scalar,
+        m12: Scalar,
+    ) -> Self {
+        Self([m00, m01, m02, m10, m11, m12])
+    }
+
     /// Apply this transformation to a point
     pub fn apply(&self, point: Point) -> Point {
         let Self([m00, m01, m02, m10, m11, m12]) = self;
@@ -268,18 +279,30 @@ impl Transform {
 
     /// Apply translation by `[tx, ty]` before self
     pub fn translate(&self, tx: Scalar, ty: Scalar) -> Self {
-        self.matmul(Self([1.0, 0.0, tx, 0.0, 1.0, ty]))
+        self.matmul(Self::new_translate(tx, ty))
+    }
+
+    pub fn new_translate(tx: Scalar, ty: Scalar) -> Self {
+        Self([1.0, 0.0, tx, 0.0, 1.0, ty])
     }
 
     /// Apply scale transformatoin by `[sx, sy]` before self
     pub fn scale(&self, sx: Scalar, sy: Scalar) -> Self {
-        self.matmul(Self([sx, 0.0, 0.0, 0.0, sy, 0.0]))
+        self.matmul(Self::new_scale(sx, sy))
+    }
+
+    pub fn new_scale(sx: Scalar, sy: Scalar) -> Self {
+        Self([sx, 0.0, 0.0, 0.0, sy, 0.0])
     }
 
     /// Apply rotation by `a` angle around the origin before self
     pub fn rotate(&self, a: Scalar) -> Self {
+        self.matmul(Self::new_rotate(a))
+    }
+
+    pub fn new_rotate(a: Scalar) -> Self {
         let (sin, cos) = a.sin_cos();
-        self.matmul(Self([cos, -sin, 0.0, sin, cos, 0.0]))
+        Self([cos, -sin, 0.0, sin, cos, 0.0])
     }
 
     /// Apply rotation around point `p` by angle `a` before self
@@ -292,7 +315,11 @@ impl Transform {
 
     /// Apply scew transformation by `[ax, ay]` before self
     pub fn skew(&self, ax: Scalar, ay: Scalar) -> Self {
-        self.matmul(Self([1.0, ax.tan(), 0.0, ay.tan(), 1.0, 0.0]))
+        self.matmul(Self::new_skew(ax, ay))
+    }
+
+    pub fn new_skew(ax: Scalar, ay: Scalar) -> Self {
+        Self([1.0, ax.tan(), 0.0, ay.tan(), 1.0, 0.0])
     }
 
     /// Multiply transformations in matrix form

@@ -22,9 +22,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Arc::new(LinColor::new(0.0, 1.0, 0.0, 1.0)),
             fill_rule,
         )
-        .transform(Transform::default().translate(bbox.width() / 3.0, 0.0)),
+        .transform(Transform::new_translate(bbox.width() / 3.0, 0.0)),
         Scene::fill(path, Arc::new(LinColor::new(0.0, 0.0, 1.0, 1.0)), fill_rule)
-            .transform(Transform::default().translate(bbox.width() * 2.0 / 3.0, 0.0)),
+            .transform(Transform::new_translate(bbox.width() * 2.0 / 3.0, 0.0)),
     ]);
 
     /*

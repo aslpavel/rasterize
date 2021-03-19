@@ -53,6 +53,8 @@ pub trait Rasterizer {
     );
 
     /// Iterator over rasterized mask pixels
+    ///
+    /// This iterator should never return pixels outside of provided size region
     fn mask_iter(
         &self,
         path: &Path,
@@ -170,6 +172,12 @@ impl Rasterizer for SignedDifferenceRasterizer {
         if size.width == 0 || size.height == 0 {
             return Box::new(std::iter::empty());
         }
+        let width = size.width;
+        // allocate extra collumnt to account for anti-aliased pixels
+        let size = Size {
+            width: width + 1,
+            height: size.height,
+        };
         let mut img = ImageOwned::new_default(size);
         for line in path.flatten(tr, self.flatness, true) {
             signed_difference_line(&mut img, line);
@@ -184,6 +192,8 @@ impl Rasterizer for SignedDifferenceRasterizer {
                     let x = index - y * size.width;
                     if x == 0 {
                         winding = 0.0;
+                    } else if x >= width {
+                        return None;
                     }
                     winding += winding_diff;
                     let alpha = fill_rule.alpha_from_winding(winding);
@@ -525,7 +535,7 @@ impl Iterator for ActiveEdgeIter {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if self.row > self.size.height {
+            if self.row >= self.size.height {
                 return None;
             }
 
@@ -598,7 +608,7 @@ struct Edge {
     dydx: Option<Scalar>,
     // `1.0` if edge is going from lower to higher `y`, `-1.0` otherwise
     dir: Scalar,
-    // first row that will be effected by this edge
+    // first (with minimal value) row that will be effected by this edge
     row: usize,
 }
 
