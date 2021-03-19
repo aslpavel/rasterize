@@ -2,7 +2,7 @@ use crate::{
     BBox, Color, FillRule, Image, ImageMut, ImageOwned, LinColor, Paint, Path, Point, Rasterizer,
     Scalar, Shape, Size, Transform,
 };
-use std::{cmp, sync::Arc};
+use std::{cmp, fmt, sync::Arc};
 
 pub enum SceneInner {
     Fill {
@@ -159,7 +159,10 @@ impl Scene {
                             // accout for anti-aliasing
                             let child_bbox =
                                 child_bbox.extend(child_bbox.max() + Point::new(1.0, 1.0));
-                            let child_layer = child.render(rasterizer, tr, child_bbox);
+                            // child layer will be having relative offset coordinates
+                            let child_layer = child
+                                .render(rasterizer, tr, child_bbox)
+                                .translate(layer.x(), layer.y());
                             let opacity = *opacity as f32;
                             layer.compose(&child_layer, |dst, src| {
                                 let src = src * opacity;
@@ -227,17 +230,18 @@ impl<P: Paint> Paint for OpacityPaint<P> {
     }
 }
 
+#[derive(Clone)]
 pub struct Layer {
     image: ImageOwned<LinColor>,
-    x: usize,
-    y: usize,
+    x: i32,
+    y: i32,
 }
 
 impl Layer {
     pub fn new(bbox: BBox) -> Self {
         let x0 = bbox.min().x().floor() as usize;
-        let y0 = bbox.min().y().floor() as usize;
         let x1 = bbox.max().x().ceil() as usize;
+        let y0 = bbox.min().y().floor() as usize;
         let y1 = bbox.max().y().ceil() as usize;
         let size = Size {
             width: x1 - x0,
@@ -246,39 +250,53 @@ impl Layer {
         let image = ImageOwned::new_default(size);
         Self {
             image,
-            x: x0,
-            y: y0,
+            x: x0 as i32,
+            y: y0 as i32,
         }
     }
 
-    pub fn x(&self) -> usize {
+    pub fn x(&self) -> i32 {
         self.x
     }
 
-    pub fn y(&self) -> usize {
+    pub fn y(&self) -> i32 {
         self.y
+    }
+
+    pub fn translate(self, dx: i32, dy: i32) -> Self {
+        Self {
+            image: self.image,
+            x: self.x + dx,
+            y: self.y + dy,
+        }
     }
 
     pub fn compose<C>(&mut self, other: &Layer, compose: C)
     where
         C: Fn(LinColor, LinColor) -> LinColor,
     {
-        let x0 = cmp::max(self.x(), other.x());
-        let x1 = cmp::min(self.x() + self.width(), other.x() + other.width());
-        let y0 = cmp::max(self.y(), other.y());
-        let y1 = cmp::min(self.y() + self.height(), other.x() + other.height());
-        let dst_shape = self.shape();
+        let x0 = cmp::max(self.x, other.x);
+        let x1 = cmp::min(self.x + self.width() as i32, other.x + other.width() as i32);
+        let y0 = cmp::max(self.y, other.y);
+        let y1 = cmp::min(
+            self.y + self.height() as i32,
+            other.y + other.height() as i32,
+        );
+
         let dst_x = self.x();
         let dst_y = self.y();
+        let dst_shape = self.shape();
         let dst_data = self.data_mut();
         let src_shape = other.shape();
         let src_data = other.data();
+
         for x in x0..x1 {
             for y in y0..y1 {
-                let dst_col = x - dst_x;
-                let dst_row = y - dst_y;
-                let src_col = x - other.x();
-                let src_row = y - other.y();
+                let dst_col = (x - dst_x) as usize;
+                let dst_row = (y - dst_y) as usize;
+                let src_col = (x - other.x()) as usize;
+                let src_row = (y - other.y()) as usize;
+
                 let dst = &mut dst_data[dst_shape.offset(dst_row, dst_col)];
                 let src = src_data[src_shape.offset(src_row, src_col)];
                 *dst = compose(*dst, src);
@@ -302,5 +320,16 @@ impl Image for Layer {
 impl ImageMut for Layer {
     fn data_mut(&mut self) -> &mut [Self::Pixel] {
         self.image.data_mut()
+    }
+}
+
+impl fmt::Debug for Layer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Layer")
+            .field("x", &self.x)
+            .field("y", &self.y)
+            .field("width", &self.width())
+            .field("height", &self.height())
+            .finish()
     }
 }

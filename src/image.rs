@@ -1,7 +1,7 @@
 use crate::{Color, Size};
 use std::{io::Write, sync::Arc};
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Shape {
     /// Width of the image
     pub width: usize,

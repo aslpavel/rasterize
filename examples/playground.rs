@@ -8,8 +8,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tr = Transform::default();
     let bbox = path.bbox(tr).expect("path is empty");
 
-    // let rasterizer = ActiveEdgeRasterizer::default();
-    let rasterizer = SignedDifferenceRasterizer::default();
+    let rasterizer = ActiveEdgeRasterizer::default();
+    // let rasterizer = SignedDifferenceRasterizer::default();
 
     let scene = Scene::group(vec![
         Scene::fill(
@@ -17,14 +17,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Arc::new(LinColor::new(1.0, 0.0, 0.0, 1.0)),
             fill_rule,
         ),
-        Scene::fill(
-            path.clone(),
-            Arc::new(LinColor::new(0.0, 1.0, 0.0, 1.0)),
-            fill_rule,
-        )
-        .transform(Transform::new_translate(bbox.width() / 3.0, 0.0)),
-        Scene::fill(path, Arc::new(LinColor::new(0.0, 0.0, 1.0, 1.0)), fill_rule)
-            .transform(Transform::new_translate(bbox.width() * 2.0 / 3.0, 0.0)),
+        Scene::group(vec![
+            Scene::fill(
+                path.clone(),
+                Arc::new(LinColor::new(0.0, 1.0, 0.0, 1.0)),
+                fill_rule,
+            )
+            .transform(Transform::new_translate(bbox.width() / 3.0, 0.0)),
+            Scene::fill(path, Arc::new(LinColor::new(0.0, 0.0, 1.0, 1.0)), fill_rule)
+                .transform(Transform::new_translate(bbox.width() * 2.0 / 3.0, 0.0)),
+        ])
+        .opacity(0.9),
     ]);
 
     /*
