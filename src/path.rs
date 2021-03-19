@@ -1,7 +1,7 @@
 use crate::{
-    clamp, curve::line_offset, rasterize::Rasterizer, BBox, Brush, Cubic, Curve, EllipArc,
-    ImageMut, LinColor, Line, Point, Quad, SVGPathParser, SVGPathParserError, Scalar, Segment,
-    Size, Transform, EPSILON,
+    clamp, curve::line_offset, rasterize::Rasterizer, BBox, Cubic, Curve, EllipArc, ImageMut,
+    LinColor, Line, Paint, Point, Quad, SVGPathParser, SVGPathParserError, Scalar, Segment, Size,
+    Transform, EPSILON,
 };
 use std::{
     fmt,
@@ -344,21 +344,21 @@ impl Path {
         }
     }
 
-    /// Fill path with the provided color
-    pub fn fill<R, B, I>(
+    /// Fill path with the provided paint
+    pub fn fill<R, P, I>(
         &self,
         rasterizer: R,
         tr: Transform,
         fill_rule: FillRule,
-        brush: B,
+        paint: P,
         mut img: I,
     ) -> I
     where
         R: Rasterizer,
-        B: Brush,
+        P: Paint,
         I: ImageMut<Pixel = LinColor>,
     {
-        rasterizer.fill(self, tr, fill_rule, &brush, &mut img);
+        rasterizer.fill(self, tr, fill_rule, &paint, &mut img);
         img
     }
 

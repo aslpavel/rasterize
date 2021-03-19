@@ -188,7 +188,8 @@ impl<I: Read> SVGPathParser<I> {
             |byte| matches!(byte, b'0'..=b'9'),
             |byte| push_digit(&mut mantissa, byte),
         )?;
-        let frac = if self.parse_once(|byte| matches!(byte, b'.'), |_| {})? {
+        let matches_dot = self.parse_once(|byte| matches!(byte, b'.'), |_| {})?;
+        let frac = if matches_dot {
             self.parse_while(
                 |byte| matches!(byte, b'0'..=b'9'),
                 |byte| {
@@ -205,7 +206,8 @@ impl<I: Read> SVGPathParser<I> {
             return Err(SVGPathParserError::InvalidScalar);
         }
 
-        if self.parse_once(|byte| matches!(byte, b'e' | b'E'), |_| {})? {
+        let matches_exp = self.parse_once(|byte| matches!(byte, b'e' | b'E'), |_| {})?;
+        if matches_exp {
             let mut sci: i64 = 0;
             let mut sci_sign = 1;
             self.parse_once(
@@ -226,7 +228,8 @@ impl<I: Read> SVGPathParser<I> {
             exponent = exponent.wrapping_add(sci_sign * sci)
         }
 
-        Ok((mantissa as Scalar) * (10.0 as Scalar).powi(exponent as i32))
+        let ten: Scalar = 10.0;
+        Ok((mantissa as Scalar) * ten.powi(exponent as i32))
     }
 
     // parse pair of scalars and convert it to a point

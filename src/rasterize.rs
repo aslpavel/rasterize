@@ -26,7 +26,7 @@
 //!  - this method is slower
 //!  - but requires less memory
 use crate::{
-    Brush, Color, Curve, FillRule, ImageMut, ImageOwned, LinColor, Line, Path, Point, Scalar,
+    Color, Curve, FillRule, ImageMut, ImageOwned, LinColor, Line, Paint, Path, Point, Scalar,
     Transform, DEFAULT_FLATNESS, EPSILON, EPSILON_SQRT,
 };
 use std::{cmp::min, collections::VecDeque};
@@ -61,26 +61,26 @@ pub trait Rasterizer {
         fill_rule: FillRule,
     ) -> Box<dyn Iterator<Item = Pixel> + '_>;
 
-    /// Fill path with the provided brush
+    /// Fill path with the provided paint
     fn fill(
         &self,
         path: &Path,
         tr: Transform,
         fill_rule: FillRule,
-        brush: &dyn Brush,
+        paint: &dyn Paint,
         img: &mut dyn ImageMut<Pixel = LinColor>,
     ) {
         let shape = img.shape();
         let data = img.data_mut();
         for pixel in self.mask_iter(path, tr, shape.size(), fill_rule) {
             let dst = &mut data[shape.offset(pixel.y, pixel.x)];
-            let color = brush.at(Point::new(pixel.x as Scalar + 0.5, pixel.y as Scalar + 0.5));
+            let color = paint.at(Point::new(pixel.x as Scalar + 0.5, pixel.y as Scalar + 0.5));
             *dst = dst.blend_over(&color.with_alpha(pixel.alpha));
         }
     }
 }
 
-impl<'a, R: Rasterizer> Rasterizer for &'a R {
+impl<'a, R: Rasterizer + ?Sized> Rasterizer for &'a R {
     fn mask(
         &self,
         path: &Path,
@@ -175,24 +175,24 @@ impl Rasterizer for SignedDifferenceRasterizer {
             signed_difference_line(&mut img, line);
         }
         let mut winding = 0.0;
-        let iter = img
-            .to_vec()
-            .into_iter()
-            .enumerate()
-            .filter_map(move |(index, winding_diff)| {
-                let y = index / size.width;
-                let x = index - y * size.width;
-                if x == 0 {
-                    winding = 0.0;
-                }
-                winding += winding_diff;
-                let alpha = fill_rule.alpha_from_winding(winding);
-                if alpha.abs() < EPSILON {
-                    None
-                } else {
-                    Some(Pixel { x, y, alpha })
-                }
-            });
+        let iter =
+            img.into_vec()
+                .into_iter()
+                .enumerate()
+                .filter_map(move |(index, winding_diff)| {
+                    let y = index / size.width;
+                    let x = index - y * size.width;
+                    if x == 0 {
+                        winding = 0.0;
+                    }
+                    winding += winding_diff;
+                    let alpha = fill_rule.alpha_from_winding(winding);
+                    if alpha.abs() < EPSILON {
+                        None
+                    } else {
+                        Some(Pixel { x, y, alpha })
+                    }
+                });
         Box::new(iter)
     }
 

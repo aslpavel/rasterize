@@ -22,29 +22,29 @@ pub trait Color {
     }
 }
 
-pub trait Brush {
+pub trait Paint {
     fn at(&self, point: Point) -> LinColor;
 }
 
-impl<'a, P: Brush> Brush for &'a P {
+impl<'a, P: Paint> Paint for &'a P {
     fn at(&self, point: Point) -> LinColor {
         (**self).at(point)
     }
 }
 
-impl Brush for Box<dyn Brush> {
+impl Paint for Box<dyn Paint> {
     fn at(&self, point: Point) -> LinColor {
         (**self).at(point)
     }
 }
 
-impl Brush for Rc<dyn Brush> {
+impl Paint for Rc<dyn Paint> {
     fn at(&self, point: Point) -> LinColor {
         (**self).at(point)
     }
 }
 
-impl Brush for Arc<dyn Brush> {
+impl Paint for Arc<dyn Paint> {
     fn at(&self, point: Point) -> LinColor {
         (**self).at(point)
     }
@@ -179,7 +179,7 @@ impl Color for LinColor {
     }
 }
 
-impl Brush for LinColor {
+impl Paint for LinColor {
     fn at(&self, _: Point) -> LinColor {
         *self
     }

@@ -183,6 +183,7 @@ impl<'a, P> Iterator for ImageIter<'a, P> {
     type Item = &'a P;
 
     fn next(&mut self) -> Option<Self::Item> {
+        #[allow(clippy::iter_nth_zero)]
         self.nth(0)
     }
 
@@ -246,6 +247,7 @@ impl<'a, P> Iterator for ImageMutIter<'a, P> {
     type Item = &'a mut P;
 
     fn next(&mut self) -> Option<Self::Item> {
+        #[allow(clippy::iter_nth_zero)]
         self.nth(0)
     }
 
@@ -305,7 +307,7 @@ impl<P> ImageOwned<P> {
         }
     }
 
-    pub fn to_vec(self) -> Vec<P> {
+    pub fn into_vec(self) -> Vec<P> {
         self.data
     }
 }
