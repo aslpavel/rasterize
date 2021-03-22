@@ -902,7 +902,7 @@ mod tests {
 
     #[test]
     fn test_fill_rule() {
-        let tr = Transform::default();
+        let tr = Transform::identity();
         let path: Path = r#"
             M50,0 21,90 98,35 2,35 79,90z
             M110,0 h90 v90 h-90z

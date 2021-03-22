@@ -230,6 +230,10 @@ impl Path {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.subpaths.is_empty()
+    }
+
     pub fn subpaths(&self) -> &[SubPath] {
         &self.subpaths
     }
@@ -333,7 +337,7 @@ impl Path {
             width: (max.x() - min.x()).round() as usize,
             height: (max.y() - min.y()).round() as usize,
         };
-        let shift = Transform::default().translate(1.0 - min_x, 1.0 - min_y);
+        let shift = Transform::new_translate(1.0 - min_x, 1.0 - min_y);
         Some((size, shift * tr, min))
     }
 
@@ -793,7 +797,7 @@ mod tests {
     #[test]
     fn test_bbox() {
         let path: Path = SQUIRREL.parse().unwrap();
-        let bbox = path.bbox(Transform::default()).unwrap();
+        let bbox = path.bbox(Transform::identity()).unwrap();
         assert_approx_eq!(bbox.x(), 0.25);
         assert_approx_eq!(bbox.y(), 1.0);
         assert_approx_eq!(bbox.width(), 15.75);
@@ -887,9 +891,7 @@ mod tests {
     #[test]
     fn test_flatten() -> Result<(), SVGPathParserError> {
         let path: Path = SQUIRREL.parse()?;
-        let tr = Transform::default()
-            .rotate(PI / 3.0)
-            .translate(-10.0, -20.0);
+        let tr = Transform::new_rotate(PI / 3.0).translate(-10.0, -20.0);
         let lines: Vec<_> = path.flatten(tr, DEFAULT_FLATNESS, true).collect();
         let mut reference = Vec::new();
         for subpath in path.subpaths() {

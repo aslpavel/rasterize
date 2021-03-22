@@ -237,7 +237,7 @@ pub struct Transform([Scalar; 6]);
 
 impl Default for Transform {
     fn default() -> Self {
-        Self([1.0, 0.0, 0.0, 0.0, 1.0, 0.0])
+        Self::identity()
     }
 }
 
@@ -251,6 +251,10 @@ impl Transform {
         m12: Scalar,
     ) -> Self {
         Self([m00, m01, m02, m10, m11, m12])
+    }
+
+    pub fn identity() -> Self {
+        Self([1.0, 0.0, 0.0, 0.0, 1.0, 0.0])
     }
 
     /// Apply this transformation to a point
@@ -344,30 +348,27 @@ impl Transform {
     pub fn make_horizontal(line: Line) -> Transform {
         let [p0, p1] = line.points();
         let cos_sin = match (p1 - p0).normalize() {
-            None => return Transform::default(),
+            None => return Transform::identity(),
             Some(cos_sin) => cos_sin,
         };
         let cos = cos_sin.x();
         let sin = cos_sin.y();
-        Transform::default()
-            .matmul(Self([cos, sin, 0.0, -sin, cos, 0.0]))
-            .translate(-p0.x(), -p0.y())
+        Transform([cos, sin, 0.0, -sin, cos, 0.0]).translate(-p0.x(), -p0.y())
     }
 
     /// Find transformation that is requred to fit `src` box into `dst`.
     pub fn fit_bbox(src: BBox, dst: BBox, align: Align) -> Transform {
         let scale = (dst.height() / src.height()).min(dst.width() / src.width());
-        let base = Transform::default()
-            .translate(dst.x(), dst.y())
+        let base = Transform::new_translate(dst.x(), dst.y())
             .scale(scale, scale)
             .translate(-src.x(), -src.y());
         let align = match align {
-            Align::Min => Transform::default(),
-            Align::Mid => Transform::default().translate(
+            Align::Min => Transform::identity(),
+            Align::Mid => Transform::new_translate(
                 (dst.width() - src.width() * scale) / 2.0,
                 (dst.height() - src.height() * scale) / 2.0,
             ),
-            Align::Max => Transform::default().translate(
+            Align::Max => Transform::new_translate(
                 dst.width() - src.width() * scale,
                 dst.height() - src.height() * scale,
             ),
@@ -550,7 +551,7 @@ mod tests {
 
     #[test]
     fn test_trasform() {
-        let tr = Transform::default()
+        let tr = Transform::identity()
             .translate(1.0, 2.0)
             .rotate(PI / 3.0)
             .skew(2.0, 3.0)

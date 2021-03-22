@@ -5,7 +5,7 @@ use std::{fs::File, sync::Arc};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = Arc::new(Path::read_svg_path(File::open("./paths/squirrel.path")?)?);
     let fill_rule = FillRule::default();
-    let tr = Transform::default();
+    let tr = Transform::identity();
     let bbox = path.bbox(tr).expect("path is empty");
 
     let rasterizer = ActiveEdgeRasterizer::default();
@@ -61,7 +61,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     */
 
-    let img = scene.render(&rasterizer, Transform::default(), bbox);
+    let img = scene.render(&rasterizer, Transform::identity(), bbox);
     img.write_bmp(std::io::stdout())?;
 
     Ok(())

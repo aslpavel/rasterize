@@ -51,7 +51,7 @@ impl EllipArc {
         let phi = x_axis_rot * PI / 180.0;
 
         // Eq 5.1
-        let Point([x1, y1]) = Transform::default().rotate(-phi).apply(0.5 * (src - dst));
+        let Point([x1, y1]) = Transform::new_rotate(-phi).apply(0.5 * (src - dst));
         // scale/normalize radii
         let s = (x1 / rx).powi(2) + (y1 / ry).powi(2);
         let (rx, ry) = if s > 1.0 {
@@ -68,7 +68,7 @@ impl EllipArc {
         let center = sq * Point([rx * y1 / ry, -ry * x1 / rx]);
         let Point([cx, cy]) = center;
         // Eq 5.3 convert center to initail coordinates
-        let center = Transform::default().rotate(phi).apply(center) + 0.5 * (dst + src);
+        let center = Transform::new_rotate(phi).apply(center) + 0.5 * (dst + src);
         // Eq 5.5-6
         let v0 = Point([1.0, 0.0]);
         let v1 = Point([(x1 - cx) / rx, (y1 - cy) / ry]);
@@ -98,7 +98,7 @@ impl EllipArc {
     pub fn at(&self, t: Scalar) -> Point {
         let (angle_sin, angle_cos) = (self.eta + t * self.eta_delta).sin_cos();
         let point = Point([self.rx * angle_cos, self.ry * angle_sin]);
-        Transform::default().rotate(self.phi).apply(point) + self.center
+        Transform::new_rotate(self.phi).apply(point) + self.center
     }
 
     pub fn start(&self) -> Point {
@@ -166,7 +166,7 @@ pub struct EllipArcCubicIter {
 
 impl EllipArcCubicIter {
     fn new(arc: EllipArc) -> Self {
-        let phi_tr = Transform::default().rotate(arc.phi);
+        let phi_tr = Transform::new_rotate(arc.phi);
         let segment_max_angle = PI / 2.0; // maximum `eta_delta` of a segment
         let segment_count = (arc.eta_delta.abs() / segment_max_angle).ceil();
         let segment_delta = arc.eta_delta / segment_count;

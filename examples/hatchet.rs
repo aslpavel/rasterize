@@ -143,7 +143,7 @@ fn hatch(path: &Path, normal: Line, ratio: Scalar) -> Path {
         Some(bbox) => bbox,
     };
     let offset_y = -(bbox_tr.y() / period).floor() * period;
-    let tr = Transform::default().translate(-bbox_tr.x(), offset_y) * tr;
+    let tr = Transform::new_translate(-bbox_tr.x(), offset_y) * tr;
 
     // all segmentes grouped by subpaths with included closing lines
     let segments: Vec<_> = path
@@ -168,12 +168,12 @@ fn hatch(path: &Path, normal: Line, ratio: Scalar) -> Path {
     while offset_y < bbox_tr.height() + period {
         let ints_low = intersect(
             &segments,
-            Transform::default().translate(0.0, -offset_y) * tr,
+            Transform::new_translate(0.0, -offset_y) * tr,
             true,
         );
         let ints_high = intersect(
             &segments,
-            Transform::default().translate(0.0, -offset_y - period * ratio) * tr,
+            Transform::new_translate(0.0, -offset_y - period * ratio) * tr,
             false,
         );
 
@@ -384,7 +384,7 @@ fn generate_font(
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let tr = Transform::default().translate(0.0, 1000.0).scale(1.0, -1.0);
+    let tr = Transform::new_translate(0.0, 1000.0).scale(1.0, -1.0);
     let mut glyphs = Vec::new();
 
     // bars

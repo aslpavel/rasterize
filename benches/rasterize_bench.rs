@@ -27,7 +27,7 @@ fn curve_benchmark(c: &mut Criterion) {
 fn stroke_benchmark(c: &mut Criterion) {
     let mut file = File::open(SQUIRREL_FILE).expect("failed to open path");
     let path = Path::read_svg_path(&mut file).expect("failed to load path");
-    let (size, tr, _) = path.size(Transform::default()).expect("path is empty");
+    let (size, tr, _) = path.size(Transform::identity()).expect("path is empty");
     let mut img = ImageOwned::new_default(size);
     let style = StrokeStyle {
         width: 1.0,
@@ -64,7 +64,7 @@ fn large_path_benchmark(c: &mut Criterion) {
     file.read_to_string(&mut path_str)
         .expect("failed to read path");
     let path: Path = path_str.parse().unwrap();
-    let (size, tr, _) = path.size(Transform::default()).expect("path is empty");
+    let (size, tr, _) = path.size(Transform::identity()).expect("path is empty");
     let mut img = ImageOwned::new_default(size);
 
     let mut group = c.benchmark_group("material-big");

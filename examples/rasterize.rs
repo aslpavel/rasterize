@@ -190,14 +190,14 @@ fn main() -> Result<(), Error> {
     let tr = match args.width {
         Some(width) if width > 2 => {
             let src_bbox = path
-                .bbox(Transform::default())
+                .bbox(Transform::identity())
                 .ok_or_else(|| ArgsError::new("path is empty"))?;
             let width = width as Scalar;
             let height = src_bbox.height() * width / src_bbox.width();
             let dst_bbox = BBox::new(Point::new(1.0, 1.0), Point::new(width - 1.0, height - 1.0));
             Transform::fit_bbox(src_bbox, dst_bbox, Align::Mid)
         }
-        _ => Transform::default(),
+        _ => Transform::identity(),
     };
 
     // stroke

@@ -1,6 +1,6 @@
 use crate::{
-    BBox, Color, FillRule, Image, ImageMut, ImageOwned, LinColor, Paint, Path, Point, Rasterizer,
-    Scalar, Shape, Size, Transform,
+    clamp, BBox, Color, FillRule, Image, ImageMut, ImageOwned, LinColor, Paint, Path, Point,
+    Rasterizer, Scalar, Shape, Size, Transform,
 };
 use std::{cmp, fmt, sync::Arc};
 
@@ -60,6 +60,7 @@ impl Scene {
     }
 
     pub fn opacity(&self, opacity: Scalar) -> Self {
+        let opacity = clamp(opacity, 0.0, 1.0);
         match self.as_ref() {
             SceneInner::Opacity {
                 child,
@@ -215,7 +216,7 @@ impl Scene {
         }
 
         let mut boxes = Vec::new();
-        is_quick_opacity_rec(self, &mut boxes, Transform::default())
+        is_quick_opacity_rec(self, &mut boxes, Transform::identity())
     }
 }
 
