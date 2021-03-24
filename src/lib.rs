@@ -33,6 +33,6 @@ pub use image::{
 pub use path::{
     FillRule, LineCap, LineJoin, Path, PathBuilder, StrokeStyle, SubPath, DEFAULT_FLATNESS,
 };
-pub use scene::{Layer, Scene};
+pub use scene::{Layer, Scene, Units};
 pub use svg::{SVGPathCmd, SVGPathParser, SVGPathParserError};
 use utils::{clamp, cubic_solve, quadratic_solve, ArrayIter, M3x3, M4x4};

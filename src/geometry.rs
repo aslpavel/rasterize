@@ -515,6 +515,13 @@ impl BBox {
             Point::new(x_max, y_max),
         ))
     }
+
+    /// Transform that makes bbox a unit-sized square
+    ///
+    /// This is used by clip|mask|gradient units
+    pub fn unit_transform(&self) -> Transform {
+        Transform::new_translate(self.x(), self.y()).scale(self.width(), self.height())
+    }
 }
 
 /// Find intersection of two ranges

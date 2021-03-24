@@ -22,7 +22,7 @@ pub trait Color {
     }
 }
 
-pub trait Paint {
+pub trait Paint: fmt::Debug {
     fn at(&self, point: Point) -> LinColor;
 }
 
@@ -140,7 +140,7 @@ impl fmt::Debug for ColorU8 {
 }
 
 /// Alpha premultiplied RGBA color in the liniar color space (no gamma correction)
-#[derive(Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct LinColor([f32; 4]);
 
 impl LinColor {

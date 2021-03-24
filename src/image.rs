@@ -307,6 +307,18 @@ impl<P> ImageOwned<P> {
         }
     }
 
+    pub fn empty() -> Self {
+        Self {
+            shape: Shape {
+                width: 0,
+                height: 0,
+                row_stride: 0,
+                col_stride: 0,
+            },
+            data: Vec::new(),
+        }
+    }
+
     pub fn into_vec(self) -> Vec<P> {
         self.data
     }

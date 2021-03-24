@@ -13,6 +13,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let scene = Scene::group(vec![
         Scene::fill(
+            Arc::new(
+                Path::builder()
+                    .move_to((bbox.min() + bbox.max()) / 2.0)
+                    .circle(bbox.width().min(bbox.height()) / 2.0)
+                    .build(),
+            ),
+            Arc::new(LinColor::new(0.59375, 0.58984375, 0.1015625, 1.0)),
+            fill_rule,
+        ),
+        Scene::fill(
             path.clone(),
             Arc::new(LinColor::new(1.0, 0.0, 0.0, 1.0)),
             fill_rule,
@@ -27,41 +37,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Scene::fill(path, Arc::new(LinColor::new(0.0, 0.0, 1.0, 1.0)), fill_rule)
                 .transform(Transform::new_translate(bbox.width() * 2.0 / 3.0, 0.0)),
         ])
-        .opacity(0.9),
-    ]);
-
-    /*
-    let mut img = ImageOwned::new_default(Size {
-        height: bbox.height() as usize + 2,
-        width: (bbox.width() * 2.0) as usize + 2,
-    });
-
-    path.fill(
-        &rasterizer,
-        tr,
+        .opacity(0.8),
+    ])
+    .clip(
+        Arc::new(
+            Path::builder()
+                .move_to((bbox.min() + bbox.max()) / 2.0)
+                .circle(bbox.width().min(bbox.height()) / 2.0)
+                .build(),
+        ),
+        Units::default(),
         fill_rule,
-        LinColor::new(1.0, 0.0, 0.0, 1.0),
-        img.as_mut(),
     );
 
-    path.fill(
-        &rasterizer,
-        tr.translate(bbox.width() / 3.0, 0.0),
-        fill_rule,
-        LinColor::new(0.0, 1.0, 0.0, 1.0),
-        img.as_mut(),
-    );
-
-    path.fill(
-        &rasterizer,
-        tr.translate(bbox.width() * 2.0 / 3.0, 0.0),
-        fill_rule,
-        LinColor::new(0.0, 0.0, 1.0, 1.0),
-        img.as_mut(),
-    );
-    */
-
-    let img = scene.render(&rasterizer, Transform::identity(), bbox);
+    let img = scene.render(&rasterizer, Transform::new_scale(1.0, 1.0), None);
     img.write_bmp(std::io::stdout())?;
 
     Ok(())
