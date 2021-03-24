@@ -239,32 +239,10 @@ fn signed_difference_line(mut img: impl ImageMut<Pixel = Scalar>, line: Line) {
     };
 
     // handle lines that are intersecting `x == 0.0`
-    // - line is splitted in left (for all points where x < 0.0) and the mid part
-    // - left part is converted to a vertical line that spans same y's and x == 0.0
-    // - left part is rastterized recursivelly, and mid part rasterized after this
-    let line = if p0.x() < 0.0 || p1.x() < 0.0 {
-        let (vertical, line) = if p1.x() > 0.0 || p0.x() > 0.0 {
-            let t = p0.x() / (p0.x() - p1.x());
-            let mid = Point::new(0.0, (1.0 - t) * p0.y() + t * p1.y());
-            if p1.x() > 0.0 {
-                let p = Point::new(0.0, p0.y());
-                (Line::new(p, mid), Line::new(mid, p1))
-            } else {
-                let p = Point::new(0.0, p1.y());
-                (Line::new(mid, p), Line::new(p0, mid))
-            }
-        } else {
-            (
-                Line::new((0.0, p0.y()), (0.0, p1.y())),
-                Line::new((0.0, 0.0), (0.0, 0.0)),
-            )
-        };
-        // signed difference by the line left of `x == 0.0`
-        signed_difference_line(img.as_mut(), vertical);
-        line
-    } else {
-        line
-    };
+    let (line, rest) = split_at_zero_x(line);
+    if let Some(rest) = rest {
+        signed_difference_line(img.as_mut(), rest);
+    }
 
     let Line([p0, p1]) = line;
     let shape = img.shape();
@@ -442,11 +420,11 @@ impl Rasterizer for ActiveEdgeRasterizer {
 pub struct ActiveEdgeIter {
     // all edges sorted by `Edge::row` in descending order
     edge_inactive: Vec<Vec<Edge>>,
-    // once scanline touches and it is activated and put into this list
+    // edge is activated when `Edge::row` is reached
     edge_active: VecDeque<Edge>,
     // row iterators are created for all active edges on
     iters_inactive: Vec<EdgeRowIter>,
-    // accumulated iterator over all active row iterators
+    // accumulated iterator over all active (x >= EdgeRowIter::column) row iterators
     iters_active: EdgeAccIter,
     // currently accumulated winding number
     winding: Scalar,
@@ -464,7 +442,10 @@ impl ActiveEdgeIter {
     pub fn new(size: Size, fill_rule: FillRule, lines: impl Iterator<Item = Line>) -> Self {
         let mut edge_table: Vec<Vec<Edge>> = Vec::new();
         edge_table.resize_with(size.height, Default::default);
-        for line in lines {
+        for line in lines.flat_map(|line| {
+            let (line, rest) = split_at_zero_x(line);
+            std::iter::once(line).chain(rest)
+        }) {
             if let Some(edge) = Edge::new(line) {
                 if edge.row >= size.height {
                     continue;
@@ -496,9 +477,10 @@ impl ActiveEdgeIter {
         // create new row iterators for all active edges
         for _ in 0..self.edge_active.len() {
             if let Some(edge) = self.edge_active.pop_front() {
-                if let Some((edge, iter)) = edge.next_row() {
+                // split edge into row iterator and the rest part
+                if let Some((edge_rest, iter)) = edge.next_row() {
                     self.iters_inactive.push(iter);
-                    self.edge_active.push_back(edge);
+                    self.edge_active.push_back(edge_rest);
                 }
             }
         }
@@ -604,7 +586,7 @@ struct Edge {
     line: Line,
     // `dx/dy` slope of the edge
     dxdy: Scalar,
-    // `dy/dx` slope of the edge, it empty for vertial lines
+    // `dy/dx` slope of the edge, it is empty for vertial lines
     dydx: Option<Scalar>,
     // `1.0` if edge is going from lower to higher `y`, `-1.0` otherwise
     dir: Scalar,
@@ -689,11 +671,13 @@ impl EdgeRowIter {
         // reduce the size of the edge
         edge.line = Line::new(p_split, p1);
 
+        // direct from lower to higher x coordinate
         let (dir, line) = if p0.x() <= p_split.x() {
             (edge.dir, Line::new(p0, p_split))
         } else {
             (-edge.dir, Line::new(p_split, p0))
         };
+
         let iter = Self {
             line: Some(line),
             reminder: None,
@@ -772,6 +756,23 @@ impl Iterator for EdgeAccIter {
             }
         }
         Some(acc)
+    }
+}
+
+/// Split line at x == 0, part with x < 0.0 is converted to vertial line with x = 0.0
+fn split_at_zero_x(line: Line) -> (Line, Option<Line>) {
+    let Line([p0, p1]) = line;
+    if p0.x() >= 0.0 && p1.x() >= 0.0 {
+        return (line, None);
+    }
+    if p0.x() <= 0.0 && p1.x() <= 0.0 {
+        return (Line::new((0.0, p0.y()), (0.0, p1.y())), None);
+    }
+    let mid = line.at(p0.x() / (p0.x() - p1.x()));
+    if p0.x() < 0.0 {
+        (Line::new(mid, p1), Some(Line::new((0.0, p0.y()), mid)))
+    } else {
+        (Line::new(p0, mid), Some(Line::new(mid, (0.0, p1.y()))))
     }
 }
 
