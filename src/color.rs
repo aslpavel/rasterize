@@ -206,6 +206,16 @@ impl Mul<f32> for LinColor {
     }
 }
 
+impl From<ColorU8> for LinColor {
+    fn from(color: ColorU8) -> Self {
+        let a = color.red() as f32 / 255.0;
+        let r = srgb_to_linear(color.red() as f32 / 255.0) * a;
+        let g = srgb_to_linear(color.green() as f32 / 255.0) * a;
+        let b = srgb_to_linear(color.blue() as f32 / 255.0) * a;
+        LinColor::new(r, g, b, a)
+    }
+}
+
 impl Color for Scalar {
     fn to_rgba(&self) -> [u8; 4] {
         let color = (linear_to_srgb(1.0 - (*self as f32)) * 255.0 + 0.5) as u8;
@@ -221,11 +231,21 @@ impl Color for Scalar {
     }
 }
 
-fn linear_to_srgb(value: f32) -> f32 {
+#[inline]
+pub fn linear_to_srgb(value: f32) -> f32 {
     if value <= 0.0031308 {
         value * 12.92
     } else {
         1.055 * value.powf(1.0 / 2.4) - 0.055
+    }
+}
+
+#[inline]
+pub fn srgb_to_linear(value: f32) -> f32 {
+    if value <= 0.04045 {
+        value / 12.92
+    } else {
+        ((value + 0.055) / 1.055).powf(2.4)
     }
 }
 
