@@ -2,14 +2,12 @@
 #![deny(warnings)]
 
 use env_logger::Env;
-use rasterize::{
-    ActiveEdgeRasterizer, Align, BBox, Curve, FillRule, Image, ImageOwned, LineCap, LineJoin, Path,
-    Point, Rasterizer, Scalar, Segment, SignedDifferenceRasterizer, StrokeStyle, Transform,
-};
+use rasterize::*;
 use std::{
     env, fmt,
     fs::File,
     io::{BufWriter, Read},
+    sync::Arc,
 };
 
 /// Add debug log message with time taken to execute provided function
@@ -124,7 +122,9 @@ fn path_load(path: String) -> Result<Path, Error> {
 }
 
 /// Convert path to the outline with control points.
-fn outline(path: &Path) -> Path {
+fn outline(path: &Path, tr: Transform) -> Scene {
+    let mut path = path.clone();
+    path.transform(tr);
     let stroke_style = StrokeStyle {
         width: 2.0,
         line_join: LineJoin::Round,
@@ -177,14 +177,31 @@ fn outline(path: &Path) -> Path {
             );
         }
     }
-    output
+    Scene::fill(
+        Arc::new(output),
+        Arc::new(LinColor::new(0.0, 0.0, 0.0, 1.0)),
+        FillRule::default(),
+    )
 }
 
 fn main() -> Result<(), Error> {
     env_logger::from_env(Env::default().default_filter_or("debug")).init();
     let args = parse_args()?;
 
-    let mut path = path_load(args.input_file)?;
+    let path = match args.stroke {
+        None => path_load(args.input_file)?,
+        Some(stroke_width) => {
+            let path = path_load(args.input_file)?;
+            let stroke_style = StrokeStyle {
+                width: stroke_width,
+                line_join: LineJoin::Round,
+                line_cap: LineCap::Round,
+            };
+            timeit("[stroke]", || path.stroke(stroke_style))
+        }
+    };
+    let path = Arc::new(path);
+    log::info!("[path:segments_count] {}", path.segments_count());
 
     // resize if needed
     let tr = match args.width {
@@ -200,43 +217,34 @@ fn main() -> Result<(), Error> {
         _ => Transform::identity(),
     };
 
-    // stroke
-    log::info!("[path::segments_count] {}", path.segments_count());
-    if let Some(stroke) = args.stroke {
-        path = timeit("[stroke]", || {
-            path.stroke(StrokeStyle {
-                width: stroke,
-                line_join: LineJoin::Round,
-                line_cap: LineCap::Round,
-            })
-        });
-        log::info!("[stroke::segments_count] {}", path.segments_count());
-    }
-
-    // convert to outline with control points
+    // scene
+    let mut group = Vec::new();
+    let fill_color = if args.outline {
+        LinColor::new(0.4, 0.4, 0.4, 1.0)
+    } else {
+        LinColor::new(0.0, 0.0, 0.0, 1.0)
+    };
+    group.push(Scene::fill(path.clone(), Arc::new(fill_color), FillRule::default()).transform(tr));
     if args.outline {
-        path = outline(&path);
+        group.push(outline(&path, tr));
     }
-
-    // rasterize path
+    let scene = Scene::group(group);
     let rasterizer = args.rasterizer;
-    let (size, tr, _) = path.size(tr).expect("path is empty");
-    let img = timeit("[allocate]", || ImageOwned::new_default(size));
-    let mask = timeit(format!("[rasterize:{}]", rasterizer.name()), || {
-        path.mask(rasterizer, tr, FillRule::NonZero, img)
+    let image = timeit(format!("[render:{}]", rasterizer.name()), || {
+        scene.render(
+            &rasterizer,
+            Transform::identity(),
+            None,
+            Some(LinColor::new(1.0, 1.0, 1.0, 1.0)),
+        )
     });
-    log::info!(
-        "[dimension] width: {} height: {}",
-        mask.width(),
-        mask.height()
-    );
 
     // save
     if args.output_file != "-" {
-        let mut image = BufWriter::new(File::create(args.output_file)?);
-        timeit("[save:bmp]", || mask.write_bmp(&mut image))?;
+        let mut image_file = BufWriter::new(File::create(args.output_file)?);
+        timeit("[save:bmp]", || image.write_bmp(&mut image_file))?;
     } else {
-        timeit("[save:bmp]", || mask.write_bmp(std::io::stdout()))?;
+        timeit("[save:bmp]", || image.write_bmp(std::io::stdout()))?;
     }
 
     Ok(())

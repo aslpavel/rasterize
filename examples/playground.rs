@@ -50,7 +50,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         fill_rule,
     );
 
-    let img = scene.render(&rasterizer, Transform::new_scale(1.0, 1.0), None);
+    let img = scene.render(&rasterizer, Transform::new_scale(1.0, 1.0), None, None);
     img.write_bmp(std::io::stdout())?;
 
     Ok(())

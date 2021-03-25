@@ -149,12 +149,13 @@ impl Scene {
         rasterizer: &dyn Rasterizer,
         tr: Transform,
         view: Option<BBox>,
+        bg: Option<LinColor>,
     ) -> Layer<LinColor> {
         let view = match view.or_else(|| self.bbox(tr)) {
             None => return Layer::empty(),
             Some(view) => view,
         };
-        let mut layer = Layer::new(view);
+        let mut layer = Layer::new(view, bg);
         self.render_rec(rasterizer, &mut layer, tr, None);
         layer
     }
@@ -215,7 +216,7 @@ impl Scene {
                         // accout for anti-aliasing
                         let bbox = bbox.extend(bbox.max() + Point::new(1.0, 1.0));
 
-                        let child_layer = child.render(rasterizer, tr, Some(bbox));
+                        let child_layer = child.render(rasterizer, tr, Some(bbox), None);
 
                         let opacity = *opacity as f32;
                         layer.compose(&child_layer, |dst, src| {
@@ -250,13 +251,13 @@ impl Scene {
                 let bbox = bbox.extend(bbox.max() + Point::new(1.0, 1.0));
 
                 // mask
-                let mut mask = Layer::new(bbox);
+                let mut mask = Layer::new(bbox, None);
                 let align =
                     crate::Transform::new_translate(-mask.x() as Scalar, -mask.y() as Scalar);
                 clip.mask(rasterizer, align * clip_tr, *fill_rule, mask.as_mut());
 
                 // child
-                let mut child_layer = child.render(rasterizer, tr, Some(bbox));
+                let mut child_layer = child.render(rasterizer, tr, Some(bbox), None);
 
                 // compose
                 child_layer.compose(&mask, |dst, src| dst * (src as f32));
@@ -336,7 +337,7 @@ pub struct Layer<C> {
 }
 
 impl<C: Default + Copy> Layer<C> {
-    pub fn new(bbox: BBox) -> Self {
+    pub fn new(bbox: BBox, color: Option<C>) -> Self {
         let x0 = bbox.min().x().floor() as usize;
         let x1 = bbox.max().x().ceil() as usize;
         let y0 = bbox.min().y().floor() as usize;
@@ -345,7 +346,10 @@ impl<C: Default + Copy> Layer<C> {
             width: x1 - x0,
             height: y1 - y0,
         };
-        let image = ImageOwned::new_default(size);
+        let image = match color {
+            None => ImageOwned::new_default(size),
+            Some(color) => ImageOwned::new_with(size, |_, _| color),
+        };
         Self {
             image,
             x: x0 as i32,
