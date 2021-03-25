@@ -17,127 +17,94 @@ where
     }
 }
 
-/// Abstraction over slices used by `ArrayIter`
-pub trait Array {
-    type Item;
-    fn new() -> Self;
-    fn size(&self) -> usize;
-    fn at(&self, index: usize) -> Option<&Self::Item>;
-    fn take(&mut self, index: usize) -> Option<Self::Item>;
-    fn put(&mut self, index: usize, value: Self::Item) -> Option<Self::Item>;
-}
-
-macro_rules! impl_array(
-    ($($size:expr),+) => {
-        $(
-            impl<T: Copy> Array for [Option<T>; $size] {
-                type Item = T;
-                fn new() -> Self {
-                    [None; $size]
-                }
-                fn size(&self) -> usize { $size }
-                fn at(&self, index: usize) -> Option<&Self::Item> {
-                    self.get(index).and_then(|item| item.as_ref())
-                }
-                fn take(&mut self, index: usize) -> Option<Self::Item> {
-                    self[index].take()
-                }
-                fn put(&mut self, index: usize, value: Self::Item) -> Option<Self::Item> {
-                    self[index].replace(value)
-                }
-            }
-        )+
-    }
-);
-
-impl_array!(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
-
 /// Fixed sized iterator
 ///
 /// This type is similar to a smallvec but it never allocates and just panics
 /// if you try to fit more data than its size.
 #[derive(Clone, Copy)]
-pub struct ArrayIter<A> {
+pub struct ArrayIter<T, const SIZE: usize> {
     start: usize,
     end: usize,
-    array: A,
+    items: [Option<T>; SIZE],
 }
 
-impl<A> fmt::Debug for ArrayIter<A>
+impl<T, const SIZE: usize> ArrayIter<T, SIZE> {
+    pub fn new() -> Self
+    where
+        T: Copy,
+    {
+        Self {
+            start: 0,
+            end: 0,
+            // remove Copy contraint everywhere when Default::default() is implemented
+            // for arrays with size bigger than 32
+            items: [None; SIZE],
+        }
+    }
+
+    /// Push new element to the end of the iterator
+    ///
+    /// Panics if size is exceeded
+    pub fn push(&mut self, item: T) {
+        self.items[self.end] = Some(item);
+        self.end += 1;
+    }
+
+    /// Check if iterator is empty
+    pub fn is_empty(&self) -> bool {
+        self.start == self.end
+    }
+
+    /// Number of unconsumed elements
+    pub fn len(&self) -> usize {
+        self.end - self.start
+    }
+}
+
+impl<T: Copy, const SIZE: usize> Default for ArrayIter<T, SIZE> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T, const SIZE: usize> fmt::Debug for ArrayIter<T, SIZE>
 where
-    A: Array,
-    A::Item: fmt::Debug,
+    T: fmt::Debug,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut list = fmt.debug_list();
         for index in self.start..self.end {
-            self.array.at(index).map(|item| list.entry(item));
+            if let Some(item) = &self.items[index] {
+                list.entry(item);
+            }
         }
         list.finish()?;
         Ok(())
     }
 }
 
-impl<A: Array> Default for ArrayIter<A> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<A: Array> ArrayIter<A> {
-    pub fn new() -> Self {
-        Self {
-            start: 0,
-            end: 0,
-            array: A::new(),
-        }
-    }
-
-    /// Push new element to the end of the iterator
-    pub fn push(&mut self, item: A::Item) {
-        self.array.put(self.end, item);
-        self.end += 1;
-    }
-
-    /// Check if array iterator is empty
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    /// Number of uncosumed elements
-    pub fn len(&self) -> usize {
-        self.end - self.start
-    }
-}
-
-impl<A: Array> Extend<A::Item> for ArrayIter<A> {
-    fn extend<T: IntoIterator<Item = A::Item>>(&mut self, iter: T) {
+impl<T, const SIZE: usize> Extend<T> for ArrayIter<T, SIZE> {
+    fn extend<TS: IntoIterator<Item = T>>(&mut self, iter: TS) {
         for item in iter.into_iter() {
             self.push(item);
         }
     }
 }
 
-impl<A> FromIterator<A::Item> for ArrayIter<A>
-where
-    A: Array,
-    A::Item: Copy,
-{
-    fn from_iter<T: IntoIterator<Item = A::Item>>(iter: T) -> Self {
-        let mut array = ArrayIter::<A>::new();
-        for item in iter.into_iter() {
-            array.push(item);
-        }
+impl<T: Copy, const SIZE: usize> FromIterator<T> for ArrayIter<T, SIZE> {
+    fn from_iter<TS: IntoIterator<Item = T>>(iter: TS) -> Self {
+        let mut array: Self = ArrayIter::new();
+        array.extend(iter);
         array
     }
 }
 
-impl<A: Array> Iterator for ArrayIter<A> {
-    type Item = A::Item;
+impl<T, const SIZE: usize> Iterator for ArrayIter<T, SIZE> {
+    type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.start < self.end {
-            let item = self.array.take(self.start);
+            let item = self.items[self.start].take();
             self.start += 1;
             item
         } else {
@@ -151,11 +118,11 @@ impl<A: Array> Iterator for ArrayIter<A> {
     }
 }
 
-impl<A: Array> DoubleEndedIterator for ArrayIter<A> {
+impl<T, const SIZE: usize> DoubleEndedIterator for ArrayIter<T, SIZE> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.start < self.end {
             self.end -= 1;
-            self.array.take(self.end)
+            self.items[self.end].take()
         } else {
             None
         }
@@ -208,7 +175,7 @@ impl Mul<M4x4> for M4x4 {
 
 /// Solve quadratic equation `a * t ^ 2 + b * t + c = 0` for `t`
 pub(crate) fn quadratic_solve(a: Scalar, b: Scalar, c: Scalar) -> impl Iterator<Item = Scalar> {
-    let mut result = ArrayIter::<[Option<Scalar>; 2]>::new();
+    let mut result = ArrayIter::<Scalar, 2>::new();
     if a.abs() < EPSILON {
         if b.abs() > EPSILON {
             result.push(-c / b);
@@ -244,7 +211,7 @@ pub(crate) fn cubic_solve(
     c: Scalar,
     d: Scalar,
 ) -> impl Iterator<Item = Scalar> {
-    let mut results = ArrayIter::<[Option<Scalar>; 3]>::new();
+    let mut results = ArrayIter::<Scalar, 3>::new();
     if a.abs() < 1.0 && a.abs().powi(2) < EPSILON {
         results.extend(quadratic_solve(b, c, d));
         return results;
@@ -362,7 +329,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_array_iter() {
-        let mut iter: ArrayIter<[Option<u32>; 5]> = (0..5).collect();
+        let mut iter: ArrayIter<u32, 5> = (0..5).collect();
         assert_eq!(iter.len(), 5);
         assert!(!iter.is_empty());
         assert_eq!(iter.next(), Some(0));

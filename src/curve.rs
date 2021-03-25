@@ -7,9 +7,9 @@ use crate::{
 use std::{fmt, io::Cursor, str::FromStr};
 
 /// Iterator containing curve roots
-pub type CurveRoots = ArrayIter<[Option<Scalar>; 3]>;
+pub type CurveRoots = ArrayIter<Scalar, 3>;
 /// Iterator containing curve extremities
-pub type CurveExtremities = ArrayIter<[Option<Scalar>; 6]>;
+pub type CurveExtremities = ArrayIter<Scalar, 6>;
 
 /// Set of operations common to all bezier curves.
 pub trait Curve: Sized + Into<Segment> {
@@ -899,7 +899,7 @@ impl Segment {
         other: Segment,
         stroke_style: StrokeStyle,
     ) -> impl Iterator<Item = Self> {
-        let mut result = ArrayIter::<[Option<Segment>; 4]>::new();
+        let mut result = ArrayIter::<Segment, 4>::new();
         if self.end().is_close_to(other.start()) {
             return result;
         }
@@ -967,7 +967,7 @@ impl Segment {
 
     /// Produce and iterator over segments that adds caps between two segments
     pub fn line_cap(self, other: Segment, stroke_style: StrokeStyle) -> impl Iterator<Item = Self> {
-        let mut result = ArrayIter::<[Option<Segment>; 4]>::new();
+        let mut result = ArrayIter::<Segment, 4>::new();
         if self.end().is_close_to(other.start()) {
             return result;
         }
