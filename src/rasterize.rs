@@ -139,6 +139,12 @@ pub struct SignedDifferenceRasterizer {
     flatness: Scalar,
 }
 
+impl SignedDifferenceRasterizer {
+    pub fn new(flatness: Scalar) -> Self {
+        Self { flatness }
+    }
+}
+
 impl Default for SignedDifferenceRasterizer {
     fn default() -> Self {
         Self {
@@ -365,6 +371,12 @@ fn signed_difference_to_mask(mut img: impl ImageMut<Pixel = Scalar>, fill_rule: 
 /// Reference: Computer graphics principles and practice (by Foley) 3.6 Filling Polygons.
 pub struct ActiveEdgeRasterizer {
     flatness: Scalar,
+}
+
+impl ActiveEdgeRasterizer {
+    pub fn new(flatness: Scalar) -> Self {
+        Self { flatness }
+    }
 }
 
 impl Default for ActiveEdgeRasterizer {
