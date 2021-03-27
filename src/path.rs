@@ -891,7 +891,7 @@ mod tests {
     #[test]
     fn test_flatten() -> Result<(), SVGPathParserError> {
         let path: Path = SQUIRREL.parse()?;
-        let tr = Transform::new_rotate(PI / 3.0).translate(-10.0, -20.0);
+        let tr = Transform::new_rotate(PI / 3.0).pre_translate(-10.0, -20.0);
         let lines: Vec<_> = path.flatten(tr, DEFAULT_FLATNESS, true).collect();
         let mut reference = Vec::new();
         for subpath in path.subpaths() {

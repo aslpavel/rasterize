@@ -282,8 +282,8 @@ impl Transform {
     }
 
     /// Apply translation by `[tx, ty]` before self
-    pub fn translate(&self, tx: Scalar, ty: Scalar) -> Self {
-        self.matmul(Self::new_translate(tx, ty))
+    pub fn pre_translate(&self, tx: Scalar, ty: Scalar) -> Self {
+        self.pre_concat(Self::new_translate(tx, ty))
     }
 
     pub fn new_translate(tx: Scalar, ty: Scalar) -> Self {
@@ -291,8 +291,8 @@ impl Transform {
     }
 
     /// Apply scale transformatoin by `[sx, sy]` before self
-    pub fn scale(&self, sx: Scalar, sy: Scalar) -> Self {
-        self.matmul(Self::new_scale(sx, sy))
+    pub fn pre_scale(&self, sx: Scalar, sy: Scalar) -> Self {
+        self.pre_concat(Self::new_scale(sx, sy))
     }
 
     pub fn new_scale(sx: Scalar, sy: Scalar) -> Self {
@@ -300,8 +300,8 @@ impl Transform {
     }
 
     /// Apply rotation by `a` angle around the origin before self
-    pub fn rotate(&self, a: Scalar) -> Self {
-        self.matmul(Self::new_rotate(a))
+    pub fn pre_rotate(&self, a: Scalar) -> Self {
+        self.pre_concat(Self::new_rotate(a))
     }
 
     pub fn new_rotate(a: Scalar) -> Self {
@@ -310,38 +310,30 @@ impl Transform {
     }
 
     /// Apply rotation around point `p` by angle `a` before self
-    pub fn rotate_around(&self, a: Scalar, p: impl Into<Point>) -> Self {
+    pub fn pre_rotate_around(&self, a: Scalar, p: impl Into<Point>) -> Self {
         let p = p.into();
-        self.translate(p.x(), p.y())
-            .rotate(a)
-            .translate(-p.x(), -p.y())
+        self.pre_translate(p.x(), p.y())
+            .pre_rotate(a)
+            .pre_translate(-p.x(), -p.y())
     }
 
     /// Apply scew transformation by `[ax, ay]` before self
-    pub fn skew(&self, ax: Scalar, ay: Scalar) -> Self {
-        self.matmul(Self::new_skew(ax, ay))
+    pub fn pre_skew(&self, ax: Scalar, ay: Scalar) -> Self {
+        self.pre_concat(Self::new_skew(ax, ay))
     }
 
     pub fn new_skew(ax: Scalar, ay: Scalar) -> Self {
         Self([1.0, ax.tan(), 0.0, ay.tan(), 1.0, 0.0])
     }
 
-    /// Multiply transformations in matrix form
-    pub fn matmul(&self, other: Transform) -> Self {
-        let Self([s00, s01, s02, s10, s11, s12]) = self;
-        let Self([o00, o01, o02, o10, o11, o12]) = other;
+    /// Apply other transformation before the current one
+    pub fn pre_concat(&self, other: Self) -> Self {
+        *self * other
+    }
 
-        // s00, s01, s02 | o00, o01, o02
-        // s10, s11, s12 | o10, o11, o12
-        // 0  , 0  , 1   | 0  , 0  , 1
-        Self([
-            s00 * o00 + s01 * o10,
-            s00 * o01 + s01 * o11,
-            s00 * o02 + s01 * o12 + s02,
-            s10 * o00 + s11 * o10,
-            s10 * o01 + s11 * o11,
-            s10 * o02 + s11 * o12 + s12,
-        ])
+    /// Apply other transformation after the curent one
+    pub fn post_concat(&self, other: Self) -> Self {
+        other * *self
     }
 
     /// Find transformation which makes line horizontal with origin at (0, 0).
@@ -353,15 +345,15 @@ impl Transform {
         };
         let cos = cos_sin.x();
         let sin = cos_sin.y();
-        Transform([cos, sin, 0.0, -sin, cos, 0.0]).translate(-p0.x(), -p0.y())
+        Transform([cos, sin, 0.0, -sin, cos, 0.0]).pre_translate(-p0.x(), -p0.y())
     }
 
     /// Find transformation that is requred to fit `src` box into `dst`.
     pub fn fit_bbox(src: BBox, dst: BBox, align: Align) -> Transform {
         let scale = (dst.height() / src.height()).min(dst.width() / src.width());
         let base = Transform::new_translate(dst.x(), dst.y())
-            .scale(scale, scale)
-            .translate(-src.x(), -src.y());
+            .pre_scale(scale, scale)
+            .pre_translate(-src.x(), -src.y());
         let align = match align {
             Align::Min => Transform::identity(),
             Align::Mid => Transform::new_translate(
@@ -393,8 +385,22 @@ impl Transform {
 impl Mul<Transform> for Transform {
     type Output = Transform;
 
+    /// Multiply matrices representing transformations
     fn mul(self, other: Transform) -> Self::Output {
-        self.matmul(other)
+        let Self([s00, s01, s02, s10, s11, s12]) = self;
+        let Self([o00, o01, o02, o10, o11, o12]) = other;
+
+        // s00, s01, s02 | o00, o01, o02
+        // s10, s11, s12 | o10, o11, o12
+        // 0  , 0  , 1   | 0  , 0  , 1
+        Self([
+            s00 * o00 + s01 * o10,
+            s00 * o01 + s01 * o11,
+            s00 * o02 + s01 * o12 + s02,
+            s10 * o00 + s11 * o10,
+            s10 * o01 + s11 * o11,
+            s10 * o02 + s11 * o12 + s12,
+        ])
     }
 }
 
@@ -520,7 +526,7 @@ impl BBox {
     ///
     /// This is used by clip|mask|gradient units
     pub fn unit_transform(&self) -> Transform {
-        Transform::new_translate(self.x(), self.y()).scale(self.width(), self.height())
+        Transform::new_translate(self.x(), self.y()).pre_scale(self.width(), self.height())
     }
 }
 
@@ -559,10 +565,10 @@ mod tests {
     #[test]
     fn test_trasform() {
         let tr = Transform::identity()
-            .translate(1.0, 2.0)
-            .rotate(PI / 3.0)
-            .skew(2.0, 3.0)
-            .scale(3.0, 2.0);
+            .pre_translate(1.0, 2.0)
+            .pre_rotate(PI / 3.0)
+            .pre_skew(2.0, 3.0)
+            .pre_scale(3.0, 2.0);
         let inv = tr.invert().unwrap();
         let p0 = Point::new(1.0, 1.0);
 

@@ -384,7 +384,7 @@ fn generate_font(
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let tr = Transform::new_translate(0.0, 1000.0).scale(1.0, -1.0);
+    let tr = Transform::new_translate(0.0, 1000.0).pre_scale(1.0, -1.0);
     let mut glyphs = Vec::new();
 
     // bars

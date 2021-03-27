@@ -79,8 +79,7 @@ struct PSState {
 impl PSState {
     fn new() -> Self {
         Self {
-            // rasterizer: Box::new(ActiveEdgeRasterizer::default()),
-            rasterizer: Box::new(SignedDifferenceRasterizer::default()),
+            rasterizer: Box::new(ActiveEdgeRasterizer::default()),
             image: ImageOwned::new_default(Size {
                 width: 0,
                 height: 0,
@@ -148,7 +147,7 @@ impl PSState {
                 self.stack.extend(not_proc);
             }
             Comment(comment) => {
-                if let Some(bbox_str) = comment.strip_prefix("%BoundingBox: ") {
+                if let Some(bbox_str) = comment.strip_prefix("%BoundingBox:") {
                     let mut bbox_iter = bbox_str.split_whitespace();
                     if let Some(bbox) = (|| {
                         let x = bbox_iter.next()?.parse().ok()?;
@@ -162,7 +161,7 @@ impl PSState {
                             height: bbox.height() as usize,
                         });
                         self.transform_default = Transform::new_scale(1.0, -1.0)
-                            .translate(-bbox.x(), -bbox.y() - bbox.height());
+                            .pre_translate(-bbox.x(), -bbox.y() - bbox.height());
                     }
                 }
             }
@@ -189,6 +188,7 @@ fn create_global_dict() -> PSDict {
     let mut global_dict: HashMap<PSSymbol, PSValue> = HashMap::new();
     let dict = &mut global_dict;
 
+    // generic
     bind_fn(dict, "copy", |state| match state.pop()? {
         PSValue::Number(count) => {
             let count = count as usize;
@@ -204,6 +204,21 @@ fn create_global_dict() -> PSDict {
             for (key, value) in src.borrow().iter() {
                 dst.insert(key.clone(), value.clone());
             }
+            Ok(())
+        }
+        val => Err(PSError::InvalidValue(val)),
+    });
+    bind_fn(dict, "length", |state| match state.pop()? {
+        PSValue::Array(array) => {
+            state.push(array.len());
+            Ok(())
+        }
+        PSValue::Dict(dict) => {
+            state.push(dict.len());
+            Ok(())
+        }
+        PSValue::String(string) => {
+            state.push(string.len());
             Ok(())
         }
         val => Err(PSError::InvalidValue(val)),
@@ -642,6 +657,21 @@ fn create_global_dict() -> PSDict {
         }
         Ok(())
     });
+    bind_fn(dict, "stop", |_state| Err(PSError::Stopped));
+    bind_fn(dict, "stopped", |state| {
+        let scope = state.pop()?;
+        match scope.try_run(state) {
+            Err(PSError::Stopped) => {
+                state.push(true);
+                Ok(())
+            }
+            val => {
+                let val = val?;
+                state.push(false);
+                Ok(val)
+            }
+        }
+    });
 
     // math
     bind_fn(dict, "add", |state| {
@@ -705,8 +735,6 @@ fn create_global_dict() -> PSDict {
         Ok(())
     });
 
-    bind_fn(dict, "stop", |_state| Err(PSError::InputEmpty));
-
     PSDict(Rc::new(RefCell::new(global_dict)))
 }
 
@@ -729,6 +757,10 @@ struct PSDict(Rc<RefCell<HashMap<PSSymbol, PSValue>>>);
 impl PSDict {
     fn new() -> Self {
         Self(Rc::new(RefCell::new(HashMap::new())))
+    }
+
+    fn len(&self) -> usize {
+        self.borrow().len()
     }
 
     fn get(&self, key: &PSSymbol) -> Option<PSValue> {
@@ -923,6 +955,12 @@ impl From<Scalar> for PSValue {
     }
 }
 
+impl From<usize> for PSValue {
+    fn from(value: usize) -> Self {
+        PSValue::Number(value as Scalar)
+    }
+}
+
 impl From<bool> for PSValue {
     fn from(value: bool) -> Self {
         PSValue::Bool(value)
@@ -1099,26 +1137,27 @@ impl<I: Read> Iterator for PSParser<I> {
 
 #[derive(Debug)]
 enum PSError {
-    IOError(std::io::Error),
+    ExpectedArray,
+    ExpectedBlock,
+    ExpectedBool,
+    ExpectedDict,
+    ExpectedMatrix,
+    ExpectedNumber,
+    ExpectedProc,
+    ExpectedQuote,
     Float(ParseFloatError),
-    Utf8(FromUtf8Error),
-    InputUnexpected(u8),
+    IOError(std::io::Error),
     InputEmpty,
+    InputUnexpected(u8),
+    InvalidValue(PSValue),
+    NotComparable(PSValue, PSValue),
+    NotDefined(PSSymbol),
+    NotInvertable,
+    StackUnderflow,
+    Stopped,
     UnclosedArray,
     UnclosedBlock,
-    ExpectedQuote,
-    ExpectedNumber,
-    ExpectedDict,
-    ExpectedArray,
-    ExpectedMatrix,
-    ExpectedBlock,
-    ExpectedProc,
-    ExpectedBool,
-    NotDefined(PSSymbol),
-    NotComparable(PSValue, PSValue),
-    NotInvertable,
-    InvalidValue(PSValue),
-    StackUnderflow,
+    Utf8(FromUtf8Error),
 }
 
 impl From<std::io::Error> for PSError {
@@ -1146,7 +1185,7 @@ fn main() -> Result<(), PSError> {
     };
 
     // let file = BufReader::new(File::open("/mnt/data/downloads/tiger.eps")?);
-    let file = BufReader::new(File::open("/mnt/data/downloads/tiger.eps")?);
+    let file = BufReader::new(File::open("/mnt/data/downloads/golfer.eps")?);
     let parser = PSParser::new(file);
     let mut state = PSState::new();
     for val in parser {
