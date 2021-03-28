@@ -336,7 +336,24 @@ impl Transform {
         other * *self
     }
 
-    /// Find transformation which makes line horizontal with origin at (0, 0).
+    /// Create transformation which converts `src` line segment to `dst` line segment
+    pub fn line_to_line(src: Line, dst: Line) -> Option<Self> {
+        // Find transformation which converts (0, 0) to p0 and (0, 1) to p1
+        fn unit_y_to_line(line: Line) -> Transform {
+            let Line([p0, p1]) = line;
+            Transform::new(
+                p1.y() - p0.y(),
+                p1.x() - p0.x(),
+                p0.x(),
+                p0.x() - p1.x(),
+                p1.y() - p0.y(),
+                p0.y(),
+            )
+        }
+        Some(unit_y_to_line(dst) * unit_y_to_line(src).invert()?)
+    }
+
+    /// Create transformation which makes line horizontal with origin at (0, 0).
     pub fn make_horizontal(line: Line) -> Transform {
         let [p0, p1] = line.points();
         let cos_sin = match (p1 - p0).normalize() {
@@ -348,7 +365,7 @@ impl Transform {
         Transform([cos, sin, 0.0, -sin, cos, 0.0]).pre_translate(-p0.x(), -p0.y())
     }
 
-    /// Find transformation that is requred to fit `src` box into `dst`.
+    /// Create transformation that is requred to fit `src` box into `dst`.
     pub fn fit_bbox(src: BBox, dst: BBox, align: Align) -> Transform {
         let scale = (dst.height() / src.height()).min(dst.width() / src.width());
         let base = Transform::new_translate(dst.x(), dst.y())
@@ -368,7 +385,7 @@ impl Transform {
         align * base
     }
 
-    /// Calculate transformation needed to fit source bounding box to provided size image
+    /// Create transformation needed to fit source bounding box to provided size image
     pub fn fit_size(src: BBox, size: Size, align: Align) -> Transform {
         let dst = if size.width < 3 || size.height < 3 {
             BBox::new((0.0, 0.0), (size.width as Scalar, size.height as Scalar))
@@ -585,6 +602,23 @@ mod tests {
         assert_eq!(l1.start(), Point::new(0.0, 0.0));
         assert_approx_eq!(l1.end().x(), 5.0);
         assert_approx_eq!(l1.end().y(), 0.0, 1e-6);
+
+        let s0 = Line::new((2.0, 1.0), (1.0, 4.0));
+        // unit verctor perpendecular to s0
+        let s1 = Line::new(
+            s0.start(),
+            s0.start() + s0.direction().normal().normalize().unwrap(),
+        );
+        let d0 = Line::new((3.0, 1.0), (4.0, 2.0));
+        let tr = Transform::line_to_line(s0, d0).unwrap();
+        let o0 = s0.transform(tr);
+        let o1 = s1.transform(tr);
+        assert_approx_eq!((o0.start() - d0.start()).length(), 0.0);
+        assert_approx_eq!((o0.end() - d0.end()).length(), 0.0);
+        // no skew introduced
+        assert_approx_eq!(o0.direction().dot(o1.direction()), 0.0);
+        // uniform scale
+        assert_approx_eq!(o1.length(), d0.length() / s0.length());
     }
 
     #[test]
