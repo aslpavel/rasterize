@@ -11,6 +11,7 @@ mod color;
 mod curve;
 mod ellipse;
 mod geometry;
+mod grad;
 mod image;
 mod path;
 mod rasterize;
@@ -28,6 +29,7 @@ pub use curve::{
 };
 pub use ellipse::EllipArc;
 pub use geometry::{scalar_fmt, Align, BBox, Point, Scalar, Transform, EPSILON, EPSILON_SQRT, PI};
+pub use grad::{GradLinear, GradSpread, GradStop, GradStops};
 pub use image::{
     Image, ImageIter, ImageMut, ImageMutIter, ImageMutRef, ImageOwned, ImageRef, Shape,
 };

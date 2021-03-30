@@ -73,7 +73,7 @@ pub trait Rasterizer {
         img: &mut dyn ImageMut<Pixel = LinColor>,
     ) {
         let pixels = self.mask_iter(path, tr, img.size(), fill_rule);
-        match paint.coord_units() {
+        match paint.units() {
             None => {
                 let color = paint.at(Point::new(0.0, 0.0));
                 fill_impl(pixels, img, |_| color);
@@ -180,7 +180,7 @@ pub trait Paint: fmt::Debug {
     fn at(&self, point: Point) -> LinColor;
 
     // Units used for the point passed to `Self::at` method
-    fn coord_units(&self) -> Option<Units>;
+    fn units(&self) -> Option<Units>;
 
     // Additional transformation to be applied to the paint
     fn transform(&self) -> Transform;
@@ -191,8 +191,8 @@ impl<'a, P: Paint> Paint for &'a P {
         (**self).at(point)
     }
 
-    fn coord_units(&self) -> Option<Units> {
-        (**self).coord_units()
+    fn units(&self) -> Option<Units> {
+        (**self).units()
     }
 
     fn transform(&self) -> Transform {
@@ -205,8 +205,8 @@ impl Paint for Box<dyn Paint> {
         (**self).at(point)
     }
 
-    fn coord_units(&self) -> Option<Units> {
-        (**self).coord_units()
+    fn units(&self) -> Option<Units> {
+        (**self).units()
     }
 
     fn transform(&self) -> Transform {
@@ -219,8 +219,8 @@ impl Paint for Rc<dyn Paint> {
         (**self).at(point)
     }
 
-    fn coord_units(&self) -> Option<Units> {
-        (**self).coord_units()
+    fn units(&self) -> Option<Units> {
+        (**self).units()
     }
 
     fn transform(&self) -> Transform {
@@ -233,8 +233,8 @@ impl Paint for Arc<dyn Paint> {
         (**self).at(point)
     }
 
-    fn coord_units(&self) -> Option<Units> {
-        (**self).coord_units()
+    fn units(&self) -> Option<Units> {
+        (**self).units()
     }
 
     fn transform(&self) -> Transform {

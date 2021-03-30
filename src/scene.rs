@@ -316,8 +316,8 @@ impl<P: Paint> Paint for OpacityPaint<P> {
         self.paint.at(point) * self.opacity
     }
 
-    fn coord_units(&self) -> Option<Units> {
-        self.paint.coord_units()
+    fn units(&self) -> Option<Units> {
+        self.paint.units()
     }
 
     fn transform(&self) -> Transform {

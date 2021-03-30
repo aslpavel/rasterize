@@ -114,24 +114,55 @@ impl fmt::Debug for ColorU8 {
 pub struct LinColor([f32; 4]);
 
 impl LinColor {
-    pub fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
+    pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
         LinColor([r, g, b, a])
     }
 
-    pub fn red(&self) -> f32 {
+    pub const fn red(&self) -> f32 {
         self.0[0]
     }
 
-    pub fn green(&self) -> f32 {
+    pub const fn green(&self) -> f32 {
         self.0[1]
     }
 
-    pub fn blue(&self) -> f32 {
+    pub const fn blue(&self) -> f32 {
         self.0[2]
     }
 
-    pub fn alpha(&self) -> f32 {
+    pub const fn alpha(&self) -> f32 {
         self.0[3]
+    }
+
+    pub fn lerp(self, other: LinColor, t: Scalar) -> Self {
+        let t = t as f32;
+        other * t + self * (1.0 - t)
+    }
+
+    /// Temporary convert to srgb color space
+    ///
+    /// Used by gradients, do not make public
+    pub(crate) fn into_srgb(self) -> Self {
+        let Self([r, g, b, a]) = self;
+        Self::new(
+            linear_to_srgb(r * a),
+            linear_to_srgb(g * a),
+            linear_to_srgb(b * a),
+            a,
+        )
+    }
+
+    /// Convert back from temporary srgb color space
+    ///
+    /// Used by gradient, do not make public
+    pub(crate) fn into_linear(self) -> Self {
+        let Self([r, g, b, a]) = self;
+        Self::new(
+            srgb_to_linear(r / a),
+            srgb_to_linear(g / a),
+            srgb_to_linear(b / a),
+            a,
+        )
     }
 }
 
@@ -154,7 +185,7 @@ impl Paint for LinColor {
         *self
     }
 
-    fn coord_units(&self) -> Option<Units> {
+    fn units(&self) -> Option<Units> {
         None
     }
 
