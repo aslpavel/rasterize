@@ -19,9 +19,10 @@ mod svg;
 mod utils;
 
 pub use crate::rasterize::{
-    ActiveEdgeIter, ActiveEdgeRasterizer, Pixel, Rasterizer, SignedDifferenceRasterizer, Size,
+    ActiveEdgeIter, ActiveEdgeRasterizer, Paint, Pixel, Rasterizer, SignedDifferenceRasterizer,
+    Size, Units,
 };
-pub use color::{linear_to_srgb, srgb_to_linear, Color, ColorU8, LinColor, Paint};
+pub use color::{linear_to_srgb, srgb_to_linear, Color, ColorU8, LinColor};
 pub use curve::{
     Cubic, Curve, CurveExtremities, CurveFlattenIter, CurveRoots, Line, Quad, Segment,
 };
@@ -33,6 +34,6 @@ pub use image::{
 pub use path::{
     FillRule, LineCap, LineJoin, Path, PathBuilder, StrokeStyle, SubPath, DEFAULT_FLATNESS,
 };
-pub use scene::{Layer, Scene, Units};
+pub use scene::{Layer, Scene};
 pub use svg::{SVGPathCmd, SVGPathParser, SVGPathParserError};
 use utils::{clamp, cubic_solve, quadratic_solve, ArrayIter, M3x3, M4x4};

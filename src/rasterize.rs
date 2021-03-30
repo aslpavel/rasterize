@@ -26,10 +26,10 @@
 //!  - this method is slower
 //!  - but requires less memory
 use crate::{
-    Color, Curve, FillRule, ImageMut, ImageOwned, LinColor, Line, Paint, Path, Point, Scalar,
-    Transform, DEFAULT_FLATNESS, EPSILON, EPSILON_SQRT,
+    Color, Curve, FillRule, ImageMut, ImageOwned, LinColor, Line, Path, Point, Scalar, Transform,
+    DEFAULT_FLATNESS, EPSILON, EPSILON_SQRT,
 };
-use std::{cmp::min, collections::VecDeque};
+use std::{cmp::min, collections::VecDeque, fmt, rc::Rc, sync::Arc};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Size {
@@ -72,13 +72,42 @@ pub trait Rasterizer {
         paint: &dyn Paint,
         img: &mut dyn ImageMut<Pixel = LinColor>,
     ) {
-        let shape = img.shape();
-        let data = img.data_mut();
-        for pixel in self.mask_iter(path, tr, shape.size(), fill_rule) {
-            let dst = &mut data[shape.offset(pixel.y, pixel.x)];
-            let color = paint.at(Point::new(pixel.x as Scalar + 0.5, pixel.y as Scalar + 0.5));
-            *dst = dst.blend_over(&color.with_alpha(pixel.alpha));
+        let pixels = self.mask_iter(path, tr, img.size(), fill_rule);
+        match paint.coord_units() {
+            None => {
+                let color = paint.at(Point::new(0.0, 0.0));
+                fill_impl(pixels, img, |_| color);
+            }
+            Some(units) => {
+                let units_tr = match units {
+                    Units::UserSpaceOnUse => tr * paint.transform(),
+                    Units::BoundingBox => match path.bbox(tr) {
+                        None => return,
+                        Some(bbox) => tr * bbox.unit_transform() * paint.transform(),
+                    },
+                };
+                if let Some(pixel_tr) = units_tr.invert() {
+                    fill_impl(pixels, img, |pixel| {
+                        let point = Point::new(pixel.x as Scalar + 0.5, pixel.y as Scalar + 0.5);
+                        paint.at(pixel_tr.apply(point))
+                    })
+                }
+            }
         }
+    }
+}
+
+fn fill_impl(
+    pixels: impl Iterator<Item = Pixel>,
+    mut img: impl ImageMut<Pixel = LinColor>,
+    color_at: impl Fn(Pixel) -> LinColor,
+) {
+    let shape = img.shape();
+    let data = img.data_mut();
+    for pixel in pixels {
+        let dst = &mut data[shape.offset(pixel.y, pixel.x)];
+        let color = color_at(pixel);
+        *dst = dst.blend_over(&color.with_alpha(pixel.alpha));
     }
 }
 
@@ -131,6 +160,85 @@ impl Rasterizer for Box<dyn Rasterizer> {
 
     fn name(&self) -> &str {
         (**self).name()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Units {
+    UserSpaceOnUse,
+    BoundingBox,
+}
+
+impl Default for Units {
+    fn default() -> Self {
+        Self::UserSpaceOnUse
+    }
+}
+
+pub trait Paint: fmt::Debug {
+    // Get color at specified point
+    fn at(&self, point: Point) -> LinColor;
+
+    // Units used for the point passed to `Self::at` method
+    fn coord_units(&self) -> Option<Units>;
+
+    // Additional transformation to be applied to the paint
+    fn transform(&self) -> Transform;
+}
+
+impl<'a, P: Paint> Paint for &'a P {
+    fn at(&self, point: Point) -> LinColor {
+        (**self).at(point)
+    }
+
+    fn coord_units(&self) -> Option<Units> {
+        (**self).coord_units()
+    }
+
+    fn transform(&self) -> Transform {
+        (**self).transform()
+    }
+}
+
+impl Paint for Box<dyn Paint> {
+    fn at(&self, point: Point) -> LinColor {
+        (**self).at(point)
+    }
+
+    fn coord_units(&self) -> Option<Units> {
+        (**self).coord_units()
+    }
+
+    fn transform(&self) -> Transform {
+        (**self).transform()
+    }
+}
+
+impl Paint for Rc<dyn Paint> {
+    fn at(&self, point: Point) -> LinColor {
+        (**self).at(point)
+    }
+
+    fn coord_units(&self) -> Option<Units> {
+        (**self).coord_units()
+    }
+
+    fn transform(&self) -> Transform {
+        (**self).transform()
+    }
+}
+
+impl Paint for Arc<dyn Paint> {
+    fn at(&self, point: Point) -> LinColor {
+        (**self).at(point)
+    }
+
+    fn coord_units(&self) -> Option<Units> {
+        (**self).coord_units()
+    }
+
+    fn transform(&self) -> Transform {
+        (**self).transform()
     }
 }
 
@@ -203,7 +311,7 @@ impl Rasterizer for SignedDifferenceRasterizer {
                     }
                     winding += winding_diff;
                     let alpha = fill_rule.alpha_from_winding(winding);
-                    if alpha.abs() < EPSILON {
+                    if alpha.abs() < 1e-6 {
                         None
                     } else {
                         Some(Pixel { x, y, alpha })

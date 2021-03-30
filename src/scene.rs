@@ -1,20 +1,8 @@
 use crate::{
     clamp, BBox, Color, FillRule, Image, ImageMut, ImageOwned, LinColor, Paint, Path, Point,
-    Rasterizer, Scalar, Shape, Size, Transform,
+    Rasterizer, Scalar, Shape, Size, Transform, Units,
 };
 use std::{cmp, fmt, sync::Arc};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Units {
-    UserSpaceOnUse,
-    BoundingBox,
-}
-
-impl Default for Units {
-    fn default() -> Self {
-        Self::UserSpaceOnUse
-    }
-}
 
 #[derive(Debug)]
 pub enum SceneInner {
@@ -326,6 +314,14 @@ struct OpacityPaint<P> {
 impl<P: Paint> Paint for OpacityPaint<P> {
     fn at(&self, point: Point) -> LinColor {
         self.paint.at(point) * self.opacity
+    }
+
+    fn coord_units(&self) -> Option<Units> {
+        self.paint.coord_units()
+    }
+
+    fn transform(&self) -> Transform {
+        self.paint.transform()
     }
 }
 
