@@ -81,7 +81,7 @@ pub trait Rasterizer {
             Some(units) => {
                 let units_tr = match units {
                     Units::UserSpaceOnUse => tr * paint.transform(),
-                    Units::BoundingBox => match path.bbox(tr) {
+                    Units::BoundingBox => match path.bbox(Transform::identity()) {
                         None => return,
                         Some(bbox) => tr * bbox.unit_transform() * paint.transform(),
                     },

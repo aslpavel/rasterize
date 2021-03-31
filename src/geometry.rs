@@ -232,12 +232,23 @@ pub enum Align {
 /// │ m11 m11 m12 │
 /// │   0   0   1 │
 /// └             ┘
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Transform([Scalar; 6]);
 
 impl Default for Transform {
     fn default() -> Self {
         Self::identity()
+    }
+}
+
+impl fmt::Debug for Transform {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self([m00, m01, m02, m10, m11, m12]) = self;
+        writeln!(f, "")?;
+        writeln!(f, "[[{}, {}, {}],", m00, m01, m02)?;
+        writeln!(f, " [{}, {}, {}],", m10, m11, m12)?;
+        writeln!(f, " [0, 0, 1]]")?;
+        Ok(())
     }
 }
 
@@ -341,14 +352,13 @@ impl Transform {
         // Find transformation which converts (0, 0) to p0 and (0, 1) to p1
         fn unit_y_to_line(line: Line) -> Transform {
             let Line([p0, p1]) = line;
-            Transform::new(
-                p1.y() - p0.y(),
-                p1.x() - p0.x(),
-                p0.x(),
-                p0.x() - p1.x(),
-                p1.y() - p0.y(),
-                p0.y(),
-            )
+            // rotation + scale
+            #[rustfmt::skip]
+            let tr = Transform::new(
+                p1.y() - p0.y(), p1.x() - p0.x(), p0.x(),
+                p0.x() - p1.x(), p1.y() - p0.y(), p0.y(),
+            );
+            tr
         }
         Some(unit_y_to_line(dst) * unit_y_to_line(src).invert()?)
     }

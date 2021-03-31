@@ -79,9 +79,10 @@ impl GradStops {
         } else if index == size {
             self.stops[size - 1].color
         } else {
-            let c0 = self.stops[index - 1].color;
-            let c1 = self.stops[index].color;
-            c0.lerp(c1, t)
+            let p0 = &self.stops[index - 1];
+            let p1 = &self.stops[index];
+            let ratio = (t - p0.position) / (p1.position - p0.position);
+            p0.color.lerp(p1.color, ratio)
         }
     }
 }
@@ -139,7 +140,7 @@ impl Paint for GradLinear {
     fn at(&self, point: Point) -> LinColor {
         // t = (point - start).dot(end - start) / |end - start| ^ 2
         let t = (point - self.start).dot(self.dir);
-        let color = self.stops.at(t);
+        let color = self.stops.at(self.spread.at(t));
         if self.linear {
             color
         } else {
@@ -156,6 +157,8 @@ impl Paint for GradLinear {
     }
 }
 
+// struct GradRadial {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,5 +174,18 @@ mod tests {
 
         assert_approx_eq!(Repeat.at(0.3), 0.3);
         assert_approx_eq!(Repeat.at(-0.3), 0.7);
+    }
+
+    #[test]
+    fn test_grad_stops() {
+        let stops = GradStops::new(vec![
+            GradStop::new(0.0, LinColor::new(1.0, 0.0, 0.0, 1.0)),
+            GradStop::new(0.5, LinColor::new(0.0, 1.0, 0.0, 1.0)),
+            GradStop::new(1.0, LinColor::new(0.0, 0.0, 1.0, 1.0)),
+        ]);
+        assert_eq!(stops.at(-1.0), LinColor::new(1.0, 0.0, 0.0, 1.0));
+        assert_eq!(stops.at(0.25), LinColor::new(0.5, 0.5, 0.0, 1.0));
+        assert_eq!(stops.at(0.75), LinColor::new(0.0, 0.5, 0.5, 1.0));
+        assert_eq!(stops.at(2.0), LinColor::new(0.0, 0.0, 1.0, 1.0));
     }
 }

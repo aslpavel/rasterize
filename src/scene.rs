@@ -334,13 +334,13 @@ pub struct Layer<C> {
 
 impl<C: Default + Copy> Layer<C> {
     pub fn new(bbox: BBox, color: Option<C>) -> Self {
-        let x0 = bbox.min().x().floor() as usize;
-        let x1 = bbox.max().x().ceil() as usize;
-        let y0 = bbox.min().y().floor() as usize;
-        let y1 = bbox.max().y().ceil() as usize;
+        let x0 = bbox.min().x().floor() as i32;
+        let x1 = bbox.max().x().ceil() as i32;
+        let y0 = bbox.min().y().floor() as i32;
+        let y1 = bbox.max().y().ceil() as i32;
         let size = Size {
-            width: x1 - x0,
-            height: y1 - y0,
+            width: (x1 - x0) as usize,
+            height: (y1 - y0) as usize,
         };
         let image = match color {
             None => ImageOwned::new_default(size),
@@ -348,8 +348,8 @@ impl<C: Default + Copy> Layer<C> {
         };
         Self {
             image,
-            x: x0 as i32,
-            y: y0 as i32,
+            x: x0,
+            y: y0,
         }
     }
 
