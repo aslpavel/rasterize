@@ -1,4 +1,4 @@
-use crate::{LinColor, Paint, Point, Scalar, Transform, Units};
+use crate::{quadratic_solve, LinColor, Paint, Point, Scalar, Transform, Units};
 use std::cmp::Ordering;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -93,15 +93,15 @@ impl From<Vec<GradStop>> for GradStops {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GradLinear {
     stops: GradStops,
     units: Units,
-    linear: bool,
-    start: Point,
-    end: Point,
+    linear_colors: bool,
     spread: GradSpread,
     tr: Transform,
+    start: Point,
+    end: Point,
     // precomputed value equal to `(end - start) / |end - start| ^ 2`
     dir: Point,
 }
@@ -110,28 +110,28 @@ impl GradLinear {
     pub fn new(
         stops: impl Into<GradStops>,
         units: Units,
-        linear: bool,
-        start: impl Into<Point>,
-        end: impl Into<Point>,
+        linear_colors: bool,
         spread: GradSpread,
         tr: Transform,
+        start: impl Into<Point>,
+        end: impl Into<Point>,
     ) -> Self {
         let start = start.into();
         let end = end.into();
         let mut stops = stops.into();
-        if !linear {
+        if !linear_colors {
             stops.convert_to_srgb();
         }
         let dir = end - start;
         Self {
             stops,
             units,
-            linear,
+            linear_colors,
+            spread,
+            tr,
             start,
             end,
             dir: dir / dir.dot(dir),
-            spread,
-            tr,
         }
     }
 }
@@ -141,7 +141,7 @@ impl Paint for GradLinear {
         // t = (point - start).dot(end - start) / |end - start| ^ 2
         let t = (point - self.start).dot(self.dir);
         let color = self.stops.at(self.spread.at(t));
-        if self.linear {
+        if self.linear_colors {
             color
         } else {
             color.into_linear()
@@ -157,7 +157,109 @@ impl Paint for GradLinear {
     }
 }
 
-// struct GradRadial {}
+#[derive(Debug, Clone)]
+pub struct GradRadial {
+    stops: GradStops,
+    units: Units,
+    linear_colors: bool,
+    spread: GradSpread,
+    tr: Transform,
+    center: Point,
+    radius: Scalar,
+    fcenter: Point,
+    fradius: Scalar,
+}
+
+impl GradRadial {
+    pub fn new(
+        stops: impl Into<GradStops>,
+        units: Units,
+        linear_colors: bool,
+        spread: GradSpread,
+        tr: Transform,
+        center: impl Into<Point>,
+        radius: Scalar,
+        fcenter: impl Into<Point>,
+        fradius: Scalar,
+    ) -> Self {
+        let center = center.into();
+        let fcenter = fcenter.into();
+        let mut stops = stops.into();
+        if !linear_colors {
+            stops.convert_to_srgb();
+        }
+        Self {
+            stops,
+            units,
+            linear_colors,
+            spread,
+            tr,
+            center,
+            radius,
+            fcenter,
+            fradius,
+        }
+    }
+
+    /// Calculate gradient offset at a given point
+    fn offset(&self, point: Point) -> Option<Scalar> {
+        // Two circle gradient is an interpolation between two cirles (fc, fr) and (c, r),
+        // with center `c(t) = (1 - t) * fc + t * c`, and radius `r(t) = (1 - t) * fr + t * r`.
+        // If we have a pixel with coordinates `p`, we should solve equation for it
+        // `|| c(t) - p || = r(t)` and pick solution corresponding to bigger radius.
+        //
+        // Solving this equation for `t`:
+        //     || c(t) - p || = r(t)  -> At² - 2Bt + C = 0
+        // where:
+        //     cd = c - fc
+        //     pd = p - fc
+        //     rd = r - fr
+        //     A = cdx ^ 2 + cdy ^ 2 - rd ^ 2
+        //     B = pdx * cdx + pdy * cdy + fradius * rd
+        //     C = pdx ^2 + pdy ^ 2 - fradius ^ 2
+        // results in:
+        //     t = (B +/- (B ^ 2 - A * C).sqrt()) / A
+        //
+        // [reference]: https://cgit.freedesktop.org/pixman/tree/pixman/pixman-radial-gradient.c
+
+        let cd = self.center - self.fcenter;
+        let pd = point - self.fcenter;
+        let rd = self.radius - self.fradius;
+
+        let a = cd.dot(cd) - rd * rd;
+        let b = -2.0 * (cd.dot(pd) + self.fradius * rd);
+        let c = pd.dot(pd) - self.fradius * self.fradius;
+
+        match quadratic_solve(a, b, c).into_array() {
+            [Some(t0), Some(t1)] => Some(t0.max(t1)),
+            [Some(t), None] | [None, Some(t)] => Some(t),
+            _ => None,
+        }
+    }
+}
+
+impl Paint for GradRadial {
+    fn at(&self, point: Point) -> LinColor {
+        let offset = match self.offset(point) {
+            None => return LinColor::new(0.0, 0.0, 0.0, 0.0),
+            Some(offset) => offset,
+        };
+        let color = self.stops.at(self.spread.at(offset));
+        if self.linear_colors {
+            color
+        } else {
+            color.into_linear()
+        }
+    }
+
+    fn transform(&self) -> Transform {
+        self.tr
+    }
+
+    fn units(&self) -> Option<Units> {
+        Some(self.units)
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -187,5 +289,25 @@ mod tests {
         assert_eq!(stops.at(0.25), LinColor::new(0.5, 0.5, 0.0, 1.0));
         assert_eq!(stops.at(0.75), LinColor::new(0.0, 0.5, 0.5, 1.0));
         assert_eq!(stops.at(2.0), LinColor::new(0.0, 0.0, 1.0, 1.0));
+    }
+
+    #[test]
+    fn test_radial_grad() {
+        let fcenter = Point::new(0.25, 0.0);
+        let center = Point::new(0.5, 0.0);
+        let grad = GradRadial::new(
+            vec![],
+            Units::BoundingBox,
+            true,
+            GradSpread::Pad,
+            Transform::identity(),
+            center,
+            0.5,
+            fcenter,
+            0.1,
+        );
+        assert!(grad.offset(fcenter).unwrap() < 0.0);
+        assert_approx_eq!(grad.offset(Point::new(0.675, 0.0)).unwrap(), 0.5);
+        assert_approx_eq!(grad.offset(Point::new(1.0, 0.0)).unwrap(), 1.0);
     }
 }

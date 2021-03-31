@@ -59,6 +59,10 @@ impl<T, const SIZE: usize> ArrayIter<T, SIZE> {
     pub fn len(&self) -> usize {
         self.end - self.start
     }
+
+    pub fn into_array(self) -> [Option<T>; SIZE] {
+        self.items
+    }
 }
 
 impl<T: Copy, const SIZE: usize> Default for ArrayIter<T, SIZE> {
@@ -174,7 +178,7 @@ impl Mul<M4x4> for M4x4 {
 }
 
 /// Solve quadratic equation `a * t ^ 2 + b * t + c = 0` for `t`
-pub(crate) fn quadratic_solve(a: Scalar, b: Scalar, c: Scalar) -> impl Iterator<Item = Scalar> {
+pub(crate) fn quadratic_solve(a: Scalar, b: Scalar, c: Scalar) -> ArrayIter<Scalar, 2> {
     let mut result = ArrayIter::<Scalar, 2>::new();
     if a.abs() < EPSILON {
         if b.abs() > EPSILON {
@@ -205,12 +209,7 @@ pub(crate) fn quadratic_solve(a: Scalar, b: Scalar, c: Scalar) -> impl Iterator<
 /// Solve cubic equation `a * t ^ 3 + b * t ^ 2 + c * t + d = 0` for `t`
 /// Reference: https://www.trans4mind.com/personal_development/mathematics/polynomials/cubicAlgebra.htm
 #[allow(clippy::many_single_char_names)]
-pub(crate) fn cubic_solve(
-    a: Scalar,
-    b: Scalar,
-    c: Scalar,
-    d: Scalar,
-) -> impl Iterator<Item = Scalar> {
+pub(crate) fn cubic_solve(a: Scalar, b: Scalar, c: Scalar, d: Scalar) -> ArrayIter<Scalar, 3> {
     let mut results = ArrayIter::<Scalar, 3>::new();
     if a.abs() < 1.0 && a.abs().powi(2) < EPSILON {
         results.extend(quadratic_solve(b, c, d));
