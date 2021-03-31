@@ -121,11 +121,14 @@ impl Scene {
             Clip {
                 child, clip, units, ..
             } => {
-                let child_bbox = child.bbox(tr)?;
                 let clip_tr = match units {
                     Units::UserSpaceOnUse => tr,
-                    Units::BoundingBox => tr * child_bbox.unit_transform(),
+                    Units::BoundingBox => {
+                        let bbox = child.bbox(Default::default())?;
+                        tr * bbox.unit_transform()
+                    }
                 };
+                let child_bbox = child.bbox(tr)?;
                 let clip_bbox = clip.bbox(clip_tr)?;
                 child_bbox.intersect(clip_bbox)
             }
@@ -220,25 +223,23 @@ impl Scene {
                 units,
                 fill_rule,
             } => {
-                let child_bbox = match self.bbox(tr) {
-                    None => return,
-                    Some(child_bbox) => child_bbox,
-                };
-                let clip_tr = match units {
-                    Units::UserSpaceOnUse => tr,
-                    Units::BoundingBox => tr * child_bbox.unit_transform(),
-                };
-                let clip_bbox = match clip.bbox(clip_tr) {
-                    None => return,
-                    Some(clip_bbox) => clip_bbox,
-                };
-                let bbox = match child_bbox.intersect(clip_bbox) {
+                let bbox = match self.bbox(tr) {
                     None => return,
                     Some(bbox) => bbox,
                 };
                 let bbox = bbox.extend(bbox.max() + Point::new(1.0, 1.0));
 
                 // mask
+                let clip_tr = match units {
+                    Units::UserSpaceOnUse => tr,
+                    Units::BoundingBox => {
+                        let bbox = match child.bbox(Default::default()) {
+                            None => return,
+                            Some(bbox) => bbox,
+                        };
+                        tr * bbox.unit_transform()
+                    }
+                };
                 let mut mask = Layer::new(bbox, None);
                 let align =
                     crate::Transform::new_translate(-mask.x() as Scalar, -mask.y() as Scalar);
