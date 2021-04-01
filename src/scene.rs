@@ -1,6 +1,6 @@
 use crate::{
     clamp, BBox, Color, FillRule, Image, ImageMut, ImageOwned, LinColor, Paint, Path, Point,
-    Rasterizer, Scalar, Shape, Size, Transform, Units,
+    Rasterizer, Scalar, Shape, Size, StrokeStyle, Transform, Units,
 };
 use std::{cmp, fmt, sync::Arc};
 
@@ -10,6 +10,11 @@ pub enum SceneInner {
         path: Arc<Path>,
         paint: Arc<dyn Paint>,
         fill_rule: FillRule,
+    },
+    Stroke {
+        path: Arc<Path>,
+        paint: Arc<dyn Paint>,
+        style: StrokeStyle,
     },
     Group {
         children: Vec<Scene>,
@@ -57,6 +62,10 @@ impl Scene {
             fill_rule,
         }
         .into()
+    }
+
+    pub fn stroke(path: Arc<Path>, paint: Arc<dyn Paint>, style: StrokeStyle) -> Self {
+        SceneInner::Stroke { path, paint, style }.into()
     }
 
     pub fn group(children: Vec<Scene>) -> Self {
@@ -109,6 +118,7 @@ impl Scene {
         use SceneInner::*;
         match self.as_ref() {
             Fill { path, .. } => path.bbox(tr),
+            Stroke { path, .. } => path.bbox(tr),
             Group { children } => children.iter().fold(None, |bbox, child| match bbox {
                 Some(bbox) => Some(bbox.union_opt(child.bbox(tr))),
                 None => child.bbox(tr),
@@ -177,6 +187,23 @@ impl Scene {
                             opacity: opacity as f32,
                         };
                         path.fill(rasterizer, align * tr, *fill_rule, paint, layer);
+                    }
+                }
+            }
+            Stroke { path, paint, style } => {
+                let path = path.stroke(*style);
+                let align =
+                    crate::Transform::new_translate(-layer.x() as Scalar, -layer.y() as Scalar);
+                match quick_opacity {
+                    None => {
+                        path.fill(rasterizer, align * tr, FillRule::NonZero, paint, layer);
+                    }
+                    Some(opacity) => {
+                        let paint = OpacityPaint {
+                            paint,
+                            opacity: opacity as f32,
+                        };
+                        path.fill(rasterizer, align * tr, FillRule::NonZero, paint, layer);
                     }
                 }
             }
@@ -264,6 +291,7 @@ impl Scene {
             use SceneInner::*;
             match scene.as_ref() {
                 Fill { path, .. } => disjoint(boxes, path.bbox(tr)),
+                Stroke { path, .. } => disjoint(boxes, path.bbox(tr)),
                 Group { children } => {
                     for child in children {
                         if !is_quick_opacity_rec(child, boxes, tr) {
