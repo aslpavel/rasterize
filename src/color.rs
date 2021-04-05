@@ -2,6 +2,7 @@ use crate::{Paint, Point, Scalar, Transform, Units};
 use std::{
     fmt,
     ops::{Add, Mul},
+    str::FromStr,
 };
 
 pub trait Color {
@@ -106,6 +107,34 @@ impl fmt::Debug for ColorU8 {
             .field("b", &self.blue())
             .field("a", &self.alpha())
             .finish()
+    }
+}
+
+impl FromStr for ColorU8 {
+    type Err = ColorError;
+
+    fn from_str(color: &str) -> Result<Self, Self::Err> {
+        if color.starts_with('#') && (color.len() == 7 || color.len() == 9) {
+            // #RRGGBB(AA)
+            let bytes: &[u8] = color[1..].as_ref();
+            let digit = |byte| match byte {
+                b'A'..=b'F' => Ok(byte - b'A' + 10),
+                b'a'..=b'f' => Ok(byte - b'a' + 10),
+                b'0'..=b'9' => Ok(byte - b'0'),
+                _ => Err(ColorError::HexExpected),
+            };
+            let mut hex = bytes
+                .chunks(2)
+                .map(|pair| Ok(digit(pair[0])? << 4 | digit(pair[1])?));
+            Ok(ColorU8::new(
+                hex.next().unwrap_or(Ok(0))?,
+                hex.next().unwrap_or(Ok(0))?,
+                hex.next().unwrap_or(Ok(0))?,
+                hex.next().unwrap_or(Ok(255))?,
+            ))
+        } else {
+            Err(ColorError::HexExpected)
+        }
     }
 }
 
@@ -225,6 +254,14 @@ impl From<ColorU8> for LinColor {
     }
 }
 
+impl FromStr for LinColor {
+    type Err = ColorError;
+
+    fn from_str(color: &str) -> Result<Self, Self::Err> {
+        Ok(ColorU8::from_str(color)?.into())
+    }
+}
+
 impl Color for Scalar {
     fn to_rgba(&self) -> [u8; 4] {
         let color = (linear_to_srgb(1.0 - (*self as f32)) * 255.0 + 0.5) as u8;
@@ -279,6 +316,23 @@ pub fn srgb_to_linear(value: f32) -> f32 {
         ((value + 0.055) / 1.055).powf(2.4)
     }
 }
+
+#[derive(Debug, Clone)]
+pub enum ColorError {
+    HexExpected,
+}
+
+impl fmt::Display for ColorError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ColorError::HexExpected => {
+                write!(f, "Color expected to be #RRGGBB(AA) in hexidemical format")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ColorError {}
 
 /*
 const MASK_LOW: u32 = 0x00FF00FF;
@@ -342,6 +396,16 @@ mod tests {
         assert_eq!(2, c.green());
         assert_eq!(3, c.blue());
         assert_eq!(4, c.alpha());
+    }
+
+    #[test]
+    fn test_color_u8_parse() -> Result<(), ColorError> {
+        assert_eq!(ColorU8::new(1, 2, 3, 4), "#01020304".parse::<ColorU8>()?);
+        assert_eq!(
+            ColorU8::new(170, 187, 204, 255),
+            "#aabbcc".parse::<ColorU8>()?
+        );
+        Ok(())
     }
 
     /*
