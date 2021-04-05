@@ -246,7 +246,7 @@ impl Mul<f32> for LinColor {
 
 impl From<ColorU8> for LinColor {
     fn from(color: ColorU8) -> Self {
-        let a = color.red() as f32 / 255.0;
+        let a = color.alpha() as f32 / 255.0;
         let r = srgb_to_linear(color.red() as f32 / 255.0) * a;
         let g = srgb_to_linear(color.green() as f32 / 255.0) * a;
         let b = srgb_to_linear(color.blue() as f32 / 255.0) * a;
@@ -405,6 +405,7 @@ mod tests {
             ColorU8::new(170, 187, 204, 255),
             "#aabbcc".parse::<ColorU8>()?
         );
+        assert_eq!(ColorU8::new(0, 0, 0, 255), "#000000".parse::<ColorU8>()?);
         Ok(())
     }
 
