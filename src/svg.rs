@@ -6,7 +6,7 @@ use std::{fmt, io::Read};
 
 /// Possible SVG path commands
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum SVGPathCmd {
+pub enum SvgPathCmd {
     MoveTo(Point),
     LineTo(Point),
     QuadTo(Point, Point),
@@ -21,10 +21,10 @@ pub enum SVGPathCmd {
     Close(Point),
 }
 
-impl SVGPathCmd {
+impl SvgPathCmd {
     /// Get destination point of the SVG command
     pub fn dst(&self) -> Point {
-        use SVGPathCmd::*;
+        use SvgPathCmd::*;
         *match self {
             MoveTo(dst) => dst,
             LineTo(dst) => dst,
@@ -37,7 +37,7 @@ impl SVGPathCmd {
 
     /// Apply SVG command to path builder
     pub fn apply(&self, builder: &mut PathBuilder) {
-        use SVGPathCmd::*;
+        use SvgPathCmd::*;
         match self {
             MoveTo(p) => builder.move_to(p),
             LineTo(p) => builder.line_to(p),
@@ -59,7 +59,7 @@ impl SVGPathCmd {
 ///
 /// See [SVG Path Specification](https://www.w3.org/TR/SVG11/paths.html#PathData)
 #[derive(Debug)]
-pub struct SVGPathParser<I> {
+pub struct SvgPathParser<I> {
     // input containing unparsed SVG path
     input: I,
     // read but not consumed input
@@ -67,14 +67,14 @@ pub struct SVGPathParser<I> {
     // previous operation
     prev_op: Option<u8>,
     // previous command (used to determine smooth points)
-    prev_cmd: Option<SVGPathCmd>,
+    prev_cmd: Option<SvgPathCmd>,
     // current position from which next relative curve will start
     position: Point,
     // current sub-path starting position
     subpath_start: Point,
 }
 
-impl<I: Read> SVGPathParser<I> {
+impl<I: Read> SvgPathParser<I> {
     pub fn new(input: I) -> Self {
         Self {
             input,
@@ -87,7 +87,7 @@ impl<I: Read> SVGPathParser<I> {
     }
 
     // consume single byte from the input
-    fn parse_byte(&mut self) -> Result<Option<u8>, SVGPathParserError> {
+    fn parse_byte(&mut self) -> Result<Option<u8>, SvgPathParserError> {
         match self.input_buffer.take() {
             None => {
                 let mut byte = [0; 1];
@@ -112,7 +112,7 @@ impl<I: Read> SVGPathParser<I> {
         &mut self,
         mut pred: impl FnMut(u8) -> bool,
         mut proc: impl FnMut(u8),
-    ) -> Result<usize, SVGPathParserError> {
+    ) -> Result<usize, SvgPathParserError> {
         let mut count = 0;
         loop {
             let byte = match self.parse_byte()? {
@@ -134,7 +134,7 @@ impl<I: Read> SVGPathParser<I> {
         &mut self,
         pred: impl FnOnce(u8) -> bool,
         proc: impl FnOnce(u8),
-    ) -> Result<bool, SVGPathParserError> {
+    ) -> Result<bool, SvgPathParserError> {
         let byte = match self.parse_byte()? {
             None => return Ok(false),
             Some(byte) => byte,
@@ -149,7 +149,7 @@ impl<I: Read> SVGPathParser<I> {
     }
 
     // consume seprators from the input
-    fn parse_separators(&mut self) -> Result<(), SVGPathParserError> {
+    fn parse_separators(&mut self) -> Result<(), SvgPathParserError> {
         loop {
             let byte = match self.parse_byte()? {
                 None => break,
@@ -164,7 +164,7 @@ impl<I: Read> SVGPathParser<I> {
     }
 
     // parse single scalar value from the input
-    fn parse_scalar(&mut self) -> Result<Scalar, SVGPathParserError> {
+    fn parse_scalar(&mut self) -> Result<Scalar, SvgPathParserError> {
         self.parse_separators()?;
 
         let mut mantissa: i64 = 0;
@@ -203,7 +203,7 @@ impl<I: Read> SVGPathParser<I> {
         mantissa *= sign;
 
         if whole + frac == 0 {
-            return Err(SVGPathParserError::InvalidScalar);
+            return Err(SvgPathParserError::InvalidScalar);
         }
 
         let matches_exp = self.parse_once(|byte| matches!(byte, b'e' | b'E'), |_| {})?;
@@ -223,7 +223,7 @@ impl<I: Read> SVGPathParser<I> {
                 |byte| push_digit(&mut sci, byte),
             )? == 0
             {
-                return Err(SVGPathParserError::InvalidScalar);
+                return Err(SvgPathParserError::InvalidScalar);
             }
             exponent = exponent.wrapping_add(sci_sign * sci)
         }
@@ -233,7 +233,7 @@ impl<I: Read> SVGPathParser<I> {
     }
 
     // parse pair of scalars and convert it to a point
-    fn parse_point(&mut self) -> Result<Point, SVGPathParserError> {
+    fn parse_point(&mut self) -> Result<Point, SvgPathParserError> {
         let point = Point::new(self.parse_scalar()?, self.parse_scalar()?);
         match self.prev_op {
             Some(cmd) if cmd.is_ascii_lowercase() => Ok(point + self.position),
@@ -242,7 +242,7 @@ impl<I: Read> SVGPathParser<I> {
     }
 
     // parse flag `0|1` used by elliptic arc command
-    fn parse_flag(&mut self) -> Result<bool, SVGPathParserError> {
+    fn parse_flag(&mut self) -> Result<bool, SvgPathParserError> {
         self.parse_separators()?;
         match self.parse_byte()? {
             Some(b'0') => Ok(false),
@@ -251,13 +251,13 @@ impl<I: Read> SVGPathParser<I> {
                 if let Some(byte) = byte {
                     self.unparse_byte(byte);
                 }
-                Err(SVGPathParserError::InvalidFlag)
+                Err(SvgPathParserError::InvalidFlag)
             }
         }
     }
 
     // parse svg command, none indicates end of input
-    fn parse_op(&mut self) -> Result<Option<u8>, SVGPathParserError> {
+    fn parse_op(&mut self) -> Result<Option<u8>, SvgPathParserError> {
         let op = match self.parse_byte()? {
             None => return Ok(None),
             Some(op) => op,
@@ -280,14 +280,14 @@ impl<I: Read> SVGPathParser<I> {
                 self.unparse_byte(byte);
                 match self.prev_op {
                     Some(op) => Ok(Some(op)),
-                    None => Err(SVGPathParserError::InvalidCmd(op)),
+                    None => Err(SvgPathParserError::InvalidCmd(op)),
                 }
             }
         }
     }
 
     /// Parse single SVG path command from the input
-    pub fn parse_cmd(&mut self) -> Result<Option<SVGPathCmd>, SVGPathParserError> {
+    pub fn parse_cmd(&mut self) -> Result<Option<SvgPathCmd>, SvgPathParserError> {
         self.parse_separators()?;
         let op = match self.parse_op()? {
             None => return Ok(None),
@@ -297,9 +297,9 @@ impl<I: Read> SVGPathParser<I> {
             b'M' | b'm' => {
                 let dst = self.parse_point()?;
                 self.subpath_start = dst;
-                SVGPathCmd::MoveTo(dst)
+                SvgPathCmd::MoveTo(dst)
             }
-            b'L' | b'l' => SVGPathCmd::LineTo(self.parse_point()?),
+            b'L' | b'l' => SvgPathCmd::LineTo(self.parse_point()?),
             b'V' | b'v' => {
                 let y = self.parse_scalar()?;
                 let p0 = self.position;
@@ -308,7 +308,7 @@ impl<I: Read> SVGPathParser<I> {
                 } else {
                     Point::new(p0.x(), y)
                 };
-                SVGPathCmd::LineTo(p1)
+                SvgPathCmd::LineTo(p1)
             }
             b'H' | b'h' => {
                 let x = self.parse_scalar()?;
@@ -318,30 +318,30 @@ impl<I: Read> SVGPathParser<I> {
                 } else {
                     Point::new(x, p0.y())
                 };
-                SVGPathCmd::LineTo(p1)
+                SvgPathCmd::LineTo(p1)
             }
-            b'Q' | b'q' => SVGPathCmd::QuadTo(self.parse_point()?, self.parse_point()?),
+            b'Q' | b'q' => SvgPathCmd::QuadTo(self.parse_point()?, self.parse_point()?),
             b'T' | b't' => {
                 let p1 = match self.prev_cmd {
-                    Some(SVGPathCmd::QuadTo(p1, p2)) => 2.0 * p2 - p1,
+                    Some(SvgPathCmd::QuadTo(p1, p2)) => 2.0 * p2 - p1,
                     _ => self.position,
                 };
                 let p2 = self.parse_point()?;
-                SVGPathCmd::QuadTo(p1, p2)
+                SvgPathCmd::QuadTo(p1, p2)
             }
-            b'C' | b'c' => SVGPathCmd::CubicTo(
+            b'C' | b'c' => SvgPathCmd::CubicTo(
                 self.parse_point()?,
                 self.parse_point()?,
                 self.parse_point()?,
             ),
             b'S' | b's' => {
                 let p1 = match self.prev_cmd {
-                    Some(SVGPathCmd::CubicTo(_, p2, p3)) => 2.0 * p3 - p2,
+                    Some(SvgPathCmd::CubicTo(_, p2, p3)) => 2.0 * p3 - p2,
                     _ => self.position,
                 };
                 let p2 = self.parse_point()?;
                 let p3 = self.parse_point()?;
-                SVGPathCmd::CubicTo(p1, p2, p3)
+                SvgPathCmd::CubicTo(p1, p2, p3)
             }
             b'A' | b'a' => {
                 let rx = self.parse_scalar()?;
@@ -350,7 +350,7 @@ impl<I: Read> SVGPathParser<I> {
                 let large_flag = self.parse_flag()?;
                 let sweep_flag = self.parse_flag()?;
                 let dst = self.parse_point()?;
-                SVGPathCmd::ArcTo {
+                SvgPathCmd::ArcTo {
                     radii: Point::new(rx, ry),
                     x_axis_rot,
                     large: large_flag,
@@ -358,7 +358,7 @@ impl<I: Read> SVGPathParser<I> {
                     dst,
                 }
             }
-            b'Z' | b'z' => SVGPathCmd::Close(self.subpath_start),
+            b'Z' | b'z' => SvgPathCmd::Close(self.subpath_start),
             _ => unreachable!(),
         };
         self.position = cmd.dst();
@@ -367,8 +367,8 @@ impl<I: Read> SVGPathParser<I> {
     }
 }
 
-impl<I: Read> Iterator for SVGPathParser<I> {
-    type Item = Result<SVGPathCmd, SVGPathParserError>;
+impl<I: Read> Iterator for SvgPathParser<I> {
+    type Item = Result<SvgPathCmd, SvgPathParserError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.parse_cmd().transpose()
@@ -377,7 +377,7 @@ impl<I: Read> Iterator for SVGPathParser<I> {
 
 /// Error while parsing path in the SVG format
 #[derive(Debug)]
-pub enum SVGPathParserError {
+pub enum SvgPathParserError {
     /// Failed to parse SVG command
     InvalidCmd(u8),
     /// Failed to parse scalar value
@@ -387,31 +387,31 @@ pub enum SVGPathParserError {
     /// Unexpected segment type found while parsing curve segment
     UnexpectedSegmentType,
     /// IO error propagated while reading input stream
-    IOError(std::io::Error),
+    IoError(std::io::Error),
 }
 
-impl fmt::Display for SVGPathParserError {
+impl fmt::Display for SvgPathParserError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
-impl From<std::io::Error> for SVGPathParserError {
+impl From<std::io::Error> for SvgPathParserError {
     fn from(error: std::io::Error) -> Self {
-        Self::IOError(error)
+        Self::IoError(error)
     }
 }
 
-impl From<SVGPathParserError> for std::io::Error {
-    fn from(error: SVGPathParserError) -> Self {
+impl From<SvgPathParserError> for std::io::Error {
+    fn from(error: SvgPathParserError) -> Self {
         match error {
-            SVGPathParserError::IOError(error) => error,
+            SvgPathParserError::IoError(error) => error,
             _ => Self::new(std::io::ErrorKind::InvalidData, error),
         }
     }
 }
 
-impl std::error::Error for SVGPathParserError {}
+impl std::error::Error for SvgPathParserError {}
 
 #[cfg(test)]
 mod tests {
@@ -420,8 +420,8 @@ mod tests {
     use std::io::Cursor;
 
     #[test]
-    fn test_parse_scalar() -> Result<(), SVGPathParserError> {
-        let mut parser = SVGPathParser::new(Cursor::new("1 .22e0.32 3.21e-3-1.24 1e4"));
+    fn test_parse_scalar() -> Result<(), SvgPathParserError> {
+        let mut parser = SvgPathParser::new(Cursor::new("1 .22e0.32 3.21e-3-1.24 1e4"));
         assert_approx_eq!(parser.parse_scalar()?, 1.0);
         assert_approx_eq!(parser.parse_scalar()?, 0.22);
         assert_approx_eq!(parser.parse_scalar()?, 0.32);

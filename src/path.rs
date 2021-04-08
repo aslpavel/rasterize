@@ -1,7 +1,7 @@
 use crate::{
     curve::line_offset, rasterize::Rasterizer, utils::clamp, BBox, Cubic, Curve, EllipArc,
-    ImageMut, LinColor, Line, Paint, Point, Quad, SVGPathParser, SVGPathParserError, Scalar,
-    Segment, Size, Transform, EPSILON,
+    ImageMut, LinColor, Line, Paint, Point, Quad, Scalar, Segment, Size, SvgPathParser,
+    SvgPathParserError, Transform, EPSILON,
 };
 use std::{
     fmt,
@@ -426,7 +426,7 @@ impl Path {
     /// Load path from SVG path representation
     pub fn read_svg_path(input: impl Read) -> std::io::Result<Self> {
         let mut builder = PathBuilder::new();
-        for cmd in SVGPathParser::new(input) {
+        for cmd in SvgPathParser::new(input) {
             cmd?.apply(&mut builder)
         }
         Ok(builder.build())
@@ -606,8 +606,8 @@ impl PathBuilder {
     pub fn append_svg_path(
         &mut self,
         string: impl AsRef<[u8]>,
-    ) -> Result<&mut Self, SVGPathParserError> {
-        for cmd in SVGPathParser::new(Cursor::new(string)) {
+    ) -> Result<&mut Self, SvgPathParserError> {
+        for cmd in SvgPathParser::new(Cursor::new(string)) {
             cmd?.apply(self);
         }
         Ok(self)
@@ -774,11 +774,11 @@ impl PathBuilder {
 }
 
 impl FromStr for Path {
-    type Err = SVGPathParserError;
+    type Err = SvgPathParserError;
 
     fn from_str(text: &str) -> Result<Path, Self::Err> {
         let mut builder = PathBuilder::new();
-        for cmd in SVGPathParser::new(Cursor::new(text)) {
+        for cmd in SvgPathParser::new(Cursor::new(text)) {
             cmd?.apply(&mut builder);
         }
         Ok(builder.build())
@@ -814,7 +814,7 @@ mod tests {
     "#;
 
     #[test]
-    fn test_path_parse() -> Result<(), SVGPathParserError> {
+    fn test_path_parse() -> Result<(), SvgPathParserError> {
         // complicated path
         let path: Path = SQUIRREL.parse()?;
         let reference = Path::builder()
@@ -889,7 +889,7 @@ mod tests {
     }
 
     #[test]
-    fn test_flatten() -> Result<(), SVGPathParserError> {
+    fn test_flatten() -> Result<(), SvgPathParserError> {
         let path: Path = SQUIRREL.parse()?;
         let tr = Transform::new_rotate(PI / 3.0).pre_translate(-10.0, -20.0);
         let lines: Vec<_> = path.flatten(tr, DEFAULT_FLATNESS, true).collect();

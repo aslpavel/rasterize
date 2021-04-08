@@ -37,4 +37,4 @@ pub use path::{
     FillRule, LineCap, LineJoin, Path, PathBuilder, StrokeStyle, SubPath, DEFAULT_FLATNESS,
 };
 pub use scene::{Layer, Scene};
-pub use svg::{SVGPathCmd, SVGPathParser, SVGPathParserError};
+pub use svg::{SvgPathCmd, SvgPathParser, SvgPathParserError};

@@ -76,7 +76,7 @@ fn large_path_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("material-big");
     group.throughput(Throughput::Elements(path.segments_count() as u64));
     group.bench_function("parse-only", |b| {
-        b.iter(|| SVGPathParser::new(Cursor::new(path_str.as_str())).count())
+        b.iter(|| SvgPathParser::new(Cursor::new(path_str.as_str())).count())
     });
     group.bench_function("parse", |b| {
         b.iter_with_large_drop(|| path_str.parse::<Path>())
