@@ -127,7 +127,7 @@ fn parse_args() -> Result<Args, Error> {
         );
         eprintln!("\nUSAGE:");
         eprintln!(
-            "    {} [-w <width>] [-s <stroke>] [-o] [-a] <file.path> <out.bmp>",
+            "    {} [-w <width>] [-s <stroke>] [-f <flatness>] [-o] [-a] <file.path> <out.bmp>",
             cmd
         );
         eprintln!("\nARGS:");
