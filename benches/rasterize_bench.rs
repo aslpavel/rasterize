@@ -18,14 +18,15 @@ fn rasterizers() -> impl Iterator<Item = Box<dyn Rasterizer>> {
 }
 
 fn curve_benchmark(c: &mut Criterion) {
-    let path = Cubic::new((157.0, 67.0), (35.0, 200.0), (220.0, 260.0), (175.0, 45.0));
-    c.bench_function("cubic extremities", |b| {
-        b.iter(|| black_box(path).extremities())
-    });
-
     let cubic = Cubic::new((158.0, 70.0), (210.0, 250.0), (25.0, 190.0), (219.0, 89.0));
-    c.bench_function("cubic length", |b| {
-        b.iter(|| black_box(cubic).length(0.0, 1.0))
+    let length = cubic.length(0.0, 1.0) / 2.0;
+    let mut group = c.benchmark_group("cubic");
+    group.throughput(Throughput::Elements(1));
+    group.bench_function("extremities", |b| b.iter(|| black_box(cubic).extremities()));
+    group.bench_function("bbox", |b| b.iter(|| black_box(cubic).bbox(None)));
+    group.bench_function("length", |b| b.iter(|| black_box(cubic).length(0.0, 1.0)));
+    group.bench_function("from length", |b| {
+        b.iter(|| cubic.from_length(black_box(length), None))
     });
 }
 
