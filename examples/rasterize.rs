@@ -37,13 +37,31 @@ impl fmt::Display for ArgsError {
 
 impl std::error::Error for ArgsError {}
 
+#[derive(Debug, Clone, Copy)]
+enum RasterizerType {
+    ActiveEdge,
+    SignedDifference,
+}
+
+#[derive(Debug)]
 struct Args {
     input_file: String,
     output_file: String,
     outline: bool,
     width: Option<usize>,
     stroke: Option<Scalar>,
-    rasterizer: Box<dyn Rasterizer>,
+    flatness: Scalar,
+    rasterizer: RasterizerType,
+}
+
+impl Args {
+    fn get_rasterizer(&self) -> Box<dyn Rasterizer> {
+        use RasterizerType::*;
+        match self.rasterizer {
+            SignedDifference => Box::new(SignedDifferenceRasterizer::new(self.flatness)),
+            ActiveEdge => Box::new(ActiveEdgeRasterizer::new(self.flatness)),
+        }
+    }
 }
 
 fn parse_args() -> Result<Args, Error> {
@@ -53,13 +71,18 @@ fn parse_args() -> Result<Args, Error> {
         outline: false,
         width: None,
         stroke: None,
-        rasterizer: Box::new(SignedDifferenceRasterizer::default()),
+        flatness: DEFAULT_FLATNESS,
+        rasterizer: RasterizerType::SignedDifference,
     };
-    let mut postional = 0;
+    let mut positional = 0;
     let mut args = env::args();
     let cmd = args.next().unwrap();
     while let Some(arg) = args.next() {
         match arg.as_ref() {
+            "-h" => {
+                positional = 0;
+                break;
+            }
             "-w" => {
                 let width = args
                     .next()
@@ -76,11 +99,21 @@ fn parse_args() -> Result<Args, Error> {
                 result.outline = true;
             }
             "-a" => {
-                result.rasterizer = Box::new(ActiveEdgeRasterizer::default());
+                result.rasterizer = RasterizerType::ActiveEdge;
+            }
+            "-f" => {
+                let flatness: Scalar = args
+                    .next()
+                    .ok_or_else(|| ArgsError::new("-f requres argument"))?
+                    .parse()?;
+                if flatness < EPSILON {
+                    return Err(Box::new(ArgsError::new("flatness is too small")));
+                }
+                result.flatness = flatness;
             }
             _ => {
-                postional += 1;
-                match postional {
+                positional += 1;
+                match positional {
                     1 => result.input_file = arg,
                     2 => result.output_file = arg,
                     _ => return Err(ArgsError::new("unexpected positional argment").into()),
@@ -88,7 +121,7 @@ fn parse_args() -> Result<Args, Error> {
             }
         }
     }
-    if postional < 2 {
+    if positional < 2 {
         eprintln!(
             "Very simple tool that accepts SVG path as an input and produces rasterized image"
         );
@@ -102,6 +135,10 @@ fn parse_args() -> Result<Args, Error> {
         eprintln!("    -s <stroke_width>  stroke path before rendering");
         eprintln!("    -o                 show outline with control points instead of filling");
         eprintln!("    -a                 use active-edge instead of signed-difference rasterizer");
+        eprintln!(
+            "    -f <flatness>      flatness used by rasterizer (defualt: {})",
+            DEFAULT_FLATNESS
+        );
         eprintln!("    <file.path>        file containing SVG path ('-' means stdin)");
         eprintln!("    <out.bmp>          image rendered in the BMP format ('-' means stdout)");
         std::process::exit(1);
@@ -187,6 +224,7 @@ fn outline(path: &Path, tr: Transform) -> Scene {
 fn main() -> Result<(), Error> {
     env_logger::from_env(Env::default().default_filter_or("debug")).init();
     let args = parse_args()?;
+    let rasterizer = args.get_rasterizer();
 
     let path = match args.stroke {
         None => path_load(args.input_file)?,
@@ -229,7 +267,7 @@ fn main() -> Result<(), Error> {
         group.push(outline(&path, tr));
     }
     let scene = Scene::group(group);
-    let rasterizer = args.rasterizer;
+
     let image = timeit(format!("[render:{}]", rasterizer.name()), || {
         scene.render(
             &rasterizer,
