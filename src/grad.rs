@@ -171,6 +171,7 @@ pub struct GradRadial {
 }
 
 impl GradRadial {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         stops: impl Into<GradStops>,
         units: Units,
