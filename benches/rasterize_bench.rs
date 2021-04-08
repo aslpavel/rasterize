@@ -22,6 +22,11 @@ fn curve_benchmark(c: &mut Criterion) {
     c.bench_function("cubic extremities", |b| {
         b.iter(|| black_box(path).extremities())
     });
+
+    let cubic = Cubic::new((158.0, 70.0), (210.0, 250.0), (25.0, 190.0), (219.0, 89.0));
+    c.bench_function("cubic length", |b| {
+        b.iter(|| black_box(cubic).length(0.0, 1.0))
+    });
 }
 
 fn stroke_benchmark(c: &mut Criterion) {

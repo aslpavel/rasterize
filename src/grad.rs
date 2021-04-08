@@ -1,4 +1,4 @@
-use crate::{quadratic_solve, LinColor, Paint, Point, Scalar, Transform, Units};
+use crate::{utils::quadratic_solve, LinColor, Paint, Point, Scalar, Transform, Units};
 use std::cmp::Ordering;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

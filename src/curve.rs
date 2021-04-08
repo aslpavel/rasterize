@@ -1,8 +1,12 @@
 //! All the things you need to handle bezier curves
 
 use crate::{
-    cubic_solve, quadratic_solve, ArrayIter, BBox, EllipArc, LineCap, LineJoin, M3x3, M4x4, Point,
-    SVGPathCmd, SVGPathParser, SVGPathParserError, Scalar, StrokeStyle, Transform, EPSILON,
+    utils::{
+        cubic_solve, integrate_quadrature, quadratic_solve, ArrayIter, M3x3, M4x4, QUADRATURE_16,
+        QUADRATURE_32,
+    },
+    BBox, EllipArc, LineCap, LineJoin, Point, SVGPathCmd, SVGPathParser, SVGPathParserError,
+    Scalar, StrokeStyle, Transform, EPSILON,
 };
 use std::{fmt, io::Cursor, str::FromStr};
 
@@ -64,6 +68,9 @@ pub trait Curve: Sized + Into<Segment> {
 
     /// Find all extermities of the curve `curve'(t)_x = 0 || curve'(t)_y = 0`
     fn extremities(&self) -> CurveExtremities;
+
+    /// Calculate length of the curve from `t0` to `t1`
+    fn length(&self, t0: Scalar, t1: Scalar) -> Scalar;
 }
 
 /// Iterator over line segments aproximating curve segment
@@ -115,6 +122,13 @@ impl fmt::Debug for Line {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Line([p0, p1]) = self;
         write!(f, "Line {:?} {:?}", p0, p1)
+    }
+}
+
+impl fmt::Display for Line {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Line([p0, p1]) = self;
+        write!(f, "M{:?} L{:?}", p0, p1)
     }
 }
 
@@ -238,6 +252,10 @@ impl Curve for Line {
     fn extremities(&self) -> CurveExtremities {
         CurveExtremities::new()
     }
+
+    fn length(&self, t0: Scalar, t1: Scalar) -> Scalar {
+        self.at(t0).dist(self.at(t1))
+    }
 }
 
 impl FromStr for Line {
@@ -290,6 +308,13 @@ impl fmt::Debug for Quad {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Quad([p0, p1, p2]) = self;
         write!(f, "Quad {:?} {:?} {:?}", p0, p1, p2)
+    }
+}
+
+impl fmt::Display for Quad {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Quad([p0, p1, p2]) = self;
+        write!(f, "M{:?} Q{:?} {:?}", p0, p1, p2)
     }
 }
 
@@ -479,6 +504,15 @@ impl Curve for Quad {
         }
         result
     }
+
+    fn length(&self, t0: Scalar, t1: Scalar) -> Scalar {
+        // length(t0, t1) = integral(t0, t1, (self'_x ^ 2 + self'_y ^ 2).sqrt())
+        let deriv = self
+            .deriv()
+            .to_line()
+            .expect("derivative of a quad curve must be a line");
+        integrate_quadrature(t0, t1, |t| deriv.at(t).length(), &QUADRATURE_16)
+    }
 }
 
 impl FromStr for Quad {
@@ -534,6 +568,13 @@ impl fmt::Debug for Cubic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Cubic([p0, p1, p2, p3]) = self;
         write!(f, "Cubic {:?} {:?} {:?} {:?}", p0, p1, p2, p3)
+    }
+}
+
+impl fmt::Display for Cubic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Cubic([p0, p1, p2, p3]) = self;
+        write!(f, "M{:?} C{:?} {:?} {:?}", p0, p1, p2, p3)
     }
 }
 
@@ -761,6 +802,22 @@ impl Curve for Cubic {
             .chain(quadratic_solve(a1, b1, c1))
             .filter(|t| *t >= 0.0 && *t <= 1.0)
             .collect::<CurveExtremities>()
+    }
+
+    fn length(&self, t0: Scalar, t1: Scalar) -> Scalar {
+        // length(t0, t1) = integral(t0, t1, (self'_x ^ 2 + self'_y ^ 2).sqrt())
+        let deriv = self
+            .deriv()
+            .to_quad()
+            .expect("derivative of a cubic curve must be a quad curve");
+        let bbox_diag = self.bbox(None).diag().direction();
+        // if flatness bigger then half of the bounding box diagonal we use 32 point
+        // integration otherwise 16. Note that `Curve::flatness()` returns `16 * flatness ^ 2`
+        if bbox_diag.dot(bbox_diag) * 4.0 < self.flatness() {
+            integrate_quadrature(t0, t1, |t| deriv.at(t).length(), &QUADRATURE_32)
+        } else {
+            integrate_quadrature(t0, t1, |t| deriv.at(t).length(), &QUADRATURE_16)
+        }
     }
 }
 
@@ -1007,6 +1064,16 @@ impl fmt::Debug for Segment {
     }
 }
 
+impl fmt::Display for Segment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Segment::Line(line) => line.fmt(f),
+            Segment::Quad(quad) => quad.fmt(f),
+            Segment::Cubic(cubic) => cubic.fmt(f),
+        }
+    }
+}
+
 impl FromStr for Segment {
     type Err = SVGPathParserError;
 
@@ -1143,6 +1210,14 @@ impl Curve for Segment {
             Segment::Line(line) => line.extremities(),
             Segment::Quad(quad) => quad.extremities(),
             Segment::Cubic(cubic) => cubic.extremities(),
+        }
+    }
+
+    fn length(&self, t0: Scalar, t1: Scalar) -> Scalar {
+        match self {
+            Segment::Line(line) => Curve::length(line, t0, t1),
+            Segment::Quad(quad) => quad.length(t0, t1),
+            Segment::Cubic(cubic) => cubic.length(t0, t1),
         }
     }
 }
@@ -1516,5 +1591,46 @@ mod tests {
         assert_approx_eq!(bbox.y(), -2.25);
         assert_approx_eq!(bbox.width(), 6.0);
         assert_approx_eq!(bbox.height(), 2.25);
+    }
+
+    fn segment_length_naive(segment: Segment) -> Scalar {
+        let mut length = 0.0;
+        for line in segment.flatten(Transform::identity(), 1e-5) {
+            length += line.length();
+        }
+        length
+    }
+
+    #[test]
+    fn test_length() {
+        let cubic = Cubic::new((158.0, 70.0), (210.0, 250.0), (25.0, 190.0), (219.0, 89.0));
+        let length = cubic.length(0.0, 1.0);
+        let length_naive = segment_length_naive(cubic.into());
+        assert_approx_eq!(length, length_naive, 0.1);
+
+        let cubic = Cubic::new((210.0, 30.0), (209.0, 234.0), (54.0, 31.0), (118.0, 158.0));
+        let length = cubic.length(0.0, 1.0);
+        let length_naive = segment_length_naive(cubic.into());
+        assert_approx_eq!(length, length_naive, 0.1);
+
+        let cubic = Cubic::new((46.0, 41.0), (210.0, 250.0), (25.0, 190.0), (219.0, 89.0));
+        let length = cubic.length(0.0, 1.0);
+        let length_naive = segment_length_naive(cubic.into());
+        assert_approx_eq!(length, length_naive, 0.1);
+
+        let cubic = Cubic::new((176.0, 73.0), (109.0, 26.0), (190.0, 196.0), (209.0, 23.0));
+        let length = cubic.length(0.0, 1.0);
+        let length_naive = segment_length_naive(cubic.into());
+        assert_approx_eq!(length, length_naive, 0.1);
+
+        let quad = Quad::new((139.0, 91.0), (20.0, 110.0), (221.0, 154.0));
+        let length = quad.length(0.0, 1.0);
+        let length_naive = segment_length_naive(quad.into());
+        assert_approx_eq!(length, length_naive, 0.1);
+
+        let cubic = Cubic::new((40.0, 118.0), (45.0, 216.0), (190.0, 196.0), (209.0, 23.0));
+        let length = cubic.length(0.0, 1.0);
+        let length_naive = segment_length_naive(cubic.into());
+        assert_approx_eq!(length, length_naive, 0.1);
     }
 }

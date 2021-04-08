@@ -1,4 +1,4 @@
-use crate::{clamp, Line, Size};
+use crate::{utils::clamp, Line, Size};
 use std::{
     fmt,
     ops::{Add, Div, Mul, Sub},

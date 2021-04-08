@@ -1,5 +1,5 @@
 use crate::{
-    clamp, BBox, Color, FillRule, Image, ImageMut, ImageOwned, LinColor, Paint, Path, Point,
+    utils::clamp, BBox, Color, FillRule, Image, ImageMut, ImageOwned, LinColor, Paint, Path, Point,
     Rasterizer, Scalar, Shape, Size, StrokeStyle, Transform, Units,
 };
 use std::{cmp, fmt, sync::Arc};

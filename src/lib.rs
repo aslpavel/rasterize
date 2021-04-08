@@ -17,7 +17,7 @@ mod path;
 mod rasterize;
 mod scene;
 mod svg;
-mod utils;
+pub mod utils;
 
 pub use crate::rasterize::{
     ActiveEdgeIter, ActiveEdgeRasterizer, Paint, Pixel, Rasterizer, SignedDifferenceRasterizer,
@@ -38,4 +38,3 @@ pub use path::{
 };
 pub use scene::{Layer, Scene};
 pub use svg::{SVGPathCmd, SVGPathParser, SVGPathParserError};
-use utils::{clamp, cubic_solve, quadratic_solve, ArrayIter, M3x3, M4x4};

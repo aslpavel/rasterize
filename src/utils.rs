@@ -135,7 +135,7 @@ impl<T, const SIZE: usize> DoubleEndedIterator for ArrayIter<T, SIZE> {
 
 /// Square 3x3 matrix
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct M3x3(pub [Scalar; 9]);
+pub struct M3x3(pub [Scalar; 9]);
 
 impl Mul<M3x3> for M3x3 {
     type Output = M3x3;
@@ -157,7 +157,7 @@ impl Mul<M3x3> for M3x3 {
 
 /// Sqaure 4x4 matrix
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct M4x4(pub [Scalar; 16]);
+pub struct M4x4(pub [Scalar; 16]);
 
 impl Mul<M4x4> for M4x4 {
     type Output = M4x4;
@@ -178,7 +178,7 @@ impl Mul<M4x4> for M4x4 {
 }
 
 /// Solve quadratic equation `a * t ^ 2 + b * t + c = 0` for `t`
-pub(crate) fn quadratic_solve(a: Scalar, b: Scalar, c: Scalar) -> ArrayIter<Scalar, 2> {
+pub fn quadratic_solve(a: Scalar, b: Scalar, c: Scalar) -> ArrayIter<Scalar, 2> {
     let mut result = ArrayIter::<Scalar, 2>::new();
     if a.abs() < EPSILON {
         if b.abs() > EPSILON {
@@ -209,7 +209,7 @@ pub(crate) fn quadratic_solve(a: Scalar, b: Scalar, c: Scalar) -> ArrayIter<Scal
 /// Solve cubic equation `a * t ^ 3 + b * t ^ 2 + c * t + d = 0` for `t`
 /// Reference: https://www.trans4mind.com/personal_development/mathematics/polynomials/cubicAlgebra.htm
 #[allow(clippy::many_single_char_names)]
-pub(crate) fn cubic_solve(a: Scalar, b: Scalar, c: Scalar, d: Scalar) -> ArrayIter<Scalar, 3> {
+pub fn cubic_solve(a: Scalar, b: Scalar, c: Scalar, d: Scalar) -> ArrayIter<Scalar, 3> {
     let mut results = ArrayIter::<Scalar, 3>::new();
     if a.abs() < 1.0 && a.abs().powi(2) < EPSILON {
         results.extend(quadratic_solve(b, c, d));
@@ -263,8 +263,109 @@ pub(crate) fn cubic_solve(a: Scalar, b: Scalar, c: Scalar, d: Scalar) -> ArrayIt
     results
 }
 
+// 16 point quadrature (weight, position)
+// [Legendre Gauss Qaudrature](https://pomax.github.io/bezierinfo/legendre-gauss.html)
+pub const QUADRATURE_32: [(Scalar, Scalar); 32] = [
+    (0.0965400885147278, -0.0483076656877383),
+    (0.0965400885147278, 0.0483076656877383),
+    (0.0956387200792749, -0.1444719615827965),
+    (0.0956387200792749, 0.1444719615827965),
+    (0.0938443990808046, -0.2392873622521371),
+    (0.0938443990808046, 0.2392873622521371),
+    (0.0911738786957639, -0.3318686022821277),
+    (0.0911738786957639, 0.3318686022821277),
+    (0.0876520930044038, -0.4213512761306353),
+    (0.0876520930044038, 0.4213512761306353),
+    (0.0833119242269467, -0.5068999089322294),
+    (0.0833119242269467, 0.5068999089322294),
+    (0.0781938957870703, -0.5877157572407623),
+    (0.0781938957870703, 0.5877157572407623),
+    (0.0723457941088485, -0.6630442669302152),
+    (0.0723457941088485, 0.6630442669302152),
+    (0.0658222227763618, -0.7321821187402897),
+    (0.0658222227763618, 0.7321821187402897),
+    (0.0586840934785355, -0.7944837959679424),
+    (0.0586840934785355, 0.7944837959679424),
+    (0.0509980592623762, -0.8493676137325700),
+    (0.0509980592623762, 0.8493676137325700),
+    (0.0428358980222267, -0.8963211557660521),
+    (0.0428358980222267, 0.8963211557660521),
+    (0.0342738629130214, -0.9349060759377397),
+    (0.0342738629130214, 0.9349060759377397),
+    (0.0253920653092621, -0.9647622555875064),
+    (0.0253920653092621, 0.9647622555875064),
+    (0.0162743947309057, -0.9856115115452684),
+    (0.0162743947309057, 0.9856115115452684),
+    (0.0070186100094701, -0.9972638618494816),
+    (0.0070186100094701, 0.9972638618494816),
+];
+
+pub const QUADRATURE_16: [(Scalar, Scalar); 16] = [
+    (0.1894506104550685, -0.0950125098376374),
+    (0.1894506104550685, 0.0950125098376374),
+    (0.1826034150449236, -0.2816035507792589),
+    (0.1826034150449236, 0.2816035507792589),
+    (0.1691565193950025, -0.4580167776572274),
+    (0.1691565193950025, 0.4580167776572274),
+    (0.1495959888165767, -0.6178762444026438),
+    (0.1495959888165767, 0.6178762444026438),
+    (0.1246289712555339, -0.7554044083550030),
+    (0.1246289712555339, 0.7554044083550030),
+    (0.0951585116824928, -0.8656312023878318),
+    (0.0951585116824928, 0.8656312023878318),
+    (0.0622535239386479, -0.9445750230732326),
+    (0.0622535239386479, 0.9445750230732326),
+    (0.0271524594117541, -0.9894009349916499),
+    (0.0271524594117541, 0.9894009349916499),
+];
+
+pub const QUADRATURE_8: [(Scalar, Scalar); 8] = [
+    (0.3626837833783620, -0.1834346424956498),
+    (0.3626837833783620, 0.1834346424956498),
+    (0.3137066458778873, -0.5255324099163290),
+    (0.3137066458778873, 0.5255324099163290),
+    (0.2223810344533745, -0.7966664774136267),
+    (0.2223810344533745, 0.7966664774136267),
+    (0.1012285362903763, -0.9602898564975363),
+    (0.1012285362903763, 0.9602898564975363),
+];
+
+pub const QUADRATURE_4: [(Scalar, Scalar); 4] = [
+    (0.6521451548625461, -0.3399810435848563),
+    (0.6521451548625461, 0.3399810435848563),
+    (0.3478548451374538, -0.8611363115940526),
+    (0.3478548451374538, 0.8611363115940526),
+];
+
+/// Find an integral of a function `f` on an interval from `x0` to `x1`
+/// using Legendre-Gauss quadrature method.
+///
+/// This method is equivalent to interpolation of the function with polynomial of degree
+/// `table.len() * 2 - 1` and calculating its integral.
+///
+/// Refernece:
+///  - [Gauss Quadrature](https://en.wikipedia.org/wiki/Gaussian_quadrature)
+///  - [Gauss Quadrature](https://www.youtube.com/watch?v=unWguclP-Ds&list=PLC8FC40C714F5E60F)
+pub fn integrate_quadrature(
+    x0: Scalar,
+    x1: Scalar,
+    f: impl Fn(Scalar) -> Scalar,
+    table: &[(Scalar, Scalar)],
+) -> Scalar {
+    // quadrature constansts are for (-1, 1) interval, we can change variable with
+    // `integral(x0, x1, f(x)) = ((b - a) / 2) integral(-1, 1, f((x1 - x0) * x / 2 + (x0 + x1) / 2))`
+    let c0 = (x1 - x0) / 2.0;
+    let c1 = (x1 + x0) / 2.0;
+
+    let mut result: Scalar = 0.0;
+    for (w, x) in table.iter() {
+        result += w * f(c0 * x + c1);
+    }
+    c0 * result
+}
+
 #[cfg(test)]
-pub(crate) mod tests {
+pub mod tests {
     use super::*;
 
     #[macro_export]

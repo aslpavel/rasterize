@@ -1,7 +1,7 @@
 use crate::{
-    clamp, curve::line_offset, rasterize::Rasterizer, BBox, Cubic, Curve, EllipArc, ImageMut,
-    LinColor, Line, Paint, Point, Quad, SVGPathParser, SVGPathParserError, Scalar, Segment, Size,
-    Transform, EPSILON,
+    curve::line_offset, rasterize::Rasterizer, utils::clamp, BBox, Cubic, Curve, EllipArc,
+    ImageMut, LinColor, Line, Paint, Point, Quad, SVGPathParser, SVGPathParserError, Scalar,
+    Segment, Size, Transform, EPSILON,
 };
 use std::{
     fmt,
