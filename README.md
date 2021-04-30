@@ -1,3 +1,9 @@
+# Rasterizer
+[Build Status](https://github.com/aslpavel/rasterize/actions/workflows/rust.yml/badge.svg)
+[![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Crate](https://img.shields.io/crates/v/rasterize.svg)](https://crates.io/crates/rasterize)
+[![API Docs](https://docs.rs/rasterize/badge.svg)](https://docs.rs/rasterize)
+
 This is a fully functional 2D rasterizer and SVG path parser.
 ### Features:
 - parsing SVG path format
