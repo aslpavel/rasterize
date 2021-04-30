@@ -7,11 +7,15 @@ version = "0.1.0"
 include = [
   "**/*.rs",
   "**/Cargo.toml",
+  "README.md",
+  "path/squirrel.png",
 ]
 homepage = "https://github.com/aslpavel/ruster"
 repository = "https://github.com/aslpavel/ruster.git"
 license = "MIT"
 readme = "README.md"
+keywords = ["2d", "rendering"]
+categories = ["rendering"]
 
 [features]
 default = []
