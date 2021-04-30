@@ -1,4 +1,4 @@
-use ruster::*;
+use rasterize::*;
 use std::{
     cell::{self, RefCell},
     cmp::{Ordering, PartialEq},

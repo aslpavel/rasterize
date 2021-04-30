@@ -1,7 +1,7 @@
 #![deny(warnings)]
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use ruster::*;
+use rasterize::*;
 use std::{
     fs::File,
     io::{Cursor, Read},

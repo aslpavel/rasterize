@@ -2,7 +2,7 @@
 #![deny(warnings)]
 
 use env_logger::Env;
-use ruster::*;
+use rasterize::*;
 use std::{
     env, fmt,
     fs::File,

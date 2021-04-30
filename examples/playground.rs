@@ -1,5 +1,5 @@
 #![deny(warnings)]
-use ruster::*;
+use rasterize::*;
 use std::{fs::File, sync::Arc};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

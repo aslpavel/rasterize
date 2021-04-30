@@ -1,6 +1,6 @@
 #![deny(warnings)]
 
-use ruster::*;
+use rasterize::*;
 use std::{
     cmp::Ordering,
     collections::{BTreeSet, HashMap},
