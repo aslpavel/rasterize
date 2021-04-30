@@ -8,7 +8,7 @@ include = [
   "**/*.rs",
   "**/Cargo.toml",
   "README.md",
-  "path/squirrel.png",
+  "paths/squirrel.png",
 ]
 homepage = "https://github.com/aslpavel/ruster"
 repository = "https://github.com/aslpavel/ruster.git"
