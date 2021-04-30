@@ -1,4 +1,4 @@
-use rasterize::*;
+use ruster::*;
 use std::{
     cell::{self, RefCell},
     cmp::{Ordering, PartialEq},
@@ -298,6 +298,12 @@ fn create_global_dict() -> PSDict {
     bind_fn(dict, "lineto", |state| {
         let point = state.pop_point()?;
         state.graphic().path.line_to(point);
+        Ok(())
+    });
+    bind_fn(dict, "rlineto", |state| {
+        let current = state.graphic().path.position();
+        let point = state.pop_point()?;
+        state.graphic().path.line_to(current + point);
         Ok(())
     });
     bind_fn(dict, "curveto", |state| {
@@ -657,6 +663,17 @@ fn create_global_dict() -> PSDict {
         }
         Ok(())
     });
+    bind_fn(dict, "for", |state| {
+        let proc = state.pop()?;
+        let limit = state.pop()?.try_into_number()?;
+        let inc = state.pop()?.try_into_number()?;
+        let mut val = state.pop()?.try_into_number()?;
+        while val < limit {
+            proc.clone().try_run(state)?;
+            val += inc;
+        }
+        Ok(())
+    });
     bind_fn(dict, "stop", |_state| Err(PSError::Stopped));
     bind_fn(dict, "stopped", |state| {
         let scope = state.pop()?;
@@ -680,6 +697,17 @@ fn create_global_dict() -> PSDict {
         state.push(a + b);
         Ok(())
     });
+    bind_fn(dict, "mul", |state| {
+        let a = state.pop()?.try_into_number()?;
+        let b = state.pop()?.try_into_number()?;
+        state.push(a * b);
+        Ok(())
+    });
+    bind_fn(dict, "sqrt", |state| {
+        let a = state.pop()?.try_into_number()?;
+        state.push(a.sqrt());
+        Ok(())
+    });
     bind_fn(dict, "div", |state| {
         let a = state.pop()?.try_into_number()?;
         let b = state.pop()?.try_into_number()?;
@@ -700,6 +728,22 @@ fn create_global_dict() -> PSDict {
     bind_fn(dict, "round", |state| {
         let val = state.pop()?.try_into_number()?;
         state.push(val.round());
+        Ok(())
+    });
+    bind_fn(dict, "sin", |state| {
+        let a = state.pop()?.try_into_number()?;
+        state.push((a / (2.0 * PI)).sin());
+        Ok(())
+    });
+    bind_fn(dict, "cos", |state| {
+        let a = state.pop()?.try_into_number()?;
+        state.push((a / (2.0 * PI)).cos());
+        Ok(())
+    });
+    bind_fn(dict, "atan", |state| {
+        let den = state.pop()?.try_into_number()?;
+        let num = state.pop()?.try_into_number()?;
+        state.push(num.atan2(den) * 2.0 * PI);
         Ok(())
     });
 
@@ -1185,12 +1229,12 @@ fn main() -> Result<(), PSError> {
     };
 
     // let file = BufReader::new(File::open("/mnt/data/downloads/tiger.eps")?);
-    let file = BufReader::new(File::open("/mnt/data/downloads/golfer.eps")?);
+    let file = BufReader::new(File::open("/mnt/data/downloads/escher.ps")?);
     let parser = PSParser::new(file);
     let mut state = PSState::new();
     for val in parser {
         let val = val?;
-        // println!("{:?}", val);
+        println!("{:?}", val);
         if let Err(err) = state.eval(val) {
             if let PSError::InputEmpty = err {
                 break;
