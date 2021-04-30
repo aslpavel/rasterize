@@ -8,6 +8,7 @@ include = [
   "**/*.rs",
   "Cargo.toml",
   "README.md",
+  "LICENSE",
   "paths/squirrel.png",
 ]
 homepage = "https://github.com/aslpavel/rasterize"
