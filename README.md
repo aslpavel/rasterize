@@ -12,4 +12,4 @@ $ cargo run --release --example rasterize -- paths/squirrel.path -w 512 -o squir
 ```
 This will produce:
 
-![squirrel](paths/squirrel.png?s=512)
+![squirrel](https://raw.githubusercontent.com/aslpavel/rasterize/main/paths/squirrel.png)
