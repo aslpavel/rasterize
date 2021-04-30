@@ -1,8 +1,17 @@
 [package]
 authors = ["Pavel Aslanov <asl.pavel@gmail.com>"]
+description = "Simple and small 2D rendering library"
 edition = "2018"
 name = "ruster"
 version = "0.1.0"
+include = [
+  "**/*.rs",
+  "**/Cargo.toml",
+]
+homepage = "https://github.com/aslpavel/ruster"
+repository = "https://github.com/aslpavel/ruster.git"
+license = "MIT"
+readme = "README.md"
 
 [features]
 default = []
