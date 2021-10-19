@@ -52,6 +52,8 @@ struct Args {
     stroke: Option<Scalar>,
     flatness: Scalar,
     rasterizer: RasterizerType,
+    fg: LinColor,
+    bg: LinColor,
 }
 
 impl Args {
@@ -73,6 +75,8 @@ fn parse_args() -> Result<Args, Error> {
         stroke: None,
         flatness: DEFAULT_FLATNESS,
         rasterizer: RasterizerType::SignedDifference,
+        fg: LinColor::new(0.0, 0.0, 0.0, 1.0),
+        bg: LinColor::new(1.0, 1.0, 1.0, 1.0),
     };
     let mut positional = 0;
     let mut args = env::args();
@@ -111,6 +115,18 @@ fn parse_args() -> Result<Args, Error> {
                 }
                 result.flatness = flatness;
             }
+            "-fg" => {
+                result.fg = args
+                    .next()
+                    .ok_or_else(|| ArgsError::new("-fg requres color #rrggbb(aa) argument"))?
+                    .parse()?;
+            }
+            "-bg" => {
+                result.bg = args
+                    .next()
+                    .ok_or_else(|| ArgsError::new("-bg requres color #rrggbb(aa) argument"))?
+                    .parse()?;
+            }
             _ => {
                 positional += 1;
                 match positional {
@@ -127,7 +143,7 @@ fn parse_args() -> Result<Args, Error> {
         );
         eprintln!("\nUSAGE:");
         eprintln!(
-            "    {} [-w <width>] [-s <stroke>] [-f <flatness>] [-o] [-a] <file.path> <out.bmp>",
+            "    {} [-w <width>] [-s <stroke>] [-f <flatness>] [-o] [-a] [-fg <color>] [-bg <color>] <file.path> <out.bmp>",
             cmd
         );
         eprintln!("\nARGS:");
@@ -135,6 +151,8 @@ fn parse_args() -> Result<Args, Error> {
         eprintln!("    -s <stroke_width>  stroke path before rendering");
         eprintln!("    -o                 show outline with control points instead of filling");
         eprintln!("    -a                 use active-edge instead of signed-difference rasterizer");
+        eprintln!("    -fg <color>        foreground color");
+        eprintln!("    -bg <color>        background color");
         eprintln!(
             "    -f <flatness>      flatness used by rasterizer (defualt: {})",
             DEFAULT_FLATNESS
@@ -257,24 +275,20 @@ fn main() -> Result<(), Error> {
 
     // scene
     let mut group = Vec::new();
-    let fill_color = if args.outline {
+    let fg = if args.outline {
         LinColor::new(0.4, 0.4, 0.4, 1.0)
     } else {
-        LinColor::new(0.0, 0.0, 0.0, 1.0)
+        args.fg
     };
-    group.push(Scene::fill(path.clone(), Arc::new(fill_color), FillRule::default()).transform(tr));
+    group.push(Scene::fill(path.clone(), Arc::new(fg), FillRule::default()).transform(tr));
     if args.outline {
         group.push(outline(&path, tr));
     }
     let scene = Scene::group(group);
 
+    let bg = args.bg;
     let image = timeit(format!("[render:{}]", rasterizer.name()), || {
-        scene.render(
-            &rasterizer,
-            Transform::identity(),
-            None,
-            Some(LinColor::new(1.0, 1.0, 1.0, 1.0)),
-        )
+        scene.render(&rasterizer, Transform::identity(), None, Some(bg))
     });
 
     // save
