@@ -1,5 +1,5 @@
 use rasterize::*;
-use std::{fs::File, sync::Arc};
+use std::sync::Arc;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let fill_rule = FillRule::default();

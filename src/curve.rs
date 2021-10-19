@@ -16,7 +16,7 @@ pub type CurveRoots = ArrayIter<Scalar, 3>;
 pub type CurveExtremities = ArrayIter<Scalar, 6>;
 
 /// Set of operations common to all bezier curves.
-pub trait Curve: Sized + Into<Segment> {
+pub trait Curve: Into<Segment> {
     /// Convert curve to an iterator over line segments with desired flatness
     fn flatten(&self, tr: Transform, flatness: Scalar) -> CurveFlattenIter {
         CurveFlattenIter::new(self.transform(tr), flatness)
