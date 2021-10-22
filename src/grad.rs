@@ -101,7 +101,6 @@ pub struct GradLinear {
     spread: GradSpread,
     tr: Transform,
     start: Point,
-    end: Point,
     // precomputed value equal to `(end - start) / |end - start| ^ 2`
     dir: Point,
 }
@@ -130,7 +129,6 @@ impl GradLinear {
             spread,
             tr,
             start,
-            end,
             dir: dir / dir.dot(dir),
         }
     }

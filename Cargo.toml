@@ -1,6 +1,6 @@
 [package]
 name = "rasterize"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Pavel Aslanov <asl.pavel@gmail.com>"]
 description = "Simple and small 2D rendering library"
 edition = "2021"
