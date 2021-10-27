@@ -624,9 +624,9 @@ impl ActiveEdgeIter {
 /// Rasterized pixel
 #[derive(Debug, Clone, Copy)]
 pub struct Pixel {
-    /// x-axis coordinate
+    /// x-axis coordinate (horizontal coordinate/column)
     pub x: usize,
-    /// y-axis coordinate
+    /// y-axis coordinate (vertical coordinate/row)
     pub y: usize,
     /// alpha value of the pixel
     pub alpha: Scalar,

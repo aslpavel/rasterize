@@ -432,7 +432,7 @@ impl Mul<Transform> for Transform {
 }
 
 /// Bounding box with sides directed along the axes
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct BBox {
     /// Point with minimal x and y values
     min: Point,
