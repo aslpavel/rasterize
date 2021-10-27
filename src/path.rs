@@ -498,7 +498,7 @@ fn stroke_close(
         }
         _ => segments.extend(last.line_join(first, style)),
     }
-    std::mem::replace(segments, Vec::new())
+    std::mem::take(segments)
 }
 
 pub struct PathFlattenIter<'a> {
@@ -615,7 +615,7 @@ impl PathBuilder {
 
     /// Move current position, ending current subpath
     pub fn move_to(&mut self, p: impl Into<Point>) -> &mut Self {
-        let subpath = std::mem::replace(&mut self.subpath, Vec::new());
+        let subpath = std::mem::take(&mut self.subpath);
         self.subpaths.extend(SubPath::new(subpath, false));
         self.position = p.into();
         self
@@ -623,7 +623,7 @@ impl PathBuilder {
 
     /// Close current subpath
     pub fn close(&mut self) -> &mut Self {
-        let subpath = std::mem::replace(&mut self.subpath, Vec::new());
+        let subpath = std::mem::take(&mut self.subpath);
         if let Some(seg) = subpath.first() {
             self.position = seg.start();
         }
