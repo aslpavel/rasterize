@@ -392,7 +392,7 @@ pub enum SvgPathParserError {
 
 impl fmt::Display for SvgPathParserError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "SvgPathParser::{:?}", self)
     }
 }
 
