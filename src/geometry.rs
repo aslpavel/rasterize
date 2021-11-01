@@ -213,7 +213,7 @@ impl Mul for Point {
 }
 
 /// Alignment options
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Align {
     /// Alling by minimal value
     Min,

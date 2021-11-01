@@ -1,6 +1,10 @@
 //! Utility functions and types used accross the library
 use crate::{Scalar, EPSILON, PI};
-use std::{fmt, iter::FromIterator, ops::Mul};
+use std::{
+    fmt,
+    iter::{FromIterator, FusedIterator},
+    ops::Mul,
+};
 
 /// Restrict value to a certain interval
 #[inline]
@@ -50,14 +54,8 @@ impl<T, const SIZE: usize> ArrayIter<T, SIZE> {
         self.end += 1;
     }
 
-    /// Check if iterator is empty
     pub fn is_empty(&self) -> bool {
         self.start == self.end
-    }
-
-    /// Number of unconsumed elements
-    pub fn len(&self) -> usize {
-        self.end - self.start
     }
 
     pub fn into_array(self) -> [Option<T>; SIZE] {
@@ -132,6 +130,14 @@ impl<T, const SIZE: usize> DoubleEndedIterator for ArrayIter<T, SIZE> {
         }
     }
 }
+
+impl<T, const SIZE: usize> ExactSizeIterator for ArrayIter<T, SIZE> {
+    fn len(&self) -> usize {
+        self.end - self.start
+    }
+}
+
+impl<T, const SIZE: usize> FusedIterator for ArrayIter<T, SIZE> {}
 
 /// Square 3x3 matrix
 #[derive(Debug, Clone, Copy)]
@@ -441,6 +447,8 @@ pub mod tests {
         assert_eq!(iter.len(), 0);
         assert!(iter.is_empty());
         assert_eq!(iter.next(), None);
+        assert_eq!(iter.next(), None);
+        assert_eq!(iter.next_back(), None);
         assert_eq!(iter.next_back(), None);
     }
 }

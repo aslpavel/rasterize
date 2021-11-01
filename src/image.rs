@@ -1,5 +1,5 @@
 use crate::{Color, Size};
-use std::{io::Write, sync::Arc};
+use std::{any::type_name, fmt, io::Write, sync::Arc};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Shape {
@@ -274,6 +274,15 @@ pub struct ImageOwned<P> {
     data: Vec<P>,
 }
 
+impl<P> fmt::Debug for ImageOwned<P> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ImageOwned")
+            .field("shape", &self.shape)
+            .field("dtype", &type_name::<P>())
+            .finish_non_exhaustive()
+    }
+}
+
 impl<P> ImageOwned<P> {
     pub fn new(shape: Shape, data: Vec<P>) -> Self {
         Self { shape, data }
@@ -348,6 +357,15 @@ pub struct ImageRef<'a, P> {
     data: &'a [P],
 }
 
+impl<'a, P> fmt::Debug for ImageRef<'a, P> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ImageRef")
+            .field("shape", &self.shape)
+            .field("dtype", &type_name::<P>())
+            .finish_non_exhaustive()
+    }
+}
+
 impl<'a, P> ImageRef<'a, P> {
     pub fn new(shape: Shape, data: &'a [P]) -> Self {
         Self { shape, data }
@@ -369,6 +387,15 @@ impl<'a, P> Image for ImageRef<'a, P> {
 pub struct ImageMutRef<'a, C> {
     shape: Shape,
     data: &'a mut [C],
+}
+
+impl<'a, C> fmt::Debug for ImageMutRef<'a, C> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ImageMutRef")
+            .field("shape", &self.shape)
+            .field("dtype", &type_name::<C>())
+            .finish_non_exhaustive()
+    }
 }
 
 impl<'a, P> ImageMutRef<'a, P> {

@@ -354,7 +354,7 @@ impl<P: Paint> Paint for OpacityPaint<P> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Layer<C> {
     image: ImageOwned<C>,
     x: i32,
@@ -456,16 +456,5 @@ impl<C> Image for Layer<C> {
 impl<C> ImageMut for Layer<C> {
     fn data_mut(&mut self) -> &mut [Self::Pixel] {
         self.image.data_mut()
-    }
-}
-
-impl<C> fmt::Debug for Layer<C> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Layer")
-            .field("x", &self.x)
-            .field("y", &self.y)
-            .field("width", &self.width())
-            .field("height", &self.height())
-            .finish()
     }
 }

@@ -31,7 +31,7 @@ use crate::{
 };
 use std::{cmp::min, collections::VecDeque, fmt, rc::Rc, sync::Arc};
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Size {
     pub width: usize,
     pub height: usize,
@@ -243,6 +243,7 @@ impl Paint for Arc<dyn Paint> {
 }
 
 /// Signed difference based rasterizer
+#[derive(Debug, Clone)]
 pub struct SignedDifferenceRasterizer {
     flatness: Scalar,
 }
@@ -477,6 +478,7 @@ fn signed_difference_to_mask(mut img: impl ImageMut<Pixel = Scalar>, fill_rule: 
 /// once scan line convers point with the highest y coordinate.
 ///
 /// Reference: Computer graphics principles and practice (by Foley) 3.6 Filling Polygons.
+#[derive(Debug, Clone)]
 pub struct ActiveEdgeRasterizer {
     flatness: Scalar,
 }
