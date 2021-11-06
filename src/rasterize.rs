@@ -398,8 +398,8 @@ fn signed_difference_line(mut img: impl ImageMut<Pixel = Scalar>, line: Line) {
         // lower bound of effected x pixels
         let x0_floor = x0.floor().max(0.0);
         let x0i = x0_floor as i32;
-        // uppwer bound of effected x pixels
-        let x1_ceil = x1.ceil();
+        // upper bound of effected x pixels
+        let x1_ceil = x1.ceil().min(width);
         let x1i = x1_ceil as i32;
         if x1i <= x0i + 1 {
             // only goes through one pixel (with the total coverage of `d` spread over two pixels)
