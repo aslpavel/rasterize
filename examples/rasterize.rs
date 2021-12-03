@@ -1,7 +1,6 @@
 //! Very simple tool that accepts SVG path as an input and produces rasterized image
 #![deny(warnings)]
 
-use env_logger::Env;
 use rasterize::*;
 use std::{
     env, fmt,
@@ -9,12 +8,13 @@ use std::{
     io::{BufWriter, Read},
     sync::Arc,
 };
+use tracing::{debug, info};
 
 /// Add debug log message with time taken to execute provided function
 fn timeit<F: FnOnce() -> R, R>(msg: impl AsRef<str>, f: F) -> R {
     let start = std::time::Instant::now();
     let result = f();
-    log::debug!("{} {:?}", msg.as_ref(), start.elapsed());
+    debug!("{} {:?}", msg.as_ref(), start.elapsed());
     result
 }
 
@@ -240,7 +240,11 @@ fn outline(path: &Path, tr: Transform) -> Scene {
 }
 
 fn main() -> Result<(), Error> {
-    env_logger::from_env(Env::default().default_filter_or("debug")).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::new("debug"))
+        .with_writer(std::io::stderr)
+        .init();
+
     let args = parse_args()?;
     let rasterizer = args.get_rasterizer();
 
@@ -257,7 +261,7 @@ fn main() -> Result<(), Error> {
         }
     };
     let path = Arc::new(path);
-    log::info!("[path:segments_count] {}", path.segments_count());
+    info!("[path:segments_count] {}", path.segments_count());
 
     // resize if needed
     let tr = match args.width {

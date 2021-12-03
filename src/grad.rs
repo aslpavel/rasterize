@@ -10,13 +10,17 @@ pub enum GradSpread {
 
 impl GradSpread {
     pub fn at(&self, t: Scalar) -> Scalar {
-        // TODO: make sure that branch predicution eliminates this match
-        use GradSpread::*;
         match self {
-            Pad => t,
-            Repeat => t.rem_euclid(1.0),
-            Reflect => ((t + 1.0).rem_euclid(2.0) - 1.0).abs(),
+            GradSpread::Pad => t,
+            GradSpread::Repeat => t.rem_euclid(1.0),
+            GradSpread::Reflect => ((t + 1.0).rem_euclid(2.0) - 1.0).abs(),
         }
+    }
+}
+
+impl Default for GradSpread {
+    fn default() -> Self {
+        Self::Pad
     }
 }
 
@@ -278,7 +282,7 @@ mod tests {
     }
 
     #[test]
-    fn test_grad_stops() {
+    fn test_grad_stops() -> Result<(), Box<dyn std::error::Error>> {
         let stops = GradStops::new(vec![
             GradStop::new(0.0, LinColor::new(1.0, 0.0, 0.0, 1.0)),
             GradStop::new(0.5, LinColor::new(0.0, 1.0, 0.0, 1.0)),
@@ -288,6 +292,8 @@ mod tests {
         assert_eq!(stops.at(0.25), LinColor::new(0.5, 0.5, 0.0, 1.0));
         assert_eq!(stops.at(0.75), LinColor::new(0.0, 0.5, 0.5, 1.0));
         assert_eq!(stops.at(2.0), LinColor::new(0.0, 0.0, 1.0, 1.0));
+
+        Ok(())
     }
 
     #[test]
@@ -308,5 +314,34 @@ mod tests {
         assert!(grad.offset(fcenter).unwrap() < 0.0);
         assert_approx_eq!(grad.offset(Point::new(0.675, 0.0)).unwrap(), 0.5);
         assert_approx_eq!(grad.offset(Point::new(1.0, 0.0)).unwrap(), 1.0);
+    }
+
+    #[test]
+    fn test_ling_grad() -> Result<(), Box<dyn std::error::Error>> {
+        let c0 = "#89155180".parse()?;
+        let c1 = "#ff272d80".parse()?;
+        let c2 = "#ff272d00".parse()?;
+        let grad = GradLinear::new(
+            vec![
+                GradStop::new(0.0, c0),
+                GradStop::new(0.5, c1),
+                GradStop::new(1.0, c2),
+            ],
+            Units::UserSpaceOnUse,
+            true,
+            GradSpread::default(),
+            Transform::identity(),
+            (0.0, 0.0),
+            (1.0, 1.0),
+        );
+
+        assert_eq!(grad.at(Point::new(-0.5, -0.5)), c0);
+        assert_eq!(grad.at(Point::new(0.0, 0.0)), c0);
+        assert_eq!(grad.at(Point::new(1.0, 0.0)), c1);
+        assert_eq!(grad.at(Point::new(0.0, 1.0)), c1);
+        assert_eq!(grad.at(Point::new(1.0, 1.0)), c2);
+        assert_eq!(grad.at(Point::new(1.5, 1.5)), c2);
+
+        Ok(())
     }
 }

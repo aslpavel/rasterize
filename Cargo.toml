@@ -22,12 +22,12 @@ categories = ["rendering"]
 default = []
 
 [dependencies]
+tracing = "^0.1"
 png = {version = "^0.16", optional = true}
 
 [dev-dependencies]
 criterion = "^0.3"
-env_logger = "^0.7"
-log = "^0.4"
+tracing-subscriber = "^0.2"
 
 [[bench]]
 harness = false

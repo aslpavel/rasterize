@@ -186,12 +186,16 @@ impl LinColor {
     /// Used by gradient, do not make public
     pub(crate) fn into_linear(self) -> Self {
         let Self([r, g, b, a]) = self;
-        Self::new(
-            srgb_to_linear(r / a),
-            srgb_to_linear(g / a),
-            srgb_to_linear(b / a),
-            a,
-        )
+        if a <= f32::EPSILON {
+            Self::new(0.0, 0.0, 0.0, 0.0)
+        } else {
+            Self::new(
+                srgb_to_linear(r / a),
+                srgb_to_linear(g / a),
+                srgb_to_linear(b / a),
+                a,
+            )
+        }
     }
 }
 
