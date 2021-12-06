@@ -168,32 +168,35 @@ impl LinColor {
         other * t + self * (1.0 - t)
     }
 
-    /// Temporary convert to srgb color space
+    /// Convert into alpha-premultiplied SRGB from Linear RGB
     ///
     /// Used by gradients, do not make public
     pub(crate) fn into_srgb(self) -> Self {
         let Self([r, g, b, a]) = self;
-        if a <= f32::EPSILON {
+        if a <= 1e-6 {
             Self([0.0, 0.0, 0.0, 0.0])
         } else {
             Self::new(
-                linear_to_srgb(r / a),
-                linear_to_srgb(g / a),
-                linear_to_srgb(b / a),
+                linear_to_srgb(r / a) * a,
+                linear_to_srgb(g / a) * a,
+                linear_to_srgb(b / a) * a,
                 a,
             )
         }
     }
 
-    /// Convert back from temporary srgb color space
+    /// Convert into alpha-premultiplied Linear RGB from SRGB
     ///
     /// Used by gradient, do not make public
     pub(crate) fn into_linear(self) -> Self {
         let Self([r, g, b, a]) = self;
+        if a <= 1e-6 {
+            return Self([0.0, 0.0, 0.0, 0.0]);
+        }
         Self::new(
-            srgb_to_linear(r) * a,
-            srgb_to_linear(g) * a,
-            srgb_to_linear(b) * a,
+            srgb_to_linear(r / a) * a,
+            srgb_to_linear(g / a) * a,
+            srgb_to_linear(b / a) * a,
             a,
         )
     }

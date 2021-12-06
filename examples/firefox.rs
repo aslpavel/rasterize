@@ -5,7 +5,7 @@ use tracing_subscriber::fmt::format::FmtSpan;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-fn firefox() -> Result<Scene> {
+fn firefox(linear: bool) -> Result<Scene> {
     Ok(Scene::group(vec![
         Scene::fill(
             Arc::new("M770.28,91.56c-23.95,27.88-35.1,90.64-10.82,154.26s61.5,49.8,84.7,114.67c30.62,85.6,16.37,200.59,16.37,200.59s36.81,106.61,62.47-6.63C979.79,341.74,770.28,143.94,770.28,91.56Z".parse()?),
@@ -21,7 +21,7 @@ fn firefox() -> Result<Scene> {
                     GradStop::new(1.0, "#c42482".parse()?),
                 ],
                 Units::UserSpaceOnUse,
-                false,
+                linear,
                 GradSpread::default(),
                 Transform::new(0.76, 0.05, 11485.79, 0.03, -1.12, 11147.95),
                 (-14491.11, 9293.72),
@@ -45,7 +45,7 @@ fn firefox() -> Result<Scene> {
                     GradStop::new(0.57, "#4a1475".parse()?),
                 ],
                 Units::UserSpaceOnUse,
-                false,
+                linear,
                 GradSpread::default(),
                 Transform::new(1.23, 0.0, 9957.91, 0.0, -1.23,  11055.45),
                 (-7587.48, 8863.48),
@@ -64,7 +64,7 @@ fn firefox() -> Result<Scene> {
                     GradStop::new(1.0, "#00207900".parse()?),
                 ],
                 Units::UserSpaceOnUse,
-                false,
+                linear,
                 GradSpread::default(),
                 Transform::new(1.0, 0.0, 0.0, 0.0, -1.0, 984.0),
                 (540.64, 254.8),
@@ -81,7 +81,7 @@ fn firefox() -> Result<Scene> {
                     GradStop::new(1.0, "#c42482".parse()?),
                 ],
                 Units::UserSpaceOnUse,
-                false,
+                linear,
                 GradSpread::default(),
                 Transform::new(1.22, 0.12, 10240.78, 0.12, -1.22,  10765.16),
                 (-8337.74, 7467.89),
@@ -105,7 +105,7 @@ fn firefox() -> Result<Scene> {
                     GradStop::new(1.0, "#ff0039".parse()?),
                 ],
                 Units::UserSpaceOnUse,
-                false,
+                linear,
                 GradSpread::default(),
                 Transform::new(1.22, 0.12, 10240.78, 0.12, -1.22,  10765.16),
                 (-8361.89, 7723.8),
@@ -124,7 +124,7 @@ fn firefox() -> Result<Scene> {
                     GradStop::new(0.99, "#620700".parse()?),
                 ],
                 Units::UserSpaceOnUse,
-                false,
+                linear,
                 GradSpread::default(),
                 Transform::new(1.22, 0.12, 10240.78, 0.12, -1.22,  10765.16),
                 (-8298.85, 7310.66),
@@ -149,7 +149,7 @@ fn firefox() -> Result<Scene> {
                     GradStop::new(0.94, "#b5007f".parse()?),
                 ],
                 Units::UserSpaceOnUse,
-                false,
+                linear,
                 GradSpread::default(),
                 Transform::new(1.0, 0.0, 0.0, 0.0, -1.0, 984.0),
                 (715.19, 589.96),
@@ -171,7 +171,7 @@ fn firefox() -> Result<Scene> {
                     GradStop::new(0.99, "#ff4a1d".parse()?),
                 ],
                 Units::UserSpaceOnUse,
-                false,
+                linear,
                 GradSpread::default(),
                 Transform::new(1.0, 0.0, 0.0, 0.0, -1.0, 984.0),
                 (670.34, 952.71),
@@ -194,7 +194,7 @@ fn firefox() -> Result<Scene> {
                     GradStop::new(1.0, "#ffe302".parse()?),
                 ],
                 Units::UserSpaceOnUse,
-                false,
+                linear,
                 GradSpread::default(),
                 Transform::new(1.22, 0.12, 10240.78, 0.12, -1.22, 10765.16),
                 (-9023.45, 7636.92),
@@ -210,7 +210,7 @@ fn firefox() -> Result<Scene> {
                     GradStop::new(1.0, "#c4248200".parse()?),
                 ],
                 Units::UserSpaceOnUse,
-                false,
+                linear,
                 GradSpread::default(),
                 Transform::new(0.99, 0.1, -250.09, 0.1, -0.99, 2306.15),
                 (188.87, 2081.23),
@@ -227,7 +227,7 @@ fn firefox() -> Result<Scene> {
                     GradStop::new(1.0,  "#ff272d00".parse()?),
                 ],
                 Units::UserSpaceOnUse,
-                false,
+                linear,
                 GradSpread::default(),
                 Transform::new(0.99, 0.1, 229.04, 0.1, -0.99 , 745.74),
                 (-38.43, 278.04),
@@ -249,11 +249,60 @@ fn firefox() -> Result<Scene> {
                     GradStop::new(0.77, "#c4248200".parse()?),
                 ],
                 Units::UserSpaceOnUse,
-                false,
+                linear,
                 GradSpread::default(),
                 Transform::new(0.99, 0.1, 229.04, 0.1, -0.99 , 745.74),
                 (142.46, 93.68),
                 (142.53, 168.46),
+            )),
+            FillRule::default(),
+        ),
+        Scene::fill(
+            Arc::new("M813.74,801.65c104.16-102.27,156.86-226.58,134.58-366,0,0,8.9,71.5-24.85,144.63,16.21-71.39,18.1-160.11-25-252C841,205.64,746.45,141.11,710.35,114.19,655.66,73.4,633,31.87,632.57,23.3c-16.34,33.48-65.77,148.2-5.31,247,56.64,92.56,145.86,120,208.33,205C950.67,631.67,813.74,801.65,813.74,801.65Z".parse()?),
+            Arc::new(GradLinear::new(
+                vec![
+                    GradStop::new(0.0, "#fff14f".parse()?),
+                    GradStop::new(0.27, "#ffee4c".parse()?),
+                    GradStop::new(0.45, "#ffe643".parse()?),
+                    GradStop::new(0.61, "#ffd834".parse()?),
+                    GradStop::new(0.76, "#ffc41e".parse()?),
+                    GradStop::new(0.89, "#ffab02".parse()?),
+                    GradStop::new(0.9, "#ffa900".parse()?),
+                    GradStop::new(0.95, "#ffa000".parse()?),
+                    GradStop::new(1.0, "#ff9100".parse()?),
+                ],
+                Units::UserSpaceOnUse,
+                linear,
+                GradSpread::default(),
+                Transform::new(1.0, 0.0, 0.0, 0.0, -1.0, 984.0),
+                (620.52, 947.88),
+                (926.18, 264.39),
+            )),
+            FillRule::default(),
+        ),
+        Scene::fill(
+            Arc::new("M798.81,535.55C762.41,460.35,717,427.55,674,392c5,7,6.23,9.47,9,14,37.83,40.32,93.61,138.66,53.11,262.11C659.88,900.48,355,791.06,323,760.32,335.93,894.81,561,959.16,707.6,872,791,793,858.47,658.79,798.81,535.55Z".parse()?),
+            Arc::new(GradLinear::new(
+                vec![
+                    GradStop::new(0.0, "#ff8e00".parse()?),
+                    GradStop::new(0.04, "#ff8e00db".parse()?),
+                    GradStop::new(0.08, "#ff8e00ba".parse()?),
+                    GradStop::new(0.13, "#ff8e00a0".parse()?),
+                    GradStop::new(0.18, "#ff8e008e".parse()?),
+                    GradStop::new(0.23, "#ff8e0082".parse()?),
+                    GradStop::new(0.28, "#ff8e007f".parse()?),
+                    GradStop::new(0.39, "#ff8e007a".parse()?),
+                    GradStop::new(0.52, "#ff8e006b".parse()?),
+                    GradStop::new(0.68, "#ff8e004f".parse()?),
+                    GradStop::new(0.84, "#ff8e002b".parse()?),
+                    GradStop::new(1.0, "#ff8e0000".parse()?),
+                ],
+                Units::UserSpaceOnUse,
+                linear,
+                GradSpread::default(),
+                Transform::new(1.0, 0.0, 0.0, 0.0, -1.0, 984.0),
+                (680.88, 554.79),
+                (536.1, 166.04),
             )),
             FillRule::default(),
         ),
@@ -267,7 +316,7 @@ fn main() -> Result<()> {
         .with_writer(std::io::stderr)
         .init();
 
-    let scene = firefox()?;
+    let scene = firefox(false)?;
 
     let view = BBox::new((0.0, 0.0), (953.37, 984.0));
     let size = BBox::new((0.0, 0.0), (512.0, 512.0));
@@ -277,7 +326,7 @@ fn main() -> Result<()> {
 
     let span = tracing::info_span!("render");
     let img = span.in_scope(|| {
-        let img = scene.render(&rasterizer, tr, Some(size), Some("#ffffff".parse()?));
+        let img = scene.render(&rasterizer, tr, Some(size), Some("#00000000".parse()?));
         Result::Ok(img)
     })?;
     img.write_bmp(std::io::stdout())?;
