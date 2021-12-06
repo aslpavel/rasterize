@@ -1,6 +1,7 @@
 #![deny(warnings)]
 use rasterize::*;
 use std::sync::Arc;
+use tracing_subscriber::fmt::format::FmtSpan;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -236,7 +237,6 @@ fn firefox() -> Result<Scene> {
         ),
         Scene::fill(
             Arc::new("M325.07,657.5c49.44,17.21,107,14.19,141.52-4.86,23.09-12.85,52.7-33.43,70.92-28.35-15.78-6.24-27.73-9.15-42.1-9.86-2.45,0-5.38,0-8-.32a136,136,0,0,0-15.76.86c-8.9.82-18.77,6.43-27.74,5.53-.48,0,8.7-3.77,8-3.61-4.75,1-9.92,1.21-15.37,1.88-3.47.39-6.45.82-9.89,1-103,8.73-190-55.81-190-55.81-7.41,25,33.17,74.3,88.52,93.57Z".parse()?),
-            /*
             Arc::new(GradLinear::new(
                 vec![
                     GradStop::new(0.0, "#c42482".parse()?),
@@ -255,8 +255,6 @@ fn firefox() -> Result<Scene> {
                 (142.46, 93.68),
                 (142.53, 168.46),
             )),
-            */
-            Arc::new("#00ff00".parse::<LinColor>()?),
             FillRule::default(),
         ),
     ]))
@@ -265,6 +263,7 @@ fn firefox() -> Result<Scene> {
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::new("debug"))
+        .with_span_events(FmtSpan::CLOSE)
         .with_writer(std::io::stderr)
         .init();
 
@@ -276,7 +275,11 @@ fn main() -> Result<()> {
 
     let rasterizer = ActiveEdgeRasterizer::default();
 
-    let img = scene.render(&rasterizer, tr, Some(size), None);
+    let span = tracing::info_span!("render");
+    let img = span.in_scope(|| {
+        let img = scene.render(&rasterizer, tr, Some(size), Some("#ffffff".parse()?));
+        Result::Ok(img)
+    })?;
     img.write_bmp(std::io::stdout())?;
 
     Ok(())
