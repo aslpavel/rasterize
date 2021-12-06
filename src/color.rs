@@ -88,7 +88,7 @@ impl Color for ColorU8 {
 impl From<LinColor> for ColorU8 {
     fn from(lin: LinColor) -> Self {
         let LinColor([r, g, b, a]) = lin;
-        if a < std::f32::EPSILON {
+        if a <= std::f32::EPSILON {
             return ColorU8::default();
         }
         let r = (linear_to_srgb(r / a) * 255.0 + 0.5) as u8;
@@ -173,12 +173,16 @@ impl LinColor {
     /// Used by gradients, do not make public
     pub(crate) fn into_srgb(self) -> Self {
         let Self([r, g, b, a]) = self;
-        Self::new(
-            linear_to_srgb(r * a),
-            linear_to_srgb(g * a),
-            linear_to_srgb(b * a),
-            a,
-        )
+        if a <= f32::EPSILON {
+            Self([0.0, 0.0, 0.0, 0.0])
+        } else {
+            Self::new(
+                linear_to_srgb(r / a),
+                linear_to_srgb(g / a),
+                linear_to_srgb(b / a),
+                a,
+            )
+        }
     }
 
     /// Convert back from temporary srgb color space
@@ -186,16 +190,12 @@ impl LinColor {
     /// Used by gradient, do not make public
     pub(crate) fn into_linear(self) -> Self {
         let Self([r, g, b, a]) = self;
-        if a <= f32::EPSILON {
-            Self::new(0.0, 0.0, 0.0, 0.0)
-        } else {
-            Self::new(
-                srgb_to_linear(r / a),
-                srgb_to_linear(g / a),
-                srgb_to_linear(b / a),
-                a,
-            )
-        }
+        Self::new(
+            srgb_to_linear(r) * a,
+            srgb_to_linear(g) * a,
+            srgb_to_linear(b) * a,
+            a,
+        )
     }
 }
 
@@ -390,6 +390,8 @@ pub fn lerp_u8x4(a: u32, b: u32, t: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
+    use crate::assert_approx_eq;
+
     use super::*;
 
     #[test]
@@ -413,6 +415,23 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn test_conversion() -> Result<(), ColorError> {
+        let c: ColorU8 = "#ff804010".parse()?;
+        let l: LinColor = c.into();
+        let r: ColorU8 = l.into();
+        assert_eq!(c, r);
+        Ok(())
+    }
+
+    #[test]
+    fn test_lin_and_srgb() {
+        for i in 0..255 {
+            let v = i as f32 / 255.0;
+            assert_approx_eq!(v, linear_to_srgb(srgb_to_linear(v)), 1e-4);
+            assert_approx_eq!(v, srgb_to_linear(linear_to_srgb(v)), 1e-4);
+        }
+    }
     /*
     #[test]
     fn test_mul_u8x4() {

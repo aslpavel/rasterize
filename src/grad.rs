@@ -344,4 +344,48 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_srgb() -> Result<(), Box<dyn std::error::Error>> {
+        use crate::Color;
+
+        for flag in [true, false] {
+            let grad = GradLinear::new(
+                vec![
+                    GradStop::new(0.01, "#89155180".parse()?),
+                    GradStop::new(0.48, "#ff272d80".parse()?),
+                    GradStop::new(1.0, "#ff272d00".parse()?),
+                ],
+                Units::UserSpaceOnUse,
+                flag,
+                GradSpread::Pad,
+                Transform::identity(),
+                (0.0, 0.0),
+                (0.0, 1.0),
+            );
+
+            let c = grad.at(Point::new(0.0, 0.8));
+            println!("{:#?}", grad.stops.stops);
+            println!("lin={} c={:?} rgba={:?}", flag, c, c.to_rgba());
+        }
+        assert!(false);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_blabla() -> Result<(), Box<dyn std::error::Error>> {
+        let mut stops = GradStops::new(vec![
+            GradStop::new(0.0, "#ff272d80".parse()?),
+            GradStop::new(1.0, "#ff272d00".parse()?),
+        ]);
+        dbg!(&stops);
+        dbg!(stops.at(0.75));
+        stops.convert_to_srgb();
+        dbg!(&stops);
+        let c = stops.at(0.5);
+        dbg!(c, c.into_linear());
+        assert!(false);
+        Ok(())
+    }
 }
