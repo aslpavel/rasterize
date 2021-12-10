@@ -107,18 +107,7 @@ fn fill_impl(
     for pixel in pixels {
         let dst = &mut data[shape.offset(pixel.y, pixel.x)];
         let color = color_at(pixel);
-        if pixel.y == 7 && pixel.x == 18 {
-            eprintln!("------------------------");
-            dbg!(
-                color,
-                pixel,
-                *dst,
-                dst.blend_over(&color.with_alpha(pixel.alpha))
-            );
-            *dst = LinColor::new(1.0, 1.0, 1.0, 1.0);
-        } else {
-            *dst = dst.blend_over(&color.with_alpha(pixel.alpha));
-        }
+        *dst = dst.blend_over(&color.with_alpha(pixel.alpha));
     }
 }
 
