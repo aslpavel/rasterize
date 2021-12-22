@@ -311,7 +311,7 @@ fn firefox(linear: bool) -> Result<Scene> {
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::new("debug"))
+        .with_env_filter("debug")
         .with_span_events(FmtSpan::CLOSE)
         .with_writer(std::io::stderr)
         .init();

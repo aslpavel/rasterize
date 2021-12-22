@@ -241,7 +241,7 @@ fn outline(path: &Path, tr: Transform) -> Scene {
 
 fn main() -> Result<(), Error> {
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::new("debug"))
+        .with_env_filter("debug")
         .with_writer(std::io::stderr)
         .init();
 
