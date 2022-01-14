@@ -155,10 +155,10 @@ pub trait Image {
         Self: Sized,
     {
         let mut encoder = png::Encoder::new(out, self.width() as u32, self.height() as u32);
-        encoder.set_color(png::ColorType::RGBA);
+        encoder.set_color(png::ColorType::Rgba);
         encoder.set_depth(png::BitDepth::Eight);
         let mut writer = encoder.write_header()?;
-        let mut stream_writer = writer.stream_writer();
+        let mut stream_writer = writer.stream_writer()?;
         for color in self.iter() {
             stream_writer.write_all(&color.to_rgba())?;
         }
