@@ -78,11 +78,11 @@ pub trait Curve: Into<Segment> {
     /// `f(t) = self.length(0.0, t) - l == 0` using Newton's method with fallback
     /// to bisection if next iteration will produce out of bound value.
     ///
-    /// Reference: https://www.geometrictools.com/Documentation/MovingAlongCurveSpecifiedSpeed.pdf
-    fn from_length(&self, l: Scalar, error: Option<Scalar>) -> Scalar {
+    /// Reference: <https://www.geometrictools.com/Documentation/MovingAlongCurveSpecifiedSpeed.pdf>
+    fn param_at_length(&self, l: Scalar, error: Option<Scalar>) -> Scalar {
         let deriv = self.deriv();
         let length = self.length(0.0, 1.0);
-        let error = error.unwrap_or_else(|| length / 1e4);
+        let error = error.unwrap_or(length / 1e4);
         let l = clamp(l, 0.0, length);
 
         let f = |t| self.length(0.0, t) - l;
@@ -1682,13 +1682,13 @@ mod tests {
     }
 
     #[test]
-    fn test_from_length() {
+    fn test_param_at_length() {
         let cubic = Cubic::new((40.0, 118.0), (45.0, 216.0), (190.0, 196.0), (209.0, 23.0));
         let length = cubic.length(0.0, 1.0);
         let error = length / 1000.0;
         for index in 0..128 {
             let l = length * index as Scalar / 127.0;
-            let t = cubic.from_length(l, Some(error));
+            let t = cubic.param_at_length(l, Some(error));
             assert_approx_eq!(cubic.length(0.0, t), l, error)
         }
     }

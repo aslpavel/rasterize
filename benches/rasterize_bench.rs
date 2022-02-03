@@ -26,7 +26,7 @@ fn curve_benchmark(c: &mut Criterion) {
     group.bench_function("bbox", |b| b.iter(|| black_box(cubic).bbox(None)));
     group.bench_function("length", |b| b.iter(|| black_box(cubic).length(0.0, 1.0)));
     group.bench_function("from length", |b| {
-        b.iter(|| cubic.from_length(black_box(length), None))
+        b.iter(|| cubic.param_at_length(black_box(length), None))
     });
 }
 

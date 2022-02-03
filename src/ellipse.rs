@@ -36,7 +36,7 @@ impl EllipArc {
     /// Convert arc from SVG arguments to parametric curve
     ///
     /// This code mostly comes from arc implementation notes from svg sepc
-    /// (Arc to Parametric)[https://www.w3.org/TR/SVG/implnote.html#ArcImplementationNotes]
+    /// [Arc to Parametric](https://www.w3.org/TR/SVG/implnote.html#ArcImplementationNotes)
     pub fn new_param(
         src: Point,
         dst: Point,

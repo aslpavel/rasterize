@@ -390,7 +390,7 @@ impl Path {
     /// Save path in SVG path format.
     pub fn write_svg_path(&self, mut out: impl Write) -> std::io::Result<()> {
         for subpath in self.subpaths.iter() {
-            write!(&mut out, "M{:?} ", subpath.start())?;
+            write!(out, "M{:?} ", subpath.start())?;
             let mut segment_type: Option<u8> = None;
             for segment in subpath.segments().iter() {
                 match segment {
@@ -398,21 +398,21 @@ impl Path {
                         if segment_type.replace(b'L') != Some(b'L') {
                             out.write_all(b"L")?;
                         }
-                        write!(&mut out, "{:?} ", line.end())?;
+                        write!(out, "{:?} ", line.end())?;
                     }
                     Segment::Quad(quad) => {
                         let [_, p1, p2] = quad.points();
                         if segment_type.replace(b'Q') != Some(b'Q') {
                             out.write_all(b"Q")?;
                         }
-                        write!(&mut out, "{:?} {:?} ", p1, p2)?;
+                        write!(out, "{:?} {:?} ", p1, p2)?;
                     }
                     Segment::Cubic(cubic) => {
                         let [_, p1, p2, p3] = cubic.points();
                         if segment_type.replace(b'C') != Some(b'C') {
                             out.write_all(b"C")?;
                         }
-                        write!(&mut out, "{:?} {:?} {:?} ", p1, p2, p3)?;
+                        write!(out, "{:?} {:?} {:?} ", p1, p2, p3)?;
                     }
                 }
             }

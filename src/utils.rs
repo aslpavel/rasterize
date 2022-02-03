@@ -213,7 +213,7 @@ pub fn quadratic_solve(a: Scalar, b: Scalar, c: Scalar) -> ArrayIter<Scalar, 2> 
 }
 
 /// Solve cubic equation `a * t ^ 3 + b * t ^ 2 + c * t + d = 0` for `t`
-/// Reference: https://www.trans4mind.com/personal_development/mathematics/polynomials/cubicAlgebra.htm
+/// Reference: <https://www.trans4mind.com/personal_development/mathematics/polynomials/cubicAlgebra.htm>
 #[allow(clippy::many_single_char_names)]
 pub fn cubic_solve(a: Scalar, b: Scalar, c: Scalar, d: Scalar) -> ArrayIter<Scalar, 3> {
     let mut results = ArrayIter::<Scalar, 3>::new();

@@ -1,14 +1,19 @@
 use crate::{utils::quadratic_solve, LinColor, Paint, Point, Scalar, Transform, Units};
 use std::cmp::Ordering;
 
+/// Gradient spread logic for the parameter smaller than 0 and greater than 1
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GradSpread {
+    /// Use the same colors as the edge of the gradient
     Pad,
+    /// Repeat gradient
     Repeat,
+    /// Repeat gradient but alternate reflected and non reflectet versions
     Reflect,
 }
 
 impl GradSpread {
+    /// Map gradient parameter value to the range of [0, 1]
     pub fn at(&self, t: Scalar) -> Scalar {
         match self {
             GradSpread::Pad => t,
@@ -24,6 +29,7 @@ impl Default for GradSpread {
     }
 }
 
+/// Specifies color at a particular parmeter offset of the gradient
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GradStop {
     pub position: Scalar,
@@ -36,6 +42,7 @@ impl GradStop {
     }
 }
 
+/// List of all `GradStop` in the gradient
 #[derive(Debug, Clone)]
 pub struct GradStops {
     stops: Vec<GradStop>,
@@ -97,6 +104,7 @@ impl From<Vec<GradStop>> for GradStops {
     }
 }
 
+/// Linear Gradient
 #[derive(Debug, Clone)]
 pub struct GradLinear {
     stops: GradStops,
@@ -159,6 +167,7 @@ impl Paint for GradLinear {
     }
 }
 
+/// Radial Gradient
 #[derive(Debug, Clone)]
 pub struct GradRadial {
     stops: GradStops,

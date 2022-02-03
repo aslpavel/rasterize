@@ -5,13 +5,18 @@ use std::{
     str::FromStr,
 };
 
+/// Common interface to all color representations
 pub trait Color {
+    /// Blend other color on top of this color
     fn blend_over(&self, other: &Self) -> Self;
 
+    /// Override alpha component of the color
     fn with_alpha(&self, alpha: Scalar) -> Self;
 
+    /// Convert color to sRGBA list
     fn to_rgba(&self) -> [u8; 4];
 
+    /// Convert color to sRGB list (alpha is discarded)
     fn to_rgb(&self) -> [u8; 3]
     where
         Self: Sized,
@@ -315,6 +320,7 @@ pub fn linear_to_srgb(value: f32) -> f32 {
 }
 */
 
+/// Convert sRGB color component into a Linear RGB color component.
 #[inline]
 pub fn srgb_to_linear(value: f32) -> f32 {
     if value <= 0.04045 {
