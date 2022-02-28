@@ -1,6 +1,7 @@
 use crate::{Color, Size};
 use std::{any::type_name, fmt, io::Write, sync::Arc};
 
+/// Shape defines size and layout of the data inside an image
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Shape {
     /// Width of the image
@@ -37,6 +38,7 @@ impl Shape {
     }
 }
 
+/// Trait common to all image types
 pub trait Image {
     /// Pixel type
     type Pixel;
@@ -62,11 +64,13 @@ pub trait Image {
         self.shape().height
     }
 
+    /// Get pixel at the specified row and column
     fn get(&self, row: usize, col: usize) -> Option<&Self::Pixel> {
         let offset = self.shape().offset(row, col);
         self.data().get(offset)
     }
 
+    /// Create immutable view to the image of the concrete type of `ImageRef`
     fn as_ref(&self) -> ImageRef<'_, Self::Pixel> {
         ImageRef {
             shape: self.shape(),
@@ -167,6 +171,7 @@ pub trait Image {
     }
 }
 
+/// Immutable iterator over pixels
 pub struct ImageIter<'a, P> {
     index: usize,
     shape: Shape,
@@ -174,6 +179,7 @@ pub struct ImageIter<'a, P> {
 }
 
 impl<'a, P> ImageIter<'a, P> {
+    /// Get current (row, column) of the pixel
     pub fn position(&self) -> (usize, usize) {
         self.shape.nth(self.index).unwrap_or((self.shape.height, 0))
     }
@@ -194,14 +200,18 @@ impl<'a, P> Iterator for ImageIter<'a, P> {
     }
 }
 
+/// Mutable image interface
 pub trait ImageMut: Image {
+    /// Get a mutable slice of image data
     fn data_mut(&mut self) -> &mut [Self::Pixel];
 
+    /// Get a mutable reference to the specified pixel
     fn get_mut(&mut self, row: usize, col: usize) -> Option<&mut Self::Pixel> {
         let index = self.shape().offset(row, col);
         self.data_mut().get_mut(index)
     }
 
+    /// Create concrete type reference to the image
     fn as_mut(&mut self) -> ImageMutRef<'_, Self::Pixel> {
         ImageMutRef {
             shape: self.shape(),
@@ -209,6 +219,7 @@ pub trait ImageMut: Image {
         }
     }
 
+    /// Fill image with the default pixel value
     fn clear(&mut self)
     where
         Self::Pixel: Default,
@@ -222,6 +233,7 @@ pub trait ImageMut: Image {
         }
     }
 
+    /// Create iterator over mutable references to all the pixel of the image
     fn iter_mut(&mut self) -> ImageMutIter<'_, Self::Pixel> {
         ImageMutIter {
             index: 0,
@@ -231,6 +243,7 @@ pub trait ImageMut: Image {
     }
 }
 
+/// Iterator over mutable references to all the pixels of the image
 pub struct ImageMutIter<'a, P> {
     index: usize,
     shape: Shape,
@@ -238,6 +251,7 @@ pub struct ImageMutIter<'a, P> {
 }
 
 impl<'a, P> ImageMutIter<'a, P> {
+    /// Current (row, col) position of the iterator
     pub fn position(&self) -> (usize, usize) {
         self.shape.nth(self.index).unwrap_or((self.shape.height, 0))
     }
@@ -268,6 +282,7 @@ impl<'a, P> Iterator for ImageMutIter<'a, P> {
     }
 }
 
+/// Create an image that owns the data
 #[derive(Clone)]
 pub struct ImageOwned<P> {
     shape: Shape,
@@ -284,10 +299,12 @@ impl<P> fmt::Debug for ImageOwned<P> {
 }
 
 impl<P> ImageOwned<P> {
+    /// Construct owned image from the `data` and the `shape`
     pub fn new(shape: Shape, data: Vec<P>) -> Self {
         Self { shape, data }
     }
 
+    /// Construct owned image filled with default color with provided `size`
     pub fn new_default(size: Size) -> Self
     where
         P: Default,
@@ -295,6 +312,8 @@ impl<P> ImageOwned<P> {
         Self::new_with(size, |_, _| Default::default())
     }
 
+    /// Construct owned image from the size and the function which is callled
+    /// with all (row, col) pair and returns pixel value.
     pub fn new_with<F>(size: Size, mut f: F) -> Self
     where
         F: FnMut(usize, usize) -> P,
@@ -316,6 +335,7 @@ impl<P> ImageOwned<P> {
         }
     }
 
+    /// Construct empty image of zero size
     pub fn empty() -> Self {
         Self {
             shape: Shape {
@@ -328,6 +348,7 @@ impl<P> ImageOwned<P> {
         }
     }
 
+    /// Convert image to a vector
     pub fn into_vec(self) -> Vec<P> {
         self.data
     }
@@ -351,6 +372,7 @@ impl<C> ImageMut for ImageOwned<C> {
     }
 }
 
+/// Reference to an image or another reference
 #[derive(Clone)]
 pub struct ImageRef<'a, P> {
     shape: Shape,
@@ -384,6 +406,7 @@ impl<'a, P> Image for ImageRef<'a, P> {
     }
 }
 
+/// Mutable reference to an image or another mutable reference
 pub struct ImageMutRef<'a, C> {
     shape: Shape,
     data: &'a mut [C],

@@ -31,6 +31,7 @@ use crate::{
 };
 use std::{cmp::min, collections::VecDeque, fmt, rc::Rc, sync::Arc};
 
+/// Size of the rectangular area with integer width and height
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Size {
     pub width: usize,
@@ -175,6 +176,7 @@ impl Default for Units {
     }
 }
 
+/// Common interface for anything that can be used to fill an area
 pub trait Paint: fmt::Debug {
     // Get color at specified point
     fn at(&self, point: Point) -> LinColor;

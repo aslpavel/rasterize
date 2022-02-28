@@ -354,6 +354,7 @@ impl<P: Paint> Paint for OpacityPaint<P> {
     }
 }
 
+/// An `OwnedImage` together with an offset
 #[derive(Debug, Clone)]
 pub struct Layer<C> {
     image: ImageOwned<C>,

@@ -1682,7 +1682,7 @@ mod tests {
     }
 
     #[test]
-    fn test_from_length() {
+    fn test_param_at_length() {
         let cubic = Cubic::new((40.0, 118.0), (45.0, 216.0), (190.0, 196.0), (209.0, 23.0));
         let length = cubic.length(0.0, 1.0);
         let error = length / 1000.0;
