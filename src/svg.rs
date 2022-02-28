@@ -148,7 +148,7 @@ impl<I: Read> SvgPathParser<I> {
         }
     }
 
-    // consume seprators from the input
+    // consume separators from the input
     fn parse_separators(&mut self) -> Result<(), SvgPathParserError> {
         loop {
             let byte = match self.parse_byte()? {

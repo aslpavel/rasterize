@@ -231,7 +231,7 @@ impl Scene {
                             None => return,
                             Some(bbox) => bbox,
                         };
-                        // accout for anti-aliasing
+                        // account for anti-aliasing
                         let bbox = bbox.extend(bbox.max() + Point::new(1.0, 1.0));
 
                         let child_layer = child.render(rasterizer, tr, Some(bbox), None);
@@ -285,7 +285,7 @@ impl Scene {
     // Check if quick opacity can be used
     //
     // This function checks if all rendering nodes are non-intersecting, and as the result
-    // it is safe to premultiply brush with opacity instead of doing ofscreen rendering
+    // it is safe to pre-multiply brush with opacity instead of doing offscreen rendering
     fn is_quick_opacity(&self) -> bool {
         fn is_quick_opacity_rec(scene: &Scene, boxes: &mut Vec<BBox>, tr: Transform) -> bool {
             use SceneInner::*;

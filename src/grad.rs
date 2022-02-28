@@ -206,14 +206,16 @@ impl GradRadial {
 
     /// Calculate gradient offset at a given point
     fn offset(&self, point: Point) -> Option<Scalar> {
-        // Two circle gradient is an interpolation between two cirles (fc, fr) and (c, r),
+        // Two circle gradient is an interpolation between two circles (fc, fr) and (c, r),
         // with center `c(t) = (1 - t) * fc + t * c`, and radius `r(t) = (1 - t) * fr + t * r`.
         // If we have a pixel with coordinates `p`, we should solve equation for it
         // `|| c(t) - p || = r(t)` and pick solution corresponding to bigger radius.
         //
         // Solving this equation for `t`:
+        //```
         //     || c(t) - p || = r(t)  -> At² - 2Bt + C = 0
         // where:
+        //
         //     cd = c - fc
         //     pd = p - fc
         //     rd = r - fr
@@ -222,7 +224,7 @@ impl GradRadial {
         //     C = pdx ^2 + pdy ^ 2 - fradius ^ 2
         // results in:
         //     t = (B +/- (B ^ 2 - A * C).sqrt()) / A
-        //
+        //```
         // [reference]: https://cgit.freedesktop.org/pixman/tree/pixman/pixman-radial-gradient.c
 
         let cd = self.center - self.fcenter;

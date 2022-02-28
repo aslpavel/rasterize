@@ -22,7 +22,7 @@ pub trait Curve: Into<Segment> {
         CurveFlattenIter::new(self.transform(tr), flatness)
     }
 
-    /// Correspond to maximum diviation of the curve from the straight line
+    /// Correspond to maximum deviation of the curve from the straight line
     /// `f = max |curve(t) - line(curve_start, curve_end)(t)|`. This function
     /// actually returns `16.0 * f^2` to avoid unneeded division and square root.
     fn flatness(&self) -> Scalar;
@@ -44,10 +44,10 @@ pub trait Curve: Into<Segment> {
         self.split_at(0.5)
     }
 
-    /// Split the curve at prameter value `t`
+    /// Split the curve at parameter value `t`
     fn split_at(&self, t: Scalar) -> (Self, Self);
 
-    /// Create subcurve specified starting at parameter value `a` and ending at value `b`
+    /// Create sub-curve specified starting at parameter value `a` and ending at value `b`
     fn cut(&self, a: Scalar, b: Scalar) -> Self;
 
     /// Extend provided `init` bounding box with the bounding box of the curve
@@ -66,7 +66,7 @@ pub trait Curve: Into<Segment> {
     /// crosses y axis.
     fn roots(&self) -> CurveRoots;
 
-    /// Find all extermities of the curve `curve'(t)_x = 0 || curve'(t)_y = 0`
+    /// Find all extremities of the curve `curve'(t)_x = 0 || curve'(t)_y = 0`
     fn extremities(&self) -> CurveExtremities;
 
     /// Calculate length of the curve from `t0` to `t1`
@@ -74,15 +74,15 @@ pub trait Curve: Into<Segment> {
 
     /// Find value of parameter `t` given desired `l` length of the segment
     ///
-    /// This method is not particulary fast, parmeter value is found by solving
+    /// This method is not particularly fast, parameter value is found by solving
     /// `f(t) = self.length(0.0, t) - l == 0` using Newton's method with fallback
     /// to bisection if next iteration will produce out of bound value.
     ///
-    /// Reference: https://www.geometrictools.com/Documentation/MovingAlongCurveSpecifiedSpeed.pdf
-    fn from_length(&self, l: Scalar, error: Option<Scalar>) -> Scalar {
+    /// Reference: <https://www.geometrictools.com/Documentation/MovingAlongCurveSpecifiedSpeed.pdf>
+    fn param_at_length(&self, l: Scalar, error: Option<Scalar>) -> Scalar {
         let deriv = self.deriv();
         let length = self.length(0.0, 1.0);
-        let error = error.unwrap_or_else(|| length / 1e4);
+        let error = error.unwrap_or(length / 1e4);
         let l = clamp(l, 0.0, length);
 
         let f = |t| self.length(0.0, t) - l;
@@ -117,7 +117,7 @@ pub trait Curve: Into<Segment> {
     }
 }
 
-/// Iterator over line segments aproximating curve segment
+/// Iterator over line segments approximating curve segment
 pub struct CurveFlattenIter {
     flatness: Scalar,
     stack: Vec<Segment>,
@@ -335,7 +335,7 @@ const QI: M3x3 = M3x3([
 
 /// Quadratic bezier curve
 ///
-/// Polynimial form:
+/// Polynomial form:
 /// `(1 - t) ^ 2 * p0 + 2 * (1 - t) * t * p1 + t ^ 2 * p2`
 /// Matrix from:
 /// ```text
@@ -373,7 +373,7 @@ impl Quad {
         self.0
     }
 
-    /// Tanget lines at the ends of the quadratic bezier curve
+    /// Tangent lines at the ends of the quadratic bezier curve
     pub fn ends(&self) -> (Line, Line) {
         let Self([p0, p1, p2]) = *self;
         let start = Line::new(p0, p1);
@@ -395,14 +395,14 @@ impl Quad {
 }
 
 impl Curve for Quad {
-    /// Flattness criteria for the cubic curve
+    /// Flatness criteria for the cubic curve
     ///
     /// It is equal to `f = max d(t) where d(t) = |q(t) - l(t)|, l(t) = (1 - t) * p0 + t * p2`
     /// for q(t) bezier2 curve with p{0..2} control points, in other words maximum distance
     /// from parametric line to bezier2 curve for the same parameter t.
     ///
     /// Line can be represented as bezier2 curve, if `p1 = (p0 + p2) / 2.0`.
-    /// Grouping polynomial coofficients:
+    /// Grouping polynomial coefficients:
     /// ```text
     ///     q(t) = t^2 p2 + 2 (1 - t) t p1 + (1 - t)^2 p0
     ///     l(t) = t^2 p2 + (1 - t) t (p0 + p2) + (1 - t)^2 p0
@@ -599,7 +599,7 @@ const CI: M4x4 = M4x4([
 
 /// Cubic bezier curve
 ///
-/// Polynimial form:
+/// Polynomial form:
 /// `(1 - t) ^ 3 * p0 + 3 * (1 - t) ^ 2 * t * p1 + 3 * (1 - t) * t ^ 2 * p2 + t ^ 3 * p3`
 /// Matrix from:
 /// ```text
@@ -643,7 +643,7 @@ impl Cubic {
         self.0
     }
 
-    /// Taget lines at the ends of cubic bezier curve
+    /// Tangent lines at the ends of cubic bezier curve
     pub fn ends(&self) -> (Line, Line) {
         let ps = self.points();
         let mut start = 0;
@@ -674,7 +674,7 @@ impl Cubic {
 }
 
 impl Curve for Cubic {
-    /// Flattness criteria for the cubic curve
+    /// Flatness criteria for the cubic curve
     /// This function actually returns `16 * flatness^2`
     ///
     /// It is equal to `f = max d(t) where d(t) = |c(t) - l(t)|, l(t) = (1 - t) * c0 + t * c3`
@@ -685,7 +685,7 @@ impl Curve for Cubic {
     /// where:
     ///     u = 3 * b1 - 2 * b0 - b3
     ///     v = 3 * b2 - b0 - 2 * b3
-    /// `f == 0` means completely flat so estimating upper bound is sufficient as spliting more
+    /// `f == 0` means completely flat so estimating upper bound is sufficient as splitting more
     /// than needed is not a problem for rendering.
     ///
     /// [Linear Approximation of Bezier Curve](https://hcklbrrfnn.files.wordpress.com/2012/08/bez.pdf)
@@ -941,7 +941,7 @@ impl Segment {
     /// Find intersection between two segments
     ///
     /// This might not be the fastest method possible but works for any two curves.
-    /// Divide cuves as long as there is intersection between bounding boxes, if
+    /// Divide curves as long as there is intersection between bounding boxes, if
     /// the intersection is smaller then tolerance we can treat it as an intersection point.
     pub fn intersect(self, other: impl Into<Segment>, tolerance: Scalar) -> Vec<Point> {
         let mut queue = vec![(self, other.into())];
@@ -957,7 +957,7 @@ impl Segment {
                     if b0_is_small && b1_is_small {
                         result.push(b.diag().at(0.5));
                     } else {
-                        // TODO: can be optimized by spliting only curves with large bbox
+                        // TODO: can be optimized by splitting only curves with large bounding box
                         let (s00, s01) = s0.split_at(0.5);
                         let (s10, s11) = s1.split_at(0.5);
                         queue.push((s00, s10));
@@ -1296,7 +1296,7 @@ pub(crate) fn line_offset(line: Line, dist: Scalar) -> Option<Line> {
     Some(Line::new(p0 + offset, p1 + offset))
 }
 
-/// Offset polyline specified by points `ps`.
+/// Offset poly-line specified by points `ps`.
 ///
 /// Implementation correctly handles repeated points.
 /// False result indicates that all points are close to each other
@@ -1362,7 +1362,7 @@ fn quad_offset_should_split(quad: Quad) -> bool {
     if (p0 - p1).dot(p2 - p1) > 0.0 {
         return true;
     }
-    // distance between center mass and midpoint of a cruve,
+    // distance between center mass and midpoint of a curve,
     // should be bigger then 0.1 of the bounding box diagonal
     let c_mass = (p0 + p1 + p2) / 3.0;
     let c_mid = quad.at(0.5);
@@ -1401,7 +1401,7 @@ fn cubic_offset_rec(
     let mut points = cubic.points();
     if polyline_offset(&mut points, dist) {
         let result: Segment = Cubic(points).into();
-        // there could a disconnect between offset curvese.
+        // there could a disconnect between offset curves.
         // For example M0,0 C10,5 0,5 10,0.
         if let Some(last) = last {
             if !last.end().is_close_to(result.start()) {
@@ -1433,7 +1433,7 @@ fn cubic_offset_should_split(cubic: Cubic) -> bool {
     if a0 * a1 < 0.0 {
         return true;
     }
-    // distance between center mass and midpoint of a cruve,
+    // distance between center mass and midpoint of a curve,
     // should be bigger then 0.1 of the bounding box diagonal
     let c_mass = (p0 + p1 + p2 + p3) / 4.0;
     let c_mid = cubic.at(0.5);
@@ -1688,7 +1688,7 @@ mod tests {
         let error = length / 1000.0;
         for index in 0..128 {
             let l = length * index as Scalar / 127.0;
-            let t = cubic.from_length(l, Some(error));
+            let t = cubic.param_at_length(l, Some(error));
             assert_approx_eq!(cubic.length(0.0, t), l, error)
         }
     }

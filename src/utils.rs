@@ -1,4 +1,4 @@
-//! Utility functions and types used accross the library
+//! Utility functions and types used across the library
 use crate::{Scalar, EPSILON, PI};
 use std::{
     fmt,
@@ -23,7 +23,7 @@ where
 
 /// Fixed sized iterator
 ///
-/// This type is similar to a smallvec but it never allocates and just panics
+/// This type is similar to a `smallvec` but it never allocates and just panics
 /// if you try to fit more data than its size.
 #[derive(Clone, Copy)]
 pub struct ArrayIter<T, const SIZE: usize> {
@@ -40,7 +40,7 @@ impl<T, const SIZE: usize> ArrayIter<T, SIZE> {
         Self {
             start: 0,
             end: 0,
-            // remove Copy contraint everywhere when Default::default() is implemented
+            // remove Copy constraint everywhere when Default::default() is implemented
             // for arrays with size bigger than 32
             items: [None; SIZE],
         }
@@ -161,7 +161,7 @@ impl Mul<M3x3> for M3x3 {
     }
 }
 
-/// Sqaure 4x4 matrix
+/// Square 4x4 matrix
 #[derive(Debug, Clone, Copy)]
 pub struct M4x4(pub [Scalar; 16]);
 
@@ -213,7 +213,7 @@ pub fn quadratic_solve(a: Scalar, b: Scalar, c: Scalar) -> ArrayIter<Scalar, 2> 
 }
 
 /// Solve cubic equation `a * t ^ 3 + b * t ^ 2 + c * t + d = 0` for `t`
-/// Reference: https://www.trans4mind.com/personal_development/mathematics/polynomials/cubicAlgebra.htm
+/// Reference: <https://www.trans4mind.com/personal_development/mathematics/polynomials/cubicAlgebra.htm>
 #[allow(clippy::many_single_char_names)]
 pub fn cubic_solve(a: Scalar, b: Scalar, c: Scalar, d: Scalar) -> ArrayIter<Scalar, 3> {
     let mut results = ArrayIter::<Scalar, 3>::new();
@@ -349,7 +349,7 @@ pub const QUADRATURE_4: [(Scalar, Scalar); 4] = [
 /// This method is equivalent to interpolation of the function with polynomial of degree
 /// `table.len() * 2 - 1` and calculating its integral.
 ///
-/// Refernece:
+/// Reference:
 ///  - [Gauss Quadrature](https://en.wikipedia.org/wiki/Gaussian_quadrature)
 ///  - [Gauss Quadrature](https://www.youtube.com/watch?v=unWguclP-Ds&list=PLC8FC40C714F5E60F)
 pub fn integrate_quadrature(
@@ -358,7 +358,7 @@ pub fn integrate_quadrature(
     f: impl Fn(Scalar) -> Scalar,
     table: &[(Scalar, Scalar)],
 ) -> Scalar {
-    // quadrature constansts are for (-1, 1) interval, we can change variable with
+    // quadrature constants are for (-1, 1) interval, we can change variable with
     // `integral(x0, x1, f(x)) = ((b - a) / 2) integral(-1, 1, f((x1 - x0) * x / 2 + (x0 + x1) / 2))`
     let c0 = (x1 - x0) / 2.0;
     let c1 = (x1 + x0) / 2.0;

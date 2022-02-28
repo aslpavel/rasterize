@@ -53,7 +53,7 @@ impl Point {
         self.0[0]
     }
 
-    /// Get `y` compenent of the point
+    /// Get `y` component of the point
     #[inline]
     pub fn y(self) -> Scalar {
         self.0[1]
@@ -127,7 +127,7 @@ impl Point {
         Some((1.0 - cos * cos).sqrt())
     }
 
-    /// Determine if self is close to the other within the marging of error (EPSILON)
+    /// Determine if self is close to the other within the margin of error (EPSILON)
     pub fn is_close_to(self, other: Point) -> bool {
         let Self([x0, y0]) = self;
         let Self([x1, y1]) = other;
@@ -215,9 +215,9 @@ impl Mul for Point {
 /// Alignment options
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Align {
-    /// Alling by minimal value
+    /// Align by minimal value
     Min,
-    /// Aling by center value
+    /// Align by center value
     Mid,
     /// Align by maximum value
     Max,
@@ -301,7 +301,7 @@ impl Transform {
         Self([1.0, 0.0, tx, 0.0, 1.0, ty])
     }
 
-    /// Apply scale transformatoin by `[sx, sy]` before self
+    /// Apply scale transformation by `[sx, sy]` before self
     pub fn pre_scale(&self, sx: Scalar, sy: Scalar) -> Self {
         self.pre_concat(Self::new_scale(sx, sy))
     }
@@ -328,7 +328,7 @@ impl Transform {
             .pre_translate(-p.x(), -p.y())
     }
 
-    /// Apply scew transformation by `[ax, ay]` before self
+    /// Apply skew transformation by `[ax, ay]` before self
     pub fn pre_skew(&self, ax: Scalar, ay: Scalar) -> Self {
         self.pre_concat(Self::new_skew(ax, ay))
     }
@@ -342,7 +342,7 @@ impl Transform {
         *self * other
     }
 
-    /// Apply other transformation after the curent one
+    /// Apply other transformation after the current one
     pub fn post_concat(&self, other: Self) -> Self {
         other * *self
     }
@@ -375,7 +375,7 @@ impl Transform {
         Transform([cos, sin, 0.0, -sin, cos, 0.0]).pre_translate(-p0.x(), -p0.y())
     }
 
-    /// Create transformation that is requred to fit `src` box into `dst`.
+    /// Create transformation that is required to fit `src` box into `dst`.
     pub fn fit_bbox(src: BBox, dst: BBox, align: Align) -> Transform {
         let scale = (dst.height() / src.height()).min(dst.width() / src.width());
         let base = Transform::new_translate(dst.x(), dst.y())
@@ -453,13 +453,13 @@ impl BBox {
         }
     }
 
-    /// Point with minmum values of x and y coordianetes
+    /// Point with minimum values of x and y coordinates
     #[inline]
     pub fn min(&self) -> Point {
         self.min
     }
 
-    /// Point with minmum values of x and y coordianetes
+    /// Point with minimum values of x and y coordinates
     #[inline]
     pub fn max(&self) -> Point {
         self.max
@@ -525,7 +525,7 @@ impl BBox {
         }
     }
 
-    /// Create bounding box the spans both bbox-es
+    /// Create union bounding box of two bounding boxes
     pub fn union(&self, other: BBox) -> Self {
         self.extend(other.min).extend(other.max)
     }
@@ -549,7 +549,7 @@ impl BBox {
         ))
     }
 
-    /// Transform that makes bbox a unit-sized square
+    /// Transform that makes bounding box a unit-sized square
     ///
     /// This is used by clip|mask|gradient units
     pub fn unit_transform(&self) -> Transform {
@@ -614,7 +614,7 @@ mod tests {
         assert_approx_eq!(l1.end().y(), 0.0, 1e-6);
 
         let s0 = Line::new((2.0, 1.0), (1.0, 4.0));
-        // unit verctor perpendecular to s0
+        // unit vector perpendicular to s0
         let s1 = Line::new(
             s0.start(),
             s0.start() + s0.direction().normal().normalize().unwrap(),

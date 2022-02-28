@@ -15,10 +15,10 @@
 //!  - requires memory equal to the size of the image
 //!
 //! ## Active-Edge-Table rasterizer
-//! This method is based on the data stracture Edge-Table which keeps all lines ordered by
+//! This method is based on the data structure Edge-Table which keeps all lines ordered by
 //! lower y coordinate, and then scanning over all pixels line by line, once lower pixel of a
 //! line is reached line is activated and put into Active-Edge-Table, and later deactivated once
-//! once scan line convers point with the highest y coordinate.
+//! once scan line covers point with the highest y coordinate.
 //!
 //! Reference: Computer graphics principles and practice (by Foley) 3.6 Filling Polygons.
 //!
@@ -39,7 +39,7 @@ pub struct Size {
 
 /// Basic rasterizer interface
 pub trait Rasterizer {
-    /// Name of the rasterizer (usefull for debugging)
+    /// Name of the rasterizer (useful for debugging)
     fn name(&self) -> &str;
 
     /// Rasterize provided path as mask with transformation applied, and
@@ -288,7 +288,7 @@ impl Rasterizer for SignedDifferenceRasterizer {
             return Box::new(std::iter::empty());
         }
         let width = size.width;
-        // allocate extra collumnt to account for anti-aliased pixels
+        // allocate extra column to account for anti-aliased pixels
         let size = Size {
             width: width + 1,
             height: size.height,
@@ -328,7 +328,7 @@ impl Rasterizer for SignedDifferenceRasterizer {
 
 /// Update provided image with the signed difference of the line
 ///
-/// Signed difference is a diffrence between adjacent pixels introduced by the line.
+/// Signed difference is a difference between adjacent pixels introduced by the line.
 fn signed_difference_line(mut img: impl ImageMut<Pixel = Scalar>, line: Line) {
     // y - is a row
     // x - is a column
@@ -365,7 +365,7 @@ fn signed_difference_line(mut img: impl ImageMut<Pixel = Scalar>, line: Line) {
     let stride = shape.col_stride;
 
     if (p0.y() - p1.y()).abs() < EPSILON {
-        // line does not introduce any signed converage
+        // line does not introduce any signed coverage
         return;
     }
     // always iterate from the point with the smallest y coordinate
@@ -375,7 +375,7 @@ fn signed_difference_line(mut img: impl ImageMut<Pixel = Scalar>, line: Line) {
         (-1.0, p1, p0)
     };
     let dxdy = (p1.x() - p0.x()) / (p1.y() - p0.y());
-    // find first point to trace. since we are going to interate over y's
+    // find first point to trace. since we are going to iterate over y's
     // we should pick min(y , p0.y) as a starting y point, and adjust x
     // accordingly
     let y = p0.y().max(0.0) as usize;
@@ -433,7 +433,7 @@ fn signed_difference_line(mut img: impl ImageMut<Pixel = Scalar>, line: Line) {
     }
 }
 
-/// Conver signed difference image to a mask
+/// Convert signed difference image to a mask
 fn signed_difference_to_mask(mut img: impl ImageMut<Pixel = Scalar>, fill_rule: FillRule) {
     let shape = img.shape();
     let data = img.data_mut();
@@ -472,10 +472,10 @@ fn signed_difference_to_mask(mut img: impl ImageMut<Pixel = Scalar>, fill_rule: 
 
 /// Active-Edge rasterizer
 ///
-/// This method is based on the data stracture Edge-Table which keeps all lines ordered by
+/// This method is based on the data structure Edge-Table which keeps all lines ordered by
 /// lower y coordinate, and then scanning over all pixels line by line, once lower pixel of a
 /// line is reached line is activated and put into Active-Edge-Table, and later deactivated once
-/// once scan line convers point with the highest y coordinate.
+/// once scan line covers point with the highest y coordinate.
 ///
 /// Reference: Computer graphics principles and practice (by Foley) 3.6 Filling Polygons.
 #[derive(Debug, Clone)]
@@ -554,7 +554,7 @@ pub struct ActiveEdgeIter {
     fill_rule: FillRule,
     // size of the output image
     size: Size,
-    // current column (x - coordindate)
+    // current column (x - coordinate)
     column: usize,
     // current row (y - coordinate)
     row: usize,
@@ -590,7 +590,7 @@ impl ActiveEdgeIter {
         this
     }
 
-    /// Swith to the next row
+    /// Switch to the next row
     fn next_row(&mut self) {
         // clear all iterators
         self.iters_inactive.clear();
@@ -680,7 +680,7 @@ impl Iterator for ActiveEdgeIter {
                 alpha: self.fill_rule.alpha_from_winding(self.winding),
             };
 
-            // update postion
+            // update position
             self.column += 1;
             if self.column >= self.size.width {
                 self.column = 0;
@@ -708,7 +708,7 @@ struct Edge {
     line: Line,
     // `dx/dy` slope of the edge
     dxdy: Scalar,
-    // `dy/dx` slope of the edge, it is empty for vertial lines
+    // `dy/dx` slope of the edge, it is empty for vertical lines
     dydx: Option<Scalar>,
     // `1.0` if edge is going from lower to higher `y`, `-1.0` otherwise
     dir: Scalar,
@@ -751,7 +751,7 @@ impl Edge {
         })
     }
 
-    /// Split edge into row iterator and reminder of the edge not convered by
+    /// Split edge into row iterator and reminder of the edge not covered by
     /// the row iterator.
     fn next_row(self) -> Option<(Edge, EdgeRowIter)> {
         EdgeRowIter::new(self)
@@ -881,7 +881,7 @@ impl Iterator for EdgeAccIter {
     }
 }
 
-/// Split line at x == 0, part with x < 0.0 is converted to vertial line with x = 0.0
+/// Split line at x == 0, part with x < 0.0 is converted to vertical line with x = 0.0
 fn split_at_zero_x(line: Line) -> (Line, Option<Line>) {
     let Line([p0, p1]) = line;
     if p0.x() >= 0.0 && p1.x() >= 0.0 {
@@ -910,7 +910,7 @@ mod tests {
             width: 5,
         });
 
-        // line convers many columns but just one row
+        // line covers many columns but just one row
         signed_difference_line(&mut img, Line::new((0.5, 1.0), (3.5, 0.0)));
         // covered areas per-pixel
         let a0 = (0.5 * (1.0 / 6.0)) / 2.0;
@@ -993,7 +993,7 @@ mod tests {
         assert_approx_eq!(iter.next().unwrap(), -2.0 / 6.0);
         assert_approx_eq!(iter.next().unwrap(), -2.0 / 6.0);
         assert_approx_eq!(iter.next().unwrap(), -1.0 / 6.0);
-        // shoud not return next row
+        // should not return next row
         assert!(edge.next_row().is_none());
 
         // vertical line

@@ -47,6 +47,7 @@ impl ColorU8 {
     }
 
     /*
+    ```
     fn blend_over(self, other: Self) -> Self {
         // Sa - source alpha
         // Sc - source color
@@ -68,6 +69,7 @@ impl ColorU8 {
         let _oc = lerp_u8x4(mul_u8x4(dc, da), sc, sa);
         todo!()
     }
+    ```
     */
 }
 
@@ -138,7 +140,7 @@ impl FromStr for ColorU8 {
     }
 }
 
-/// Alpha premultiplied RGBA color in the liniar color space (no gamma correction)
+/// Alpha premultiplied RGBA color in the linear color space (no gamma correction)
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct LinColor([f32; 4]);
 
@@ -289,6 +291,17 @@ impl Color for Scalar {
 /// It was hard to optimize this function, even current version
 /// is slow because of the conditional jump. Lookup table is not working
 /// here as well it should be at least 4K in size an not cache friendly.
+///
+/// Precise implementation
+/// ```no_run
+/// pub fn linear_to_srgb(value: f32) -> f32 {
+///     if value <= 0.0031308 {
+///         value * 12.92
+///     } else {
+///         1.055 * value.powf(1.0 / 2.4) - 0.055
+///     }
+/// }
+/// ```
 #[inline]
 pub fn linear_to_srgb(x0: f32) -> f32 {
     if x0 <= 0.0031308 {
@@ -303,17 +316,6 @@ pub fn linear_to_srgb(x0: f32) -> f32 {
         -0.01848558 * x0 + 0.6445592 * x1 + 0.70994765 * x2 - 0.33605254 * x3
     }
 }
-
-/*
-#[inline]
-pub fn linear_to_srgb(value: f32) -> f32 {
-    if value <= 0.0031308 {
-        value * 12.92
-    } else {
-        1.055 * value.powf(1.0 / 2.4) - 0.055
-    }
-}
-*/
 
 #[inline]
 pub fn srgb_to_linear(value: f32) -> f32 {
@@ -342,11 +344,12 @@ impl fmt::Display for ColorError {
 impl std::error::Error for ColorError {}
 
 /*
+```ignore
 const MASK_LOW: u32 = 0x00FF00FF;
 
 /// Calculate `[_, a1, _, a3] * b / 255`, where `a{0-3}` and `b` are `u8`
 ///
-/// Those optimisation comes from for these two formulas:
+/// Those optimization comes from for these two formulas:
 ///   1. `a + ar + ar^2 ... = a / (1 - r)` for all r in [0..1)
 ///   2. `t / 255 = (t / 256) / (1 - r)` where if `r = 1 / 256`
 ///
@@ -356,10 +359,10 @@ const MASK_LOW: u32 = 0x00FF00FF;
 /// Basically we get `v / 255 = ((v >> 8) + v) >> 8`
 ///
 /// This function also doing this operation at on two u8 at once by means of masking
-/// and then recomposing everyting in one value.
+/// and then recomposing everything in one value.
 ///
 /// References:
-///   - [Image Compasiting Fundamentals](https://www.cs.princeton.edu/courses/archive/fall00/cs426/papers/smith95a.pdf)
+///   - [Image Compositing Fundamentals](https://www.cs.princeton.edu/courses/archive/fall00/cs426/papers/smith95a.pdf)
 ///   - [Double blend trick](http://stereopsis.com/doubleblend.html)
 fn mul_u8x2(a: u32, b: u32) -> u32 {
     let m0 = (a & MASK_LOW) * b + 0x00800080;
@@ -389,6 +392,7 @@ pub fn lerp_u8x4(a: u32, b: u32, t: u32) -> u32 {
     let high = lerp_u8x2(a >> 8, b >> 8, t) << 8;
     low | high
 }
+```
 */
 
 #[cfg(test)]

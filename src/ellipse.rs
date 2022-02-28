@@ -35,8 +35,8 @@ impl fmt::Debug for EllipArc {
 impl EllipArc {
     /// Convert arc from SVG arguments to parametric curve
     ///
-    /// This code mostly comes from arc implementation notes from svg sepc
-    /// (Arc to Parametric)[https://www.w3.org/TR/SVG/implnote.html#ArcImplementationNotes]
+    /// This code mostly comes from arc implementation notes from svg specification
+    /// [Arc to Parametric](https://www.w3.org/TR/SVG/implnote.html#ArcImplementationNotes)
     pub fn new_param(
         src: Point,
         dst: Point,
@@ -67,7 +67,7 @@ impl EllipArc {
         let sq = if large_flag == sweep_flag { -sq } else { sq };
         let center = sq * Point([rx * y1 / ry, -ry * x1 / rx]);
         let Point([cx, cy]) = center;
-        // Eq 5.3 convert center to initail coordinates
+        // Eq 5.3 convert center to initial coordinates
         let center = Transform::new_rotate(phi).apply(center) + 0.5 * (dst + src);
         // Eq 5.5-6
         let v0 = Point([1.0, 0.0]);
@@ -137,11 +137,11 @@ impl EllipArc {
     }
 }
 
-/// Approximate arc with a sequnce of cubic bezier curves
+/// Approximate arc with a sequence of cubic bezier curves
 ///
-/// [Drawing an elliptical arc using polylines, quadratic or cubic Bezier curves]
+/// [Drawing an elliptical arc using poly lines, quadratic or cubic Bezier curves]
 /// (http://www.spaceroots.org/documents/ellipse/elliptical-arc.pdf)
-/// [Approximating Arcs Using Cubic Bézier Curves]
+/// [Approximating Arcs Using Cubic Bezier Curves]
 /// (https://www.joecridge.me/content/pdf/bezier-arcs.pdf)
 ///
 /// We are using following formula to split arc segment from `eta_1` to `eta_2`

@@ -10,7 +10,7 @@ use std::{
     usize,
 };
 
-/// Default flatness used during rasterizetion.
+/// Default flatness used during rasterization.
 /// Value of 0.05px gives good accuracy tradeoff.
 pub const DEFAULT_FLATNESS: Scalar = 0.05;
 
@@ -51,10 +51,10 @@ impl Default for FillRule {
 /// See [SVG specification](https://www.w3.org/TR/SVG2/painting.html#LineJoin) for more details.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum LineJoin {
-    /// Continue path segments with lines untill they intersect. But only
+    /// Continue path segments with lines until they intersect. But only
     /// if `miter_length = stroke-width / sin(0.5 * eta)` is less than the miter argument.
     Miter(Scalar),
-    /// Connect path segments with straigh line.
+    /// Connect path segments with straight line.
     Bevel,
     /// Round corner is to be used to join path segments.
     /// The corner is a circular sector centered on the join point.
@@ -67,7 +67,7 @@ impl Default for LineJoin {
     }
 }
 
-/// `LineCap` specifies the shape to be used at the end of open subpaths when they are stroked.
+/// `LineCap` specifies the shape to be used at the end of open sub-paths when they are stroked.
 /// See [SVG specification](https://www.w3.org/TR/SVG2/painting.html#LineCaps) for more details.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum LineCap {
@@ -96,7 +96,7 @@ pub struct StrokeStyle {
     pub line_cap: LineCap,
 }
 
-/// Non-empty collections of segments where end of each segments conisides with the start of the next one.
+/// Non-empty collections of segments where end of each segments coincides with the start of the next one.
 #[derive(Clone, PartialEq)]
 pub struct SubPath {
     /// List of segments representing SubPath
@@ -198,7 +198,7 @@ impl SubPath {
     }
 }
 
-/// Collection of the SubPath treated as a signle unit
+/// Collection of the SubPath treated as a single unit
 #[derive(Clone, PartialEq, Default)]
 pub struct Path {
     subpaths: Vec<SubPath>,
@@ -218,7 +218,7 @@ impl fmt::Debug for Path {
 }
 
 impl Path {
-    /// Create path from the list of subpaths
+    /// Create path from the list of sub-paths
     pub fn new(subpaths: Vec<SubPath>) -> Self {
         Self { subpaths }
     }
@@ -263,7 +263,7 @@ impl Path {
     /// Stroke path
     ///
     /// Stroked path is the path constructed from original by offsetting by `distance/2` and
-    /// joinging it with the path offsetted by `-distance/2`.
+    /// joining it with the path offset by `-distance/2`.
     pub fn stroke(&self, style: StrokeStyle) -> Path {
         let mut subpaths = Vec::new();
         for subpath in self.subpaths.iter() {
@@ -321,7 +321,7 @@ impl Path {
             .fold(None, |bbox, subpath| Some(subpath.bbox(bbox, tr)))
     }
 
-    /// Calclulate size of the image required to render the path
+    /// Calculate size of the image required to render the path
     ///
     /// Returns:
     ///   - Size of the image
@@ -341,7 +341,7 @@ impl Path {
         Some((size, shift * tr, min))
     }
 
-    /// Rreverse order and direction of all segments
+    /// Reverse order and direction of all segments
     pub fn reverse(&self) -> Self {
         Self {
             subpaths: self.subpaths.iter().map(|s| s.reverse()).collect(),
@@ -390,7 +390,7 @@ impl Path {
     /// Save path in SVG path format.
     pub fn write_svg_path(&self, mut out: impl Write) -> std::io::Result<()> {
         for subpath in self.subpaths.iter() {
-            write!(&mut out, "M{:?} ", subpath.start())?;
+            write!(out, "M{:?} ", subpath.start())?;
             let mut segment_type: Option<u8> = None;
             for segment in subpath.segments().iter() {
                 match segment {
@@ -398,21 +398,21 @@ impl Path {
                         if segment_type.replace(b'L') != Some(b'L') {
                             out.write_all(b"L")?;
                         }
-                        write!(&mut out, "{:?} ", line.end())?;
+                        write!(out, "{:?} ", line.end())?;
                     }
                     Segment::Quad(quad) => {
                         let [_, p1, p2] = quad.points();
                         if segment_type.replace(b'Q') != Some(b'Q') {
                             out.write_all(b"Q")?;
                         }
-                        write!(&mut out, "{:?} {:?} ", p1, p2)?;
+                        write!(out, "{:?} {:?} ", p1, p2)?;
                     }
                     Segment::Cubic(cubic) => {
                         let [_, p1, p2, p3] = cubic.points();
                         if segment_type.replace(b'C') != Some(b'C') {
                             out.write_all(b"C")?;
                         }
-                        write!(&mut out, "{:?} {:?} {:?} ", p1, p2, p3)?;
+                        write!(out, "{:?} {:?} {:?} ", p1, p2, p3)?;
                     }
                 }
             }
@@ -659,7 +659,7 @@ impl PathBuilder {
         self.quad_to(p1, p2)
     }
 
-    /// Add cubic beizer curve
+    /// Add cubic bezier curve
     pub fn cubic_to(
         &mut self,
         p1: impl Into<Point>,
@@ -767,7 +767,7 @@ impl PathBuilder {
         self.close().move_to(init)
     }
 
-    /// Current possition of the builder
+    /// Current position of the builder
     pub fn position(&self) -> Point {
         self.position
     }
@@ -868,7 +868,7 @@ mod tests {
             .move_to((0.5, -3.0))
             .line_to((-11.0, -0.11))
             .build();
-        // unseparated scalars, implicit line segment
+        // not separated scalars, implicit line segment
         let p1: Path = "M.5-3-11-.11".parse()?;
         // other spaces, implicit relative line segment
         let p2: Path = " m.5,-3 -11.5\n2.89 ".parse()?;
