@@ -334,6 +334,116 @@ impl fmt::Debug for Scene {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct PipelineNodeId(usize);
+
+enum PipelineItem {
+    Fill {
+        path: Arc<Path>,
+        paint: Arc<dyn Paint>,
+        fill_rule: FillRule,
+    },
+    Group {
+        children: Vec<PipelineNodeId>,
+    },
+    Opacity {
+        child: PipelineNodeId,
+        opacity: Scalar,
+    },
+    Clip {
+        child: PipelineNodeId,
+        clip: Arc<Path>,
+        fill_rule: FillRule,
+        units: Units,
+    },
+}
+
+struct PipelineNode {
+    item: PipelineItem,
+    // rendering bounding box (in case of a stroke includes stroke itself)
+    bbox: Option<BBox>,
+    // transform used for rendering
+    tr: Transform,
+}
+
+struct Pipeline {
+    nodes: Vec<PipelineNode>,
+}
+
+impl Pipeline {
+    pub fn build(
+        scene: &Scene,
+        tr: Transform,
+        view: Option<BBox>,
+        // rasterizer: &dyn Rasterizer,
+        // bg: Option<LinColor>,
+    ) -> Self {
+        let mut pipeline = Self { nodes: Vec::new() };
+
+        fn build_rec(
+            pipeline: &mut Pipeline,
+            scene: &Scene,
+            view: Option<BBox>,
+            tr: Transform,
+        ) -> PipelineNodeId {
+            use SceneInner::*;
+            // allocate node
+            let id = match scene.as_ref() {
+                Fill {
+                    path,
+                    paint,
+                    fill_rule,
+                } => {
+                    let item = PipelineItem::Fill {
+                        path: path.clone(),
+                        paint: paint.clone(),
+                        fill_rule: *fill_rule,
+                    };
+                    pipeline.alloc(item, path.bbox(tr), tr)
+                }
+                Stroke { path, paint, style } => {
+                    let path = path.stroke(*style);
+                    let bbox = path.bbox(tr);
+                    let item = PipelineItem::Fill {
+                        path: Arc::new(path),
+                        paint: paint.clone(),
+                        fill_rule: FillRule::NonZero,
+                    };
+                    pipeline.alloc(item, bbox, tr)
+                }
+                Group { children } => {
+                    let children = children
+                        .iter()
+                        .map(|child| build_rec(pipeline, child, view, tr))
+                        .collect();
+                    unimplemented!()
+                }
+            };
+            // reduce bounding box
+            if let Some(view) = view {
+                let mut node = pipeline.get_mut(id);
+                if let Some(bbox) = node.bbox {
+                    node.bbox = view.intersect(bbox);
+                }
+            }
+            id
+        }
+
+        build_rec(&mut pipeline, scene, view, tr);
+        pipeline
+    }
+
+    fn alloc(&mut self, item: PipelineItem, bbox: Option<BBox>, tr: Transform) -> PipelineNodeId {
+        let id = PipelineNodeId(self.nodes.len());
+        self.nodes.push(PipelineNode { item, bbox, tr });
+        id
+    }
+
+    fn get_mut(&mut self, id: PipelineNodeId) -> &mut PipelineNode {
+        &mut self.nodes[id.0]
+    }
+}
+
 #[derive(Debug)]
 struct OpacityPaint<P> {
     paint: P,
