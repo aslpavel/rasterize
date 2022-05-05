@@ -507,8 +507,33 @@ impl Pipeline {
         &self.nodes[id.0]
     }
 
+    fn root(&self) -> Option<PipelineNodeId> {
+        self.nodes
+            .is_empty()
+            .then(|| PipelineNodeId(self.nodes.len() - 1))
+    }
+
     pub fn render(&mut self, rasterizer: &dyn Rasterizer, bg: Option<LinColor>) -> Layer<LinColor> {
-        todo!()
+        fn render_rec(
+            pipeline: &mut Pipeline,
+            node_id: PipelineNodeId,
+            layer: &mut Layer<LinColor>,
+        ) {
+            let node = pipeline.get(node_id);
+
+            use PipelineItem::*;
+            match node.item {
+                _ => todo!(),
+            }
+        }
+
+        let root_id = match self.root() {
+            None => return Layer::empty(),
+            Some(root_id) => root_id,
+        };
+        let mut layer = Layer::new(self.get(root_id).bbox, bg);
+        render_rec(self, root_id, &mut layer);
+        layer
     }
 }
 
