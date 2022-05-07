@@ -326,7 +326,7 @@ fn main() -> Result<()> {
 
     let span = tracing::info_span!("render");
     let img = span.in_scope(|| {
-        let img = scene.render(&rasterizer, tr, Some(size), Some("#00000000".parse()?));
+        let img = scene.render_pipeline(&rasterizer, tr, Some(size), Some("#00000000".parse()?));
         Result::Ok(img)
     })?;
     img.write_bmp(std::io::stdout())?;

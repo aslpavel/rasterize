@@ -312,7 +312,7 @@ impl<P> ImageOwned<P> {
         Self::new_with(size, |_, _| Default::default())
     }
 
-    /// Construct owned image from the size and the function which is callled
+    /// Construct owned image from the size and the function which is called
     /// with all (row, col) pair and returns pixel value.
     pub fn new_with<F>(size: Size, mut f: F) -> Self
     where

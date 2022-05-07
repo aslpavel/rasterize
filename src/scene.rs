@@ -55,6 +55,7 @@ impl From<SceneInner> for Scene {
 }
 
 impl Scene {
+    /// Fill path
     pub fn fill(path: Arc<Path>, paint: Arc<dyn Paint>, fill_rule: FillRule) -> Self {
         SceneInner::Fill {
             path,
@@ -64,10 +65,12 @@ impl Scene {
         .into()
     }
 
+    /// Stroke path
     pub fn stroke(path: Arc<Path>, paint: Arc<dyn Paint>, style: StrokeStyle) -> Self {
         SceneInner::Stroke { path, paint, style }.into()
     }
 
+    /// Group multiple sub-scenes
     pub fn group(children: Vec<Scene>) -> Self {
         match children.as_slice() {
             [child] => child.clone(),
@@ -75,6 +78,7 @@ impl Scene {
         }
     }
 
+    /// Apply opacity to the scene
     pub fn opacity(&self, opacity: Scalar) -> Self {
         let opacity = clamp(opacity, 0.0, 1.0);
         match self.as_ref() {
@@ -90,6 +94,7 @@ impl Scene {
         }
     }
 
+    /// Apply clip to the scene
     pub fn clip(&self, clip: Arc<Path>, units: Units, fill_rule: FillRule) -> Self {
         SceneInner::Clip {
             child: self.clone(),
@@ -100,6 +105,7 @@ impl Scene {
         .into()
     }
 
+    /// Apply transform to the scene
     pub fn transform(&self, tr: Transform) -> Self {
         match self.as_ref() {
             SceneInner::Transform {
@@ -114,6 +120,7 @@ impl Scene {
         }
     }
 
+    /// Bounding box of the scene, not including stroke width
     pub fn bbox(&self, tr: Transform) -> Option<BBox> {
         use SceneInner::*;
         match self.as_ref() {
@@ -143,6 +150,21 @@ impl Scene {
                 child_bbox.intersect(clip_bbox)
             }
         }
+    }
+
+    pub fn render_pipeline(
+        &self,
+        rasterizer: &dyn Rasterizer,
+        tr: Transform,
+        view: Option<BBox>,
+        bg: Option<LinColor>,
+    ) -> Layer<LinColor> {
+        let pipeline = Pipeline::build(self, tr, view);
+        let root_id = match pipeline.root() {
+            None => return Layer::empty(),
+            Some(root_id) => root_id,
+        };
+        pipeline.render(rasterizer, root_id, bg)
     }
 
     pub fn render(
@@ -334,6 +356,223 @@ impl fmt::Debug for Scene {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct PipelineNodeId(usize);
+
+enum PipelineItem {
+    Fill {
+        path: Arc<Path>,
+        paint: Arc<dyn Paint>,
+        fill_rule: FillRule,
+    },
+    Group {
+        children: Vec<PipelineNodeId>,
+    },
+    Opacity {
+        child: PipelineNodeId,
+        opacity: Scalar,
+    },
+    Clip {
+        child: PipelineNodeId,
+        clip: Arc<Path>,
+        clip_tr: Transform,
+        fill_rule: FillRule,
+    },
+}
+
+struct PipelineNode {
+    item: PipelineItem,
+    // rendering bounding box (in case of a stroke includes stroke itself)
+    bbox: BBox,
+    // transform used for rendering
+    tr: Transform,
+}
+
+struct Pipeline {
+    nodes: Vec<PipelineNode>,
+}
+
+impl Pipeline {
+    /// Build pipeline
+    pub fn build(scene: &Scene, tr: Transform, view: Option<BBox>) -> Self {
+        let mut pipeline = Self { nodes: Vec::new() };
+        pipeline.build_rec(scene, view, tr);
+        pipeline
+    }
+
+    fn build_rec(
+        &mut self,
+        scene: &Scene,
+        view: Option<BBox>,
+        tr: Transform,
+    ) -> Option<PipelineNodeId> {
+        use SceneInner::*;
+
+        // restrict bounding box to view
+        fn view_apply(view: Option<BBox>, bbox: Option<BBox>) -> Option<BBox> {
+            match view {
+                None => bbox,
+                Some(view) => view.intersect(bbox?),
+            }
+        }
+
+        match scene.as_ref() {
+            Fill {
+                path,
+                paint,
+                fill_rule,
+            } => {
+                let item = PipelineItem::Fill {
+                    path: path.clone(),
+                    paint: paint.clone(),
+                    fill_rule: *fill_rule,
+                };
+                Some(self.alloc(item, view_apply(view, path.bbox(tr))?, tr))
+            }
+            Stroke { path, paint, style } => {
+                let path = path.stroke(*style);
+                let bbox = view_apply(view, path.bbox(tr))?;
+                let item = PipelineItem::Fill {
+                    path: Arc::new(path),
+                    paint: paint.clone(),
+                    fill_rule: FillRule::NonZero,
+                };
+                Some(self.alloc(item, bbox, tr))
+            }
+            Group { children } => {
+                let children: Vec<_> = children
+                    .iter()
+                    .flat_map(|child| self.build_rec(child, view, tr))
+                    .collect();
+                let bbox = children
+                    .iter()
+                    .map(|id| self.get(*id).bbox)
+                    .fold(None, |acc, bbox| Some(bbox.union_opt(acc)))?;
+                let item = PipelineItem::Group { children };
+                Some(self.alloc(item, bbox, tr))
+            }
+            Clip {
+                child,
+                clip,
+                units,
+                fill_rule,
+            } => {
+                let clip_tr = match units {
+                    Units::UserSpaceOnUse => tr,
+                    Units::BoundingBox => {
+                        let bbox = child.bbox(crate::Transform::identity())?;
+                        tr * bbox.unit_transform()
+                    }
+                };
+                let clip_bbox = view_apply(view, clip.bbox(clip_tr))?;
+                let child_id = self.build_rec(child, Some(clip_bbox), tr)?;
+                let bbox = clip_bbox.intersect(self.get(child_id).bbox)?;
+                let item = PipelineItem::Clip {
+                    child: child_id,
+                    clip: clip.clone(),
+                    clip_tr,
+                    fill_rule: *fill_rule,
+                };
+                Some(self.alloc(item, bbox, tr))
+            }
+            Opacity { child, opacity } => {
+                let child_id = self.build_rec(child, view, tr)?;
+                let item = PipelineItem::Opacity {
+                    child: child_id,
+                    opacity: *opacity,
+                };
+                let bbox = self.get(child_id).bbox;
+                Some(self.alloc(item, bbox, tr))
+            }
+            Transform {
+                child,
+                tr: child_tr,
+            } => self.build_rec(child, view, tr * *child_tr),
+        }
+    }
+
+    /// Allocate new pipeline node
+    fn alloc(&mut self, item: PipelineItem, bbox: BBox, tr: Transform) -> PipelineNodeId {
+        let id = PipelineNodeId(self.nodes.len());
+        self.nodes.push(PipelineNode { item, bbox, tr });
+        id
+    }
+
+    /// Get reference to the node by its id
+    fn get(&self, id: PipelineNodeId) -> &PipelineNode {
+        &self.nodes[id.0]
+    }
+
+    /// Id of the root node
+    fn root(&self) -> Option<PipelineNodeId> {
+        if self.nodes.is_empty() {
+            None
+        } else {
+            Some(PipelineNodeId(self.nodes.len() - 1))
+        }
+    }
+
+    pub fn render(
+        &self,
+        rasterizer: &dyn Rasterizer,
+        node_id: PipelineNodeId,
+        bg: Option<LinColor>,
+    ) -> Layer<LinColor> {
+        fn render_rec(
+            pipeline: &Pipeline,
+            rasterizer: &dyn Rasterizer,
+            node_id: PipelineNodeId,
+            layer: &mut Layer<LinColor>,
+        ) {
+            let node = pipeline.get(node_id);
+
+            use PipelineItem::*;
+            match &node.item {
+                Fill {
+                    path,
+                    paint,
+                    fill_rule,
+                } => {
+                    let align =
+                        Transform::new_translate(-layer.x() as Scalar, -layer.y() as Scalar);
+                    path.fill(rasterizer, align * node.tr, *fill_rule, paint, layer);
+                }
+                Group { children } => {
+                    for child in children {
+                        render_rec(pipeline, rasterizer, *child, layer);
+                    }
+                }
+                Opacity { child, opacity } => {
+                    let child_layer = pipeline.render(rasterizer, *child, None);
+                    let opacity = *opacity as f32;
+                    layer.compose(&child_layer, |dst, src| {
+                        let src = src * opacity;
+                        dst.blend_over(&src)
+                    });
+                }
+                Clip {
+                    child,
+                    clip,
+                    clip_tr,
+                    fill_rule,
+                } => {
+                    let mut mask = Layer::new(node.bbox, None);
+                    let align = Transform::new_translate(-mask.x() as Scalar, -mask.y() as Scalar);
+                    let mut child_layer = pipeline.render(rasterizer, *child, None);
+                    clip.mask(rasterizer, align * *clip_tr, *fill_rule, mask.as_mut());
+                    // TOOD: do compose in a single pass?
+                    child_layer.compose(&mask, |dst, src| dst * (src as f32));
+                    layer.compose(&child_layer, |dst, src| dst.blend_over(&src));
+                }
+            }
+        }
+
+        let mut layer = Layer::new(self.get(node_id).bbox, bg);
+        render_rec(self, rasterizer, node_id, &mut layer);
+        layer
+    }
+}
+
 #[derive(Debug)]
 struct OpacityPaint<P> {
     paint: P,
@@ -363,6 +602,7 @@ pub struct Layer<C> {
 }
 
 impl<C: Default + Copy> Layer<C> {
+    /// New layer fully containing bounding box
     pub fn new(bbox: BBox, color: Option<C>) -> Self {
         let x0 = bbox.min().x().floor() as i32;
         let x1 = bbox.max().x().ceil() as i32;
@@ -407,7 +647,8 @@ impl<C: Default + Copy> Layer<C> {
         }
     }
 
-    pub fn compose<CF, CO>(&mut self, other: &Layer<CO>, compose: CF)
+    /// Compose other layer on top of this one taking into account offset
+    pub fn compose<CF, CO>(&mut self, other: &Layer<CO>, compose: CF) -> &mut Self
     where
         CO: Default + Copy,
         CF: Fn(C, CO) -> C,
@@ -439,6 +680,7 @@ impl<C: Default + Copy> Layer<C> {
                 *dst = compose(*dst, src);
             }
         }
+        self
     }
 }
 
@@ -457,5 +699,28 @@ impl<C> Image for Layer<C> {
 impl<C> ImageMut for Layer<C> {
     fn data_mut(&mut self) -> &mut [Self::Pixel] {
         self.image.data_mut()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Path;
+
+    type Error = Box<dyn std::error::Error>;
+
+    #[test]
+    fn test_scene() -> Result<(), Error> {
+        let path = Path::builder()
+            .move_to((5.0, 5.0))
+            .circle(4.5)
+            .close()
+            .build()
+            .into();
+        let tomato: Arc<LinColor> = Arc::new("#ff8040".parse()?);
+        let scene = Scene::fill(path, tomato, FillRule::EvenOdd);
+        println!("{:?}", scene.bbox(Transform::identity()));
+        // TODO: add scene parser to simplify writing tests
+        Ok(())
     }
 }
