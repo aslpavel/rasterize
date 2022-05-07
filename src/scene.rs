@@ -159,8 +159,12 @@ impl Scene {
         view: Option<BBox>,
         bg: Option<LinColor>,
     ) -> Layer<LinColor> {
-        let mut pipeline = Pipeline::build(self, tr, view);
-        pipeline.render(rasterizer, bg)
+        let pipeline = Pipeline::build(self, tr, view);
+        let root_id = match pipeline.root() {
+            None => return Layer::empty(),
+            Some(root_id) => root_id,
+        };
+        pipeline.render(rasterizer, root_id, bg)
     }
 
     pub fn render(
@@ -355,7 +359,6 @@ impl fmt::Debug for Scene {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct PipelineNodeId(usize);
 
-#[allow(unused)]
 enum PipelineItem {
     Fill {
         path: Arc<Path>,
@@ -377,7 +380,6 @@ enum PipelineItem {
     },
 }
 
-#[allow(unused)]
 struct PipelineNode {
     item: PipelineItem,
     // rendering bounding box (in case of a stroke includes stroke itself)
@@ -390,7 +392,6 @@ struct Pipeline {
     nodes: Vec<PipelineNode>,
 }
 
-#[allow(unused)]
 impl Pipeline {
     /// Build pipeline
     pub fn build(scene: &Scene, tr: Transform, view: Option<BBox>) -> Self {
@@ -459,7 +460,7 @@ impl Pipeline {
                 let clip_tr = match units {
                     Units::UserSpaceOnUse => tr,
                     Units::BoundingBox => {
-                        let bbox = child.bbox(Default::default())?;
+                        let bbox = child.bbox(crate::Transform::identity())?;
                         tr * bbox.unit_transform()
                     }
                 };
@@ -497,42 +498,77 @@ impl Pipeline {
         id
     }
 
-    /// Get mutable reference to the node by its id
-    fn get_mut(&mut self, id: PipelineNodeId) -> &mut PipelineNode {
-        &mut self.nodes[id.0]
-    }
-
     /// Get reference to the node by its id
-    fn get(&mut self, id: PipelineNodeId) -> &PipelineNode {
+    fn get(&self, id: PipelineNodeId) -> &PipelineNode {
         &self.nodes[id.0]
     }
 
+    /// Id of the root node
     fn root(&self) -> Option<PipelineNodeId> {
-        self.nodes
-            .is_empty()
-            .then(|| PipelineNodeId(self.nodes.len() - 1))
+        if self.nodes.is_empty() {
+            None
+        } else {
+            Some(PipelineNodeId(self.nodes.len() - 1))
+        }
     }
 
-    pub fn render(&mut self, rasterizer: &dyn Rasterizer, bg: Option<LinColor>) -> Layer<LinColor> {
+    pub fn render(
+        &self,
+        rasterizer: &dyn Rasterizer,
+        node_id: PipelineNodeId,
+        bg: Option<LinColor>,
+    ) -> Layer<LinColor> {
         fn render_rec(
-            pipeline: &mut Pipeline,
+            pipeline: &Pipeline,
+            rasterizer: &dyn Rasterizer,
             node_id: PipelineNodeId,
             layer: &mut Layer<LinColor>,
         ) {
             let node = pipeline.get(node_id);
 
             use PipelineItem::*;
-            match node.item {
-                _ => todo!(),
+            match &node.item {
+                Fill {
+                    path,
+                    paint,
+                    fill_rule,
+                } => {
+                    let align =
+                        Transform::new_translate(-layer.x() as Scalar, -layer.y() as Scalar);
+                    path.fill(rasterizer, align * node.tr, *fill_rule, paint, layer);
+                }
+                Group { children } => {
+                    for child in children {
+                        render_rec(pipeline, rasterizer, *child, layer);
+                    }
+                }
+                Opacity { child, opacity } => {
+                    let child_layer = pipeline.render(rasterizer, *child, None);
+                    let opacity = *opacity as f32;
+                    layer.compose(&child_layer, |dst, src| {
+                        let src = src * opacity;
+                        dst.blend_over(&src)
+                    });
+                }
+                Clip {
+                    child,
+                    clip,
+                    clip_tr,
+                    fill_rule,
+                } => {
+                    let mut mask = Layer::new(node.bbox, None);
+                    let align = Transform::new_translate(-mask.x() as Scalar, -mask.y() as Scalar);
+                    let mut child_layer = pipeline.render(rasterizer, *child, None);
+                    clip.mask(rasterizer, align * *clip_tr, *fill_rule, mask.as_mut());
+                    // TOOD: do compose in a single pass?
+                    child_layer.compose(&mask, |dst, src| dst * (src as f32));
+                    layer.compose(&child_layer, |dst, src| dst.blend_over(&src));
+                }
             }
         }
 
-        let root_id = match self.root() {
-            None => return Layer::empty(),
-            Some(root_id) => root_id,
-        };
-        let mut layer = Layer::new(self.get(root_id).bbox, bg);
-        render_rec(self, root_id, &mut layer);
+        let mut layer = Layer::new(self.get(node_id).bbox, bg);
+        render_rec(self, rasterizer, node_id, &mut layer);
         layer
     }
 }
@@ -566,6 +602,7 @@ pub struct Layer<C> {
 }
 
 impl<C: Default + Copy> Layer<C> {
+    /// New layer fully containing bounding box
     pub fn new(bbox: BBox, color: Option<C>) -> Self {
         let x0 = bbox.min().x().floor() as i32;
         let x1 = bbox.max().x().ceil() as i32;
@@ -610,7 +647,8 @@ impl<C: Default + Copy> Layer<C> {
         }
     }
 
-    pub fn compose<CF, CO>(&mut self, other: &Layer<CO>, compose: CF)
+    /// Compose other layer on top of this one taking into account offset
+    pub fn compose<CF, CO>(&mut self, other: &Layer<CO>, compose: CF) -> &mut Self
     where
         CO: Default + Copy,
         CF: Fn(C, CO) -> C,
@@ -642,6 +680,7 @@ impl<C: Default + Copy> Layer<C> {
                 *dst = compose(*dst, src);
             }
         }
+        self
     }
 }
 
@@ -660,5 +699,28 @@ impl<C> Image for Layer<C> {
 impl<C> ImageMut for Layer<C> {
     fn data_mut(&mut self) -> &mut [Self::Pixel] {
         self.image.data_mut()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Path;
+
+    type Error = Box<dyn std::error::Error>;
+
+    #[test]
+    fn test_scene() -> Result<(), Error> {
+        let path = Path::builder()
+            .move_to((5.0, 5.0))
+            .circle(4.5)
+            .close()
+            .build()
+            .into();
+        let tomato: Arc<LinColor> = Arc::new("#ff8040".parse()?);
+        let scene = Scene::fill(path, tomato, FillRule::EvenOdd);
+        println!("{:?}", scene.bbox(Transform::identity()));
+        // TODO: add scene parser to simplify writing tests
+        Ok(())
     }
 }

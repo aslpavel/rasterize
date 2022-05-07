@@ -1025,6 +1025,48 @@ mod tests {
         assert!(edge.next_row().is_none());
     }
 
+    fn test_rasterizer(rasterizer: &dyn Rasterizer) {
+        #[rustfmt::skip]
+        let expected = [
+        //x 0    1    2     3     4    5     6     7    8
+            0.0, 1.0, 1.0,  1.0,  1.0, 1.0,  1.0,  1.0, 0.0, // 0
+            0.0, 0.5, 1.0,  1.0,  1.0, 1.0,  1.0,  0.5, 0.0, // 1
+            0.0, 0.0, 0.25, 0.75, 1.0, 0.75, 0.25, 0.0, 0.0, // 2
+            0.0, 0.0, 0.0,  0.0,  0.0, 0.0,  0.0,  0.0, 0.0, // 3
+        ];
+
+        let path = Path::builder()
+            .move_to((1.0, 0.0))
+            .line_to((1.0, 1.0))
+            .line_to((2.0, 2.0))
+            .line_to((4.0, 3.0))
+            .line_to((5.0, 3.0))
+            .line_to((7.0, 2.0))
+            .line_to((8.0, 1.0))
+            .line_to((8.0, 0.0))
+            .close()
+            .build();
+
+        let mut img = ImageOwned::new_default(Size {
+            width: 9,
+            height: 4,
+        });
+        rasterizer.mask(&path, Transform::identity(), &mut img, FillRule::EvenOdd);
+        for (expected, pixel) in expected.iter().zip(img.data()) {
+            assert_approx_eq!(expected, pixel);
+        }
+    }
+
+    #[test]
+    fn test_active_edge_rasterizer() {
+        test_rasterizer(&ActiveEdgeRasterizer::default())
+    }
+
+    #[test]
+    fn test_sigend_difference_rasterizer() {
+        test_rasterizer(&SignedDifferenceRasterizer::default())
+    }
+
     #[test]
     fn test_fill_rule() {
         let tr = Transform::identity();
