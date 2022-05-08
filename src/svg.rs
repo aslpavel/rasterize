@@ -1,8 +1,12 @@
 //! SVG path parser
 //!
 //! See [SVG Path Specification](https://www.w3.org/TR/SVG11/paths.html#PathData)
-use crate::{PathBuilder, Point, Scalar};
-use std::{fmt, io::Read};
+use crate::{PathBuilder, Point, Scalar, Transform};
+use std::{
+    fmt,
+    io::{Cursor, Read},
+    str::FromStr,
+};
 
 /// Possible SVG path commands
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -55,39 +59,21 @@ impl SvgPathCmd {
     }
 }
 
-/// Path parser for SVG encoded path
-///
-/// See [SVG Path Specification](https://www.w3.org/TR/SVG11/paths.html#PathData)
-#[derive(Debug)]
-pub struct SvgPathParser<I> {
-    // input containing unparsed SVG path
+struct Parser<I> {
     input: I,
-    // read but not consumed input
     input_buffer: Option<u8>,
-    // previous operation
-    prev_op: Option<u8>,
-    // previous command (used to determine smooth points)
-    prev_cmd: Option<SvgPathCmd>,
-    // current position from which next relative curve will start
-    position: Point,
-    // current sub-path starting position
-    subpath_start: Point,
 }
 
-impl<I: Read> SvgPathParser<I> {
+impl<I: Read> Parser<I> {
     pub fn new(input: I) -> Self {
         Self {
             input,
             input_buffer: None,
-            prev_op: None,
-            prev_cmd: None,
-            position: Point::new(0.0, 0.0),
-            subpath_start: Point::new(0.0, 0.0),
         }
     }
 
     // consume single byte from the input
-    fn parse_byte(&mut self) -> Result<Option<u8>, SvgPathParserError> {
+    pub fn parse_byte(&mut self) -> Result<Option<u8>, SvgPathParserError> {
         match self.input_buffer.take() {
             None => {
                 let mut byte = [0; 1];
@@ -102,13 +88,13 @@ impl<I: Read> SvgPathParser<I> {
     }
 
     // put byte into input buffer, at most one byte is cached
-    fn unparse_byte(&mut self, byte: u8) {
+    pub fn unparse_byte(&mut self, byte: u8) {
         debug_assert!(self.input_buffer.is_none());
         self.input_buffer = Some(byte);
     }
 
     // consume input while `pred` predicate is true, consumed input is stored in `Self::buffer`
-    fn parse_while(
+    pub fn parse_while(
         &mut self,
         mut pred: impl FnMut(u8) -> bool,
         mut proc: impl FnMut(u8),
@@ -130,7 +116,7 @@ impl<I: Read> SvgPathParser<I> {
     }
 
     // consume at most one byte from the input, if predicate returns true
-    fn parse_once(
+    pub fn parse_once(
         &mut self,
         pred: impl FnOnce(u8) -> bool,
         proc: impl FnOnce(u8),
@@ -149,7 +135,7 @@ impl<I: Read> SvgPathParser<I> {
     }
 
     // consume separators from the input
-    fn parse_separators(&mut self) -> Result<(), SvgPathParserError> {
+    pub fn parse_separators(&mut self) -> Result<(), SvgPathParserError> {
         loop {
             let byte = match self.parse_byte()? {
                 None => break,
@@ -164,7 +150,7 @@ impl<I: Read> SvgPathParser<I> {
     }
 
     // parse single scalar value from the input
-    fn parse_scalar(&mut self) -> Result<Scalar, SvgPathParserError> {
+    pub fn parse_scalar(&mut self) -> Result<Scalar, SvgPathParserError> {
         self.parse_separators()?;
 
         let mut mantissa: i64 = 0;
@@ -231,10 +217,37 @@ impl<I: Read> SvgPathParser<I> {
         let ten: Scalar = 10.0;
         Ok((mantissa as Scalar) * ten.powi(exponent as i32))
     }
+}
+
+/// Path parser for SVG encoded path
+///
+/// See [SVG Path Specification](https://www.w3.org/TR/SVG11/paths.html#PathData)
+pub struct SvgPathParser<I> {
+    parser: Parser<I>,
+    // previous operation
+    prev_op: Option<u8>,
+    // previous command (used to determine smooth points)
+    prev_cmd: Option<SvgPathCmd>,
+    // current position from which next relative curve will start
+    position: Point,
+    // current sub-path starting position
+    subpath_start: Point,
+}
+
+impl<I: Read> SvgPathParser<I> {
+    pub fn new(input: I) -> Self {
+        Self {
+            parser: Parser::new(input),
+            prev_op: None,
+            prev_cmd: None,
+            position: Point::new(0.0, 0.0),
+            subpath_start: Point::new(0.0, 0.0),
+        }
+    }
 
     // parse pair of scalars and convert it to a point
     fn parse_point(&mut self) -> Result<Point, SvgPathParserError> {
-        let point = Point::new(self.parse_scalar()?, self.parse_scalar()?);
+        let point = Point::new(self.parser.parse_scalar()?, self.parser.parse_scalar()?);
         match self.prev_op {
             Some(cmd) if cmd.is_ascii_lowercase() => Ok(point + self.position),
             _ => Ok(point),
@@ -243,13 +256,13 @@ impl<I: Read> SvgPathParser<I> {
 
     // parse flag `0|1` used by elliptic arc command
     fn parse_flag(&mut self) -> Result<bool, SvgPathParserError> {
-        self.parse_separators()?;
-        match self.parse_byte()? {
+        self.parser.parse_separators()?;
+        match self.parser.parse_byte()? {
             Some(b'0') => Ok(false),
             Some(b'1') => Ok(true),
             byte => {
                 if let Some(byte) = byte {
-                    self.unparse_byte(byte);
+                    self.parser.unparse_byte(byte);
                 }
                 Err(SvgPathParserError::InvalidFlag)
             }
@@ -258,7 +271,7 @@ impl<I: Read> SvgPathParser<I> {
 
     // parse svg command, none indicates end of input
     fn parse_op(&mut self) -> Result<Option<u8>, SvgPathParserError> {
-        let op = match self.parse_byte()? {
+        let op = match self.parser.parse_byte()? {
             None => return Ok(None),
             Some(op) => op,
         };
@@ -277,7 +290,7 @@ impl<I: Read> SvgPathParser<I> {
                 Ok(Some(op))
             }
             byte => {
-                self.unparse_byte(byte);
+                self.parser.unparse_byte(byte);
                 match self.prev_op {
                     Some(op) => Ok(Some(op)),
                     None => Err(SvgPathParserError::InvalidCmd(op)),
@@ -288,7 +301,7 @@ impl<I: Read> SvgPathParser<I> {
 
     /// Parse single SVG path command from the input
     pub fn parse_cmd(&mut self) -> Result<Option<SvgPathCmd>, SvgPathParserError> {
-        self.parse_separators()?;
+        self.parser.parse_separators()?;
         let op = match self.parse_op()? {
             None => return Ok(None),
             Some(op) => op,
@@ -301,7 +314,7 @@ impl<I: Read> SvgPathParser<I> {
             }
             b'L' | b'l' => SvgPathCmd::LineTo(self.parse_point()?),
             b'V' | b'v' => {
-                let y = self.parse_scalar()?;
+                let y = self.parser.parse_scalar()?;
                 let p0 = self.position;
                 let p1 = if op == b'v' {
                     Point::new(p0.x(), p0.y() + y)
@@ -311,7 +324,7 @@ impl<I: Read> SvgPathParser<I> {
                 SvgPathCmd::LineTo(p1)
             }
             b'H' | b'h' => {
-                let x = self.parse_scalar()?;
+                let x = self.parser.parse_scalar()?;
                 let p0 = self.position;
                 let p1 = if op == b'h' {
                     Point::new(p0.x() + x, p0.y())
@@ -344,9 +357,9 @@ impl<I: Read> SvgPathParser<I> {
                 SvgPathCmd::CubicTo(p1, p2, p3)
             }
             b'A' | b'a' => {
-                let rx = self.parse_scalar()?;
-                let ry = self.parse_scalar()?;
-                let x_axis_rot = self.parse_scalar()?;
+                let rx = self.parser.parse_scalar()?;
+                let ry = self.parser.parse_scalar()?;
+                let x_axis_rot = self.parser.parse_scalar()?;
                 let large_flag = self.parse_flag()?;
                 let sweep_flag = self.parse_flag()?;
                 let dst = self.parse_point()?;
@@ -375,6 +388,172 @@ impl<I: Read> Iterator for SvgPathParser<I> {
     }
 }
 
+// maximum length of matrix | translate(X|Y)? | scale(X|Y)? | rotate | skew(X|Y) | deg | rad
+const TRANSFORM_BUF: usize = 10;
+
+struct SvgTransformParser<I> {
+    parser: Parser<I>,
+    buf: [u8; TRANSFORM_BUF],
+    buf_len: usize,
+}
+
+impl<I: Read> SvgTransformParser<I> {
+    fn new(input: I) -> Self {
+        Self {
+            parser: Parser::new(input),
+            buf: [0; TRANSFORM_BUF],
+            buf_len: 0,
+        }
+    }
+
+    fn parse_ident(&mut self) -> Result<&[u8], SvgPathParserError> {
+        self.buf_len = 0;
+        self.parser.parse_while(
+            |b| matches!(b, b'a'..=b'z' | b'A'..=b'Z'),
+            |b| {
+                self.buf[self.buf_len] = b;
+                self.buf_len = (self.buf_len + 1) % TRANSFORM_BUF;
+            },
+        )?;
+
+        Ok(&self.buf[..self.buf_len])
+    }
+
+    // parse angle in radians
+    fn parse_angle(&mut self) -> Result<Scalar, SvgPathParserError> {
+        let value = self.parser.parse_scalar()?;
+        let units = self.parse_ident()?;
+        match units {
+            b"" | b"deg" => Ok(value * crate::PI / 180.0),
+            b"rad" => Ok(value),
+            _ => Err(SvgPathParserError::InvalidAngleUnits),
+        }
+    }
+
+    fn parse_length(&mut self) -> Result<Scalar, SvgPathParserError> {
+        let value = self.parser.parse_scalar()?;
+        let _units = self.parse_ident()?;
+        // TODO: units px|cm|in? ...
+        Ok(value)
+    }
+
+    fn parse_transform(&mut self) -> Result<Option<Transform>, SvgPathParserError> {
+        enum Op {
+            Matrix,
+            Rotate,
+            Translate,
+            TranslateX,
+            TranslateY,
+            Scale,
+            ScaleX,
+            ScaleY,
+            SkewX,
+            SkewY,
+        }
+
+        self.parser.parse_separators()?;
+        match self.parser.parse_byte()? {
+            None => return Ok(None),
+            Some(b) => self.parser.unparse_byte(b),
+        }
+
+        let op = match self.parse_ident()? {
+            b"matrix" => Op::Matrix,
+            b"rotate" => Op::Rotate,
+            b"translate" => Op::Translate,
+            b"translateX" => Op::TranslateX,
+            b"translateY" => Op::TranslateY,
+            b"scale" => Op::Scale,
+            b"scaleX" => Op::ScaleX,
+            b"scaleY" => Op::ScaleY,
+            b"skewX" => Op::SkewX,
+            b"skewY" => Op::SkewY,
+            _ => {
+                return Err(SvgPathParserError::InvalidTransformOp);
+            }
+        };
+
+        self.parser.parse_separators()?;
+        if !matches!(self.parser.parse_byte()?, Some(b'(')) {
+            return Err(SvgPathParserError::BracketExpected);
+        }
+
+        let tr = match op {
+            Op::Matrix => {
+                let m00 = self.parser.parse_scalar()?;
+                let m10 = self.parser.parse_scalar()?;
+                let m01 = self.parser.parse_scalar()?;
+                let m11 = self.parser.parse_scalar()?;
+                let m02 = self.parser.parse_scalar()?;
+                let m12 = self.parser.parse_scalar()?;
+                Transform::new(m00, m01, m02, m10, m11, m12)
+            }
+            Op::Rotate => {
+                let mut tr = Transform::new_rotate(self.parse_angle()?);
+                if let Ok(tx) = self.parse_length() {
+                    let ty = self.parse_length()?;
+                    tr = Transform::new_translate(tx, ty) * tr;
+                }
+                tr
+            }
+            Op::Translate => {
+                let tx = self.parse_length()?;
+                let ty = self.parse_length().unwrap_or(0.0);
+                Transform::new_translate(tx, ty)
+            }
+            Op::TranslateX => {
+                let tx = self.parse_length()?;
+                Transform::new_translate(tx, 0.0)
+            }
+            Op::TranslateY => {
+                let ty = self.parse_length()?;
+                Transform::new_translate(0.0, ty)
+            }
+            Op::Scale => {
+                let sx = self.parser.parse_scalar()?;
+                let sy = self.parser.parse_scalar().unwrap_or(sx);
+                Transform::new_scale(sx, sy)
+            }
+            Op::ScaleX => {
+                let sx = self.parser.parse_scalar()?;
+                Transform::new_scale(sx, 1.0)
+            }
+            Op::ScaleY => {
+                let sy = self.parser.parse_scalar()?;
+                Transform::new_scale(1.0, sy)
+            }
+            Op::SkewX => {
+                let ax = self.parse_angle()?;
+                Transform::new_skew(ax, 0.0)
+            }
+            Op::SkewY => {
+                let ay = self.parse_angle()?;
+                Transform::new_skew(0.0, ay)
+            }
+        };
+
+        self.parser.parse_separators()?;
+        if !matches!(self.parser.parse_byte()?, Some(b')')) {
+            return Err(SvgPathParserError::BracketExpected);
+        }
+
+        Ok(Some(tr))
+    }
+}
+
+impl FromStr for Transform {
+    type Err = SvgPathParserError;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        let mut tr = Transform::identity();
+        let mut parser = SvgTransformParser::new(Cursor::new(text));
+        while let Some(tr_next) = parser.parse_transform()? {
+            tr = tr * tr_next;
+        }
+        Ok(tr)
+    }
+}
+
 /// Error while parsing path in the SVG format
 #[derive(Debug)]
 pub enum SvgPathParserError {
@@ -386,6 +565,12 @@ pub enum SvgPathParserError {
     InvalidFlag,
     /// Unexpected segment type found while parsing curve segment
     UnexpectedSegmentType,
+    /// Invalid transform operation
+    InvalidTransformOp,
+    /// Invalid Angle
+    InvalidAngleUnits,
+    /// Bracket expected,
+    BracketExpected,
     /// IO error propagated while reading input stream
     IoError(std::io::Error),
 }
@@ -421,13 +606,28 @@ mod tests {
 
     #[test]
     fn test_parse_scalar() -> Result<(), SvgPathParserError> {
-        let mut parser = SvgPathParser::new(Cursor::new("1 .22e0.32 3.21e-3-1.24 1e4"));
+        let mut parser = Parser::new(Cursor::new("1 .22e0.32 3.21e-3-1.24 1e4"));
         assert_approx_eq!(parser.parse_scalar()?, 1.0);
         assert_approx_eq!(parser.parse_scalar()?, 0.22);
         assert_approx_eq!(parser.parse_scalar()?, 0.32);
         assert_approx_eq!(parser.parse_scalar()?, 3.21e-3);
         assert_approx_eq!(parser.parse_scalar()?, -1.24);
         assert_approx_eq!(parser.parse_scalar()?, 1e4);
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_transform() -> Result<(), SvgPathParserError> {
+        let tr_str = r#"
+            translate(1 2)
+            skewX(30)
+            matrix(1 2 3 4 -3,-7)
+            scale(2,1)
+            rotate(10 1 2)
+            rotate(30)
+        "#;
+        let tr = Transform::from_str(tr_str)?;
+        println!("{:?}", tr);
         Ok(())
     }
 }
