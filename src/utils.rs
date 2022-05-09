@@ -371,11 +371,9 @@ pub fn integrate_quadrature(
 }
 
 /// (De)Serialize with FromStr and Display
-pub(crate) mod serde_with_display {
-    use std::fmt::Display;
-    use std::str::FromStr;
-
+pub(crate) mod serde_from_str {
     use serde::{de, Deserialize, Deserializer, Serializer};
+    use std::{fmt::Display, str::FromStr};
 
     pub fn serialize<T, S>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
     where

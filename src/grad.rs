@@ -1,14 +1,22 @@
-use crate::{utils::quadratic_solve, LinColor, Paint, Point, Scalar, Transform, Units};
+use serde::{
+    de::{self, IgnoredAny, Visitor},
+    Deserialize, Serialize,
+};
+
+use crate::{
+    utils::quadratic_solve, LinColor, Paint, Point, Scalar, SvgParserError, Transform, Units,
+};
 use std::cmp::Ordering;
 
 /// Gradient spread logic for the parameter smaller than 0 and greater than 1
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum GradSpread {
     /// Use the same colors as the edge of the gradient
     Pad,
     /// Repeat gradient
     Repeat,
-    /// Repeat gradient but alternate reflected and non reflectet versions
+    /// Repeat gradient but alternate reflected and non reflected versions
     Reflect,
 }
 
@@ -29,7 +37,7 @@ impl Default for GradSpread {
     }
 }
 
-/// Specifies color at a particular parmeter offset of the gradient
+/// Specifies color at a particular parameter offset of the gradient
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GradStop {
     pub position: Scalar,
@@ -42,8 +50,56 @@ impl GradStop {
     }
 }
 
+impl Serialize for GradStop {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let color = self.color.to_string();
+        (self.position, color).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for GradStop {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct GradStopVisit;
+
+        impl<'de> Visitor<'de> for GradStopVisit {
+            type Value = GradStop;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(formatter, "a sequence")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let position = seq
+                    .next_element()?
+                    .ok_or_else(|| de::Error::missing_field("postion"))?;
+                let color = seq
+                    .next_element::<String>()?
+                    .ok_or_else(|| de::Error::missing_field("color"))?
+                    .parse::<LinColor>()
+                    .map_err(de::Error::custom)?;
+                if !seq.next_element::<IgnoredAny>()?.is_none() {
+                    return Err(de::Error::custom("unexpected field"));
+                }
+                Ok(GradStop { position, color })
+            }
+        }
+
+        deserializer.deserialize_seq(GradStopVisit)
+    }
+}
+
 /// List of all `GradStop` in the gradient
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct GradStops {
     stops: Vec<GradStop>,
 }
@@ -105,16 +161,20 @@ impl From<Vec<GradStop>> for GradStops {
 }
 
 /// Linear Gradient
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GradLinear {
-    stops: GradStops,
+    #[serde(default)]
     units: Units,
+    #[serde(default)]
     linear_colors: bool,
+    #[serde(default)]
     spread: GradSpread,
+    #[serde(with = "crate::utils::serde_from_str")]
     tr: Transform,
     start: Point,
     // precomputed value equal to `(end - start) / |end - start| ^ 2`
     dir: Point,
+    stops: GradStops,
 }
 
 impl GradLinear {
@@ -144,6 +204,11 @@ impl GradLinear {
             dir: dir / dir.dot(dir),
         }
     }
+
+    /// Construct linear gradient from JSON value
+    pub fn from_json(value: serde_json::Value) -> Result<Self, SvgParserError> {
+        Ok(serde_json::from_value(value)?)
+    }
 }
 
 impl Paint for GradLinear {
@@ -165,20 +230,33 @@ impl Paint for GradLinear {
     fn units(&self) -> Option<Units> {
         Some(self.units)
     }
+
+    fn to_json(&self) -> Result<serde_json::Value, SvgParserError> {
+        let mut value = serde_json::to_value(self)?;
+        let map = value
+            .as_object_mut()
+            .expect("linear gradient should be a map");
+        map.insert("type".to_owned(), "linear-gradient".into());
+        Ok(value)
+    }
 }
 
 /// Radial Gradient
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GradRadial {
-    stops: GradStops,
+    #[serde(default)]
     units: Units,
+    #[serde(default)]
     linear_colors: bool,
+    #[serde(default)]
     spread: GradSpread,
+    #[serde(with = "crate::utils::serde_from_str")]
     tr: Transform,
     center: Point,
     radius: Scalar,
     fcenter: Point,
     fradius: Scalar,
+    stops: GradStops,
 }
 
 impl GradRadial {
@@ -211,6 +289,11 @@ impl GradRadial {
             fcenter,
             fradius,
         }
+    }
+
+    /// Construct radial gradient from JSON value
+    pub fn from_json(value: serde_json::Value) -> Result<Self, SvgParserError> {
+        Ok(serde_json::from_value(value)?)
     }
 
     /// Calculate gradient offset at a given point
@@ -272,6 +355,15 @@ impl Paint for GradRadial {
 
     fn units(&self) -> Option<Units> {
         Some(self.units)
+    }
+
+    fn to_json(&self) -> Result<serde_json::Value, SvgParserError> {
+        let mut value = serde_json::to_value(self)?;
+        let map = value
+            .as_object_mut()
+            .expect("radial gradient should be a map");
+        map.insert("type".to_owned(), "radial-gradient".into());
+        Ok(value)
     }
 }
 

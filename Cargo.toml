@@ -24,6 +24,7 @@ default = []
 [dependencies]
 tracing = "^0.1"
 serde = { version = "1.0", features = ["rc", "derive"]}
+serde_json = "1.0"
 png = { version = "^0.17", optional = true }
 
 [dev-dependencies]
