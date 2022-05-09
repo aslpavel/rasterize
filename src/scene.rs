@@ -1,41 +1,53 @@
+use serde::Deserialize;
+
 use crate::{
     utils::clamp, BBox, Color, FillRule, Image, ImageMut, ImageOwned, LinColor, Paint, Path, Point,
     Rasterizer, Scalar, Shape, Size, StrokeStyle, Transform, Units,
 };
+use serde::{Deserialize, Serialize};
 use std::{cmp, fmt, sync::Arc};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
 pub enum SceneInner {
+    #[serde(rename = "fill")]
     Fill {
+        #[serde(with = "crate::utils::serde_with_display")]
         path: Arc<Path>,
         paint: Arc<dyn Paint>,
+        #[serde(with = "crate::utils::serde_with_display", default)]
         fill_rule: FillRule,
     },
+    #[serde(rename = "stroke")]
     Stroke {
+        #[serde(with = "crate::utils::serde_with_display")]
         path: Arc<Path>,
         paint: Arc<dyn Paint>,
         style: StrokeStyle,
     },
-    Group {
-        children: Vec<Scene>,
-    },
+    #[serde(rename = "group")]
+    Group { children: Vec<Scene> },
+    #[serde(rename = "transform")]
     Transform {
         child: Scene,
+        #[serde(with = "crate::utils::serde_with_display")]
         tr: Transform,
     },
-    Opacity {
-        child: Scene,
-        opacity: Scalar,
-    },
+    #[serde(rename = "opacity")]
+    Opacity { child: Scene, opacity: Scalar },
+    #[serde(rename = "clip")]
     Clip {
         child: Scene,
+        #[serde(with = "crate::utils::serde_with_display")]
         clip: Arc<Path>,
         units: Units,
+        #[serde(with = "crate::utils::serde_with_display", default)]
         fill_rule: FillRule,
     },
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Scene {
     inner: Arc<SceneInner>,
 }

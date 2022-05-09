@@ -572,6 +572,8 @@ pub enum SvgParserError {
     InvalidTransformOp,
     /// Invalid Angle
     InvalidAngleUnits,
+    /// Invalid Fill Rule
+    InvalidFillRule,
     /// Bracket expected,
     BracketExpected,
     /// IO error propagated while reading input stream

@@ -3,6 +3,7 @@ use crate::{
     ImageMut, LinColor, Line, Paint, Point, Quad, Scalar, Segment, Size, SvgParserError,
     SvgPathParser, Transform, EPSILON,
 };
+use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     io::{Cursor, Read, Write},
@@ -21,6 +22,27 @@ pub enum FillRule {
     NonZero,
     /// Fill area with odd winding number
     EvenOdd,
+}
+
+impl fmt::Display for FillRule {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FillRule::EvenOdd => write!(f, "evenodd"),
+            FillRule::NonZero => write!(f, "nonzero"),
+        }
+    }
+}
+
+impl FromStr for FillRule {
+    type Err = SvgParserError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "evenodd" => Ok(FillRule::EvenOdd),
+            "nonzero" => Ok(FillRule::NonZero),
+            _ => Err(SvgParserError::InvalidFillRule),
+        }
+    }
 }
 
 impl FillRule {
@@ -86,7 +108,7 @@ impl Default for LineCap {
 }
 
 /// Style used to generate stroke
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct StrokeStyle {
     /// Width of the stroke
     pub width: Scalar,
@@ -214,6 +236,12 @@ impl fmt::Debug for Path {
             }
         }
         Ok(())
+    }
+}
+
+impl fmt::Display for Path {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_svg_path())
     }
 }
 
