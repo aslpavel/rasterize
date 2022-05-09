@@ -52,6 +52,7 @@ struct Args {
     stroke: Option<Scalar>,
     flatness: Scalar,
     rasterizer: RasterizerType,
+    tr: Transform,
     fg: LinColor,
     bg: LinColor,
 }
@@ -75,6 +76,7 @@ fn parse_args() -> Result<Args, Error> {
         stroke: None,
         flatness: DEFAULT_FLATNESS,
         rasterizer: RasterizerType::SignedDifference,
+        tr: Transform::identity(),
         fg: LinColor::new(0.0, 0.0, 0.0, 1.0),
         bg: LinColor::new(1.0, 1.0, 1.0, 1.0),
     };
@@ -92,6 +94,12 @@ fn parse_args() -> Result<Args, Error> {
                     .next()
                     .ok_or_else(|| ArgsError::new("-w requires argument"))?;
                 result.width = Some(width.parse()?);
+            }
+            "-t" => {
+                let tr_str = args
+                    .next()
+                    .ok_or_else(|| ArgsError::new("-t requires argument"))?;
+                result.tr = tr_str.parse()?;
             }
             "-s" => {
                 let stroke = args
@@ -148,6 +156,7 @@ fn parse_args() -> Result<Args, Error> {
         );
         eprintln!("\nARGS:");
         eprintln!("    -w <width>         width in pixels of the output image");
+        eprintln!("    -t <transform>     apply transform");
         eprintln!("    -s <stroke_width>  stroke path before rendering");
         eprintln!("    -o                 show outline with control points instead of filling");
         eprintln!("    -a                 use active-edge instead of signed-difference rasterizer");
@@ -263,18 +272,18 @@ fn main() -> Result<(), Error> {
     let path = Arc::new(path);
     info!("[path:segments_count] {}", path.segments_count());
 
-    // resize if needed
+    // transform if needed
     let tr = match args.width {
         Some(width) if width > 2 => {
             let src_bbox = path
-                .bbox(Transform::identity())
+                .bbox(args.tr)
                 .ok_or_else(|| ArgsError::new("path is empty"))?;
             let width = width as Scalar;
             let height = src_bbox.height() * width / src_bbox.width();
             let dst_bbox = BBox::new(Point::new(1.0, 1.0), Point::new(width - 1.0, height - 1.0));
-            Transform::fit_bbox(src_bbox, dst_bbox, Align::Mid)
+            Transform::fit_bbox(src_bbox, dst_bbox, Align::Mid) * args.tr
         }
-        _ => Transform::identity(),
+        _ => args.tr,
     };
 
     // scene

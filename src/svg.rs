@@ -73,7 +73,7 @@ impl<I: Read> Parser<I> {
     }
 
     // consume single byte from the input
-    pub fn parse_byte(&mut self) -> Result<Option<u8>, SvgPathParserError> {
+    pub fn parse_byte(&mut self) -> Result<Option<u8>, SvgParserError> {
         match self.input_buffer.take() {
             None => {
                 let mut byte = [0; 1];
@@ -98,7 +98,7 @@ impl<I: Read> Parser<I> {
         &mut self,
         mut pred: impl FnMut(u8) -> bool,
         mut proc: impl FnMut(u8),
-    ) -> Result<usize, SvgPathParserError> {
+    ) -> Result<usize, SvgParserError> {
         let mut count = 0;
         loop {
             let byte = match self.parse_byte()? {
@@ -120,7 +120,7 @@ impl<I: Read> Parser<I> {
         &mut self,
         pred: impl FnOnce(u8) -> bool,
         proc: impl FnOnce(u8),
-    ) -> Result<bool, SvgPathParserError> {
+    ) -> Result<bool, SvgParserError> {
         let byte = match self.parse_byte()? {
             None => return Ok(false),
             Some(byte) => byte,
@@ -135,7 +135,7 @@ impl<I: Read> Parser<I> {
     }
 
     // consume separators from the input
-    pub fn parse_separators(&mut self) -> Result<(), SvgPathParserError> {
+    pub fn parse_separators(&mut self) -> Result<(), SvgParserError> {
         loop {
             let byte = match self.parse_byte()? {
                 None => break,
@@ -150,7 +150,7 @@ impl<I: Read> Parser<I> {
     }
 
     // parse single scalar value from the input
-    pub fn parse_scalar(&mut self) -> Result<Scalar, SvgPathParserError> {
+    pub fn parse_scalar(&mut self) -> Result<Scalar, SvgParserError> {
         self.parse_separators()?;
 
         let mut mantissa: i64 = 0;
@@ -189,7 +189,7 @@ impl<I: Read> Parser<I> {
         mantissa *= sign;
 
         if whole + frac == 0 {
-            return Err(SvgPathParserError::InvalidScalar);
+            return Err(SvgParserError::InvalidScalar);
         }
 
         let matches_exp = self.parse_once(|byte| matches!(byte, b'e' | b'E'), |_| {})?;
@@ -209,7 +209,7 @@ impl<I: Read> Parser<I> {
                 |byte| push_digit(&mut sci, byte),
             )? == 0
             {
-                return Err(SvgPathParserError::InvalidScalar);
+                return Err(SvgParserError::InvalidScalar);
             }
             exponent = exponent.wrapping_add(sci_sign * sci)
         }
@@ -246,7 +246,7 @@ impl<I: Read> SvgPathParser<I> {
     }
 
     // parse pair of scalars and convert it to a point
-    fn parse_point(&mut self) -> Result<Point, SvgPathParserError> {
+    fn parse_point(&mut self) -> Result<Point, SvgParserError> {
         let point = Point::new(self.parser.parse_scalar()?, self.parser.parse_scalar()?);
         match self.prev_op {
             Some(cmd) if cmd.is_ascii_lowercase() => Ok(point + self.position),
@@ -255,7 +255,7 @@ impl<I: Read> SvgPathParser<I> {
     }
 
     // parse flag `0|1` used by elliptic arc command
-    fn parse_flag(&mut self) -> Result<bool, SvgPathParserError> {
+    fn parse_flag(&mut self) -> Result<bool, SvgParserError> {
         self.parser.parse_separators()?;
         match self.parser.parse_byte()? {
             Some(b'0') => Ok(false),
@@ -264,13 +264,13 @@ impl<I: Read> SvgPathParser<I> {
                 if let Some(byte) = byte {
                     self.parser.unparse_byte(byte);
                 }
-                Err(SvgPathParserError::InvalidFlag)
+                Err(SvgParserError::InvalidFlag)
             }
         }
     }
 
     // parse svg command, none indicates end of input
-    fn parse_op(&mut self) -> Result<Option<u8>, SvgPathParserError> {
+    fn parse_op(&mut self) -> Result<Option<u8>, SvgParserError> {
         let op = match self.parser.parse_byte()? {
             None => return Ok(None),
             Some(op) => op,
@@ -293,14 +293,14 @@ impl<I: Read> SvgPathParser<I> {
                 self.parser.unparse_byte(byte);
                 match self.prev_op {
                     Some(op) => Ok(Some(op)),
-                    None => Err(SvgPathParserError::InvalidCmd(op)),
+                    None => Err(SvgParserError::InvalidCmd(op)),
                 }
             }
         }
     }
 
     /// Parse single SVG path command from the input
-    pub fn parse_cmd(&mut self) -> Result<Option<SvgPathCmd>, SvgPathParserError> {
+    pub fn parse_cmd(&mut self) -> Result<Option<SvgPathCmd>, SvgParserError> {
         self.parser.parse_separators()?;
         let op = match self.parse_op()? {
             None => return Ok(None),
@@ -381,7 +381,7 @@ impl<I: Read> SvgPathParser<I> {
 }
 
 impl<I: Read> Iterator for SvgPathParser<I> {
-    type Item = Result<SvgPathCmd, SvgPathParserError>;
+    type Item = Result<SvgPathCmd, SvgParserError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.parse_cmd().transpose()
@@ -406,7 +406,7 @@ impl<I: Read> SvgTransformParser<I> {
         }
     }
 
-    fn parse_ident(&mut self) -> Result<&[u8], SvgPathParserError> {
+    fn parse_ident(&mut self) -> Result<&[u8], SvgParserError> {
         self.buf_len = 0;
         self.parser.parse_while(
             |b| matches!(b, b'a'..=b'z' | b'A'..=b'Z'),
@@ -420,24 +420,24 @@ impl<I: Read> SvgTransformParser<I> {
     }
 
     // parse angle in radians
-    fn parse_angle(&mut self) -> Result<Scalar, SvgPathParserError> {
+    fn parse_angle(&mut self) -> Result<Scalar, SvgParserError> {
         let value = self.parser.parse_scalar()?;
         let units = self.parse_ident()?;
         match units {
             b"" | b"deg" => Ok(value * crate::PI / 180.0),
             b"rad" => Ok(value),
-            _ => Err(SvgPathParserError::InvalidAngleUnits),
+            _ => Err(SvgParserError::InvalidAngleUnits),
         }
     }
 
-    fn parse_length(&mut self) -> Result<Scalar, SvgPathParserError> {
+    fn parse_length(&mut self) -> Result<Scalar, SvgParserError> {
         let value = self.parser.parse_scalar()?;
         let _units = self.parse_ident()?;
         // TODO: units px|cm|in? ...
         Ok(value)
     }
 
-    fn parse_transform(&mut self) -> Result<Option<Transform>, SvgPathParserError> {
+    fn parse_transform(&mut self) -> Result<Option<Transform>, SvgParserError> {
         enum Op {
             Matrix,
             Rotate,
@@ -469,13 +469,13 @@ impl<I: Read> SvgTransformParser<I> {
             b"skewX" => Op::SkewX,
             b"skewY" => Op::SkewY,
             _ => {
-                return Err(SvgPathParserError::InvalidTransformOp);
+                return Err(SvgParserError::InvalidTransformOp);
             }
         };
 
         self.parser.parse_separators()?;
         if !matches!(self.parser.parse_byte()?, Some(b'(')) {
-            return Err(SvgPathParserError::BracketExpected);
+            return Err(SvgParserError::BracketExpected);
         }
 
         let tr = match op {
@@ -492,7 +492,10 @@ impl<I: Read> SvgTransformParser<I> {
                 let mut tr = Transform::new_rotate(self.parse_angle()?);
                 if let Ok(tx) = self.parse_length() {
                     let ty = self.parse_length()?;
-                    tr = Transform::new_translate(tx, ty) * tr;
+                    // rotate around (tx, ty)
+                    tr = Transform::new_translate(tx, ty)
+                        .pre_concat(tr)
+                        .pre_translate(-tx, -ty);
                 }
                 tr
             }
@@ -534,7 +537,7 @@ impl<I: Read> SvgTransformParser<I> {
 
         self.parser.parse_separators()?;
         if !matches!(self.parser.parse_byte()?, Some(b')')) {
-            return Err(SvgPathParserError::BracketExpected);
+            return Err(SvgParserError::BracketExpected);
         }
 
         Ok(Some(tr))
@@ -542,7 +545,7 @@ impl<I: Read> SvgTransformParser<I> {
 }
 
 impl FromStr for Transform {
-    type Err = SvgPathParserError;
+    type Err = SvgParserError;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         let mut tr = Transform::identity();
@@ -556,7 +559,7 @@ impl FromStr for Transform {
 
 /// Error while parsing path in the SVG format
 #[derive(Debug)]
-pub enum SvgPathParserError {
+pub enum SvgParserError {
     /// Failed to parse SVG command
     InvalidCmd(u8),
     /// Failed to parse scalar value
@@ -575,28 +578,28 @@ pub enum SvgPathParserError {
     IoError(std::io::Error),
 }
 
-impl fmt::Display for SvgPathParserError {
+impl fmt::Display for SvgParserError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "SvgPathParser::{:?}", self)
     }
 }
 
-impl From<std::io::Error> for SvgPathParserError {
+impl From<std::io::Error> for SvgParserError {
     fn from(error: std::io::Error) -> Self {
         Self::IoError(error)
     }
 }
 
-impl From<SvgPathParserError> for std::io::Error {
-    fn from(error: SvgPathParserError) -> Self {
+impl From<SvgParserError> for std::io::Error {
+    fn from(error: SvgParserError) -> Self {
         match error {
-            SvgPathParserError::IoError(error) => error,
+            SvgParserError::IoError(error) => error,
             _ => Self::new(std::io::ErrorKind::InvalidData, error),
         }
     }
 }
 
-impl std::error::Error for SvgPathParserError {}
+impl std::error::Error for SvgParserError {}
 
 #[cfg(test)]
 mod tests {
@@ -605,7 +608,7 @@ mod tests {
     use std::io::Cursor;
 
     #[test]
-    fn test_parse_scalar() -> Result<(), SvgPathParserError> {
+    fn test_parse_scalar() -> Result<(), SvgParserError> {
         let mut parser = Parser::new(Cursor::new("1 .22e0.32 3.21e-3-1.24 1e4"));
         assert_approx_eq!(parser.parse_scalar()?, 1.0);
         assert_approx_eq!(parser.parse_scalar()?, 0.22);
@@ -617,17 +620,20 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_transform() -> Result<(), SvgPathParserError> {
+    fn test_parse_transform() -> Result<(), SvgParserError> {
         let tr_str = r#"
             translate(1 2)
-            skewX(30)
-            matrix(1 2 3 4 -3,-7)
+            skewX(30deg)
+            matrix(1  2 3 4 -3-7)
             scale(2,1)
             rotate(10 1 2)
-            rotate(30)
+            rotate(1rad)
         "#;
+        let tr_fmt = "matrix(6.56129 5.23393 -1.92617 -2.14614 -5.23999 -4.1231)";
         let tr = Transform::from_str(tr_str)?;
-        println!("{:?}", tr);
+        assert_eq!(format!("{tr:?}"), tr_fmt);
+        let tr = Transform::from_str(tr_fmt)?;
+        assert_eq!(format!("{tr:?}"), tr_fmt);
         Ok(())
     }
 }

@@ -1,7 +1,7 @@
 use crate::{
     curve::line_offset, rasterize::Rasterizer, utils::clamp, BBox, Cubic, Curve, EllipArc,
-    ImageMut, LinColor, Line, Paint, Point, Quad, Scalar, Segment, Size, SvgPathParser,
-    SvgPathParserError, Transform, EPSILON,
+    ImageMut, LinColor, Line, Paint, Point, Quad, Scalar, Segment, Size, SvgParserError,
+    SvgPathParser, Transform, EPSILON,
 };
 use std::{
     fmt,
@@ -606,7 +606,7 @@ impl PathBuilder {
     pub fn append_svg_path(
         &mut self,
         string: impl AsRef<[u8]>,
-    ) -> Result<&mut Self, SvgPathParserError> {
+    ) -> Result<&mut Self, SvgParserError> {
         for cmd in SvgPathParser::new(Cursor::new(string)) {
             cmd?.apply(self);
         }
@@ -774,7 +774,7 @@ impl PathBuilder {
 }
 
 impl FromStr for Path {
-    type Err = SvgPathParserError;
+    type Err = SvgParserError;
 
     fn from_str(text: &str) -> Result<Path, Self::Err> {
         let mut builder = PathBuilder::new();
@@ -814,7 +814,7 @@ mod tests {
     "#;
 
     #[test]
-    fn test_path_parse() -> Result<(), SvgPathParserError> {
+    fn test_path_parse() -> Result<(), SvgParserError> {
         // complicated path
         let path: Path = SQUIRREL.parse()?;
         let reference = Path::builder()
@@ -889,7 +889,7 @@ mod tests {
     }
 
     #[test]
-    fn test_flatten() -> Result<(), SvgPathParserError> {
+    fn test_flatten() -> Result<(), SvgParserError> {
         let path: Path = SQUIRREL.parse()?;
         let tr = Transform::new_rotate(PI / 3.0).pre_translate(-10.0, -20.0);
         let lines: Vec<_> = path.flatten(tr, DEFAULT_FLATNESS, true).collect();

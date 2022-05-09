@@ -243,11 +243,20 @@ impl Default for Transform {
 
 impl fmt::Debug for Transform {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
+impl fmt::Display for Transform {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Self([m00, m01, m02, m10, m11, m12]) = self;
-        writeln!(f)?;
-        writeln!(f, "[[{}, {}, {}],", m00, m01, m02)?;
-        writeln!(f, " [{}, {}, {}],", m10, m11, m12)?;
-        writeln!(f, " [0, 0, 1]]")?;
+        write!(f, "matrix(")?;
+        for val in [m00, m10, m01, m11, m02] {
+            scalar_fmt(f, *val)?;
+            write!(f, " ")?;
+        }
+        scalar_fmt(f, *m12)?;
+        write!(f, ")")?;
         Ok(())
     }
 }

@@ -5,8 +5,8 @@ use crate::{
         clamp, cubic_solve, integrate_quadrature, quadratic_solve, ArrayIter, M3x3, M4x4,
         QUADRATURE_16, QUADRATURE_32,
     },
-    BBox, EllipArc, LineCap, LineJoin, Point, Scalar, StrokeStyle, SvgPathCmd, SvgPathParser,
-    SvgPathParserError, Transform, EPSILON,
+    BBox, EllipArc, LineCap, LineJoin, Point, Scalar, StrokeStyle, SvgParserError, SvgPathCmd,
+    SvgPathParser, Transform, EPSILON,
 };
 use std::{fmt, io::Cursor, str::FromStr};
 
@@ -303,13 +303,13 @@ impl Curve for Line {
 }
 
 impl FromStr for Line {
-    type Err = SvgPathParserError;
+    type Err = SvgParserError;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         let segment = Segment::from_str(text)?;
         segment
             .to_line()
-            .ok_or(SvgPathParserError::UnexpectedSegmentType)
+            .ok_or(SvgParserError::UnexpectedSegmentType)
     }
 }
 
@@ -565,13 +565,13 @@ impl Curve for Quad {
 }
 
 impl FromStr for Quad {
-    type Err = SvgPathParserError;
+    type Err = SvgParserError;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         let segment = Segment::from_str(text)?;
         segment
             .to_quad()
-            .ok_or(SvgPathParserError::UnexpectedSegmentType)
+            .ok_or(SvgParserError::UnexpectedSegmentType)
     }
 }
 
@@ -907,13 +907,13 @@ impl From<Quad> for Cubic {
 }
 
 impl FromStr for Cubic {
-    type Err = SvgPathParserError;
+    type Err = SvgParserError;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         let segment = Segment::from_str(text)?;
         segment
             .to_cubic()
-            .ok_or(SvgPathParserError::UnexpectedSegmentType)
+            .ok_or(SvgParserError::UnexpectedSegmentType)
     }
 }
 
@@ -1120,7 +1120,7 @@ impl fmt::Display for Segment {
 }
 
 impl FromStr for Segment {
-    type Err = SvgPathParserError;
+    type Err = SvgParserError;
 
     fn from_str(text: &str) -> Result<Self, Self::Err> {
         use SvgPathCmd::*;
@@ -1135,11 +1135,11 @@ impl FromStr for Segment {
                     LineTo(p1) => Line::new(p0, p1).into(),
                     QuadTo(p1, p2) => Quad::new(p0, p1, p2).into(),
                     CubicTo(p1, p2, p3) => Cubic::new(p0, p1, p2, p3).into(),
-                    _ => return Err(SvgPathParserError::UnexpectedSegmentType),
+                    _ => return Err(SvgParserError::UnexpectedSegmentType),
                 };
                 Ok(segment)
             }
-            _ => Err(SvgPathParserError::UnexpectedSegmentType),
+            _ => Err(SvgParserError::UnexpectedSegmentType),
         }
     }
 }

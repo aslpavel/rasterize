@@ -2,7 +2,7 @@
 //!
 //! Main features:
 //!  - SVG path parsing and generation
-//!  - Anit-aliased rendering
+//!  - Anti-aliased rendering
 //!  - Path offsetting
 //!
 #![deny(warnings)]
@@ -37,4 +37,4 @@ pub use path::{
     FillRule, LineCap, LineJoin, Path, PathBuilder, StrokeStyle, SubPath, DEFAULT_FLATNESS,
 };
 pub use scene::{Layer, Scene};
-pub use svg::{SvgPathCmd, SvgPathParser, SvgPathParserError};
+pub use svg::{SvgParserError, SvgPathCmd, SvgPathParser};
