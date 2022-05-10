@@ -1,7 +1,4 @@
-use serde::{
-    de::{self, IgnoredAny, Visitor},
-    Deserialize, Serialize,
-};
+use serde::{de, Deserialize, Serialize};
 
 use crate::{
     utils::quadratic_solve, LinColor, Paint, Point, Scalar, SvgParserError, Transform, Units,
@@ -65,35 +62,11 @@ impl<'de> Deserialize<'de> for GradStop {
     where
         D: serde::Deserializer<'de>,
     {
-        struct GradStopVisit;
-
-        impl<'de> Visitor<'de> for GradStopVisit {
-            type Value = GradStop;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(formatter, "a sequence")
-            }
-
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::SeqAccess<'de>,
-            {
-                let position = seq
-                    .next_element()?
-                    .ok_or_else(|| de::Error::missing_field("postion"))?;
-                let color = seq
-                    .next_element::<String>()?
-                    .ok_or_else(|| de::Error::missing_field("color"))?
-                    .parse::<LinColor>()
-                    .map_err(de::Error::custom)?;
-                if !seq.next_element::<IgnoredAny>()?.is_none() {
-                    return Err(de::Error::custom("unexpected field"));
-                }
-                Ok(GradStop { position, color })
-            }
-        }
-
-        deserializer.deserialize_seq(GradStopVisit)
+        let (position, color): (Scalar, &str) = Deserialize::deserialize(deserializer)?;
+        Ok(Self {
+            position,
+            color: color.parse::<LinColor>().map_err(de::Error::custom)?,
+        })
     }
 }
 
