@@ -370,10 +370,18 @@ pub fn integrate_quadrature(
     c0 * result
 }
 
+/// Check if value is equal to default
+/// useful for skipping serialization if value is equal to default value
+/// by adding `#[serde(default, skip_serializing_if = "is_default")]`
+pub(crate) fn is_default<T: Default + PartialEq>(val: &T) -> bool {
+    val == &T::default()
+}
+
 /// (De)Serialize with FromStr and Display
+/// by adding `#[serde(with = "serde_from_str")]`
 pub(crate) mod serde_from_str {
     use serde::{de, Deserialize, Deserializer, Serializer};
-    use std::{fmt::Display, str::FromStr};
+    use std::{borrow::Cow, fmt::Display, str::FromStr};
 
     pub fn serialize<T, S>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -389,7 +397,7 @@ pub(crate) mod serde_from_str {
         T::Err: Display,
         D: Deserializer<'de>,
     {
-        String::deserialize(deserializer)?
+        Cow::<'de, str>::deserialize(deserializer)?
             .parse()
             .map_err(de::Error::custom)
     }

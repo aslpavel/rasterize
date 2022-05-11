@@ -5,6 +5,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Cow,
     fmt,
     io::{Cursor, Read, Write},
     str::FromStr,
@@ -100,10 +101,10 @@ pub struct StrokeStyle {
     /// Width of the stroke
     pub width: Scalar,
     /// How to join offset segments
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "crate::utils::is_default")]
     pub line_join: LineJoin,
     /// How to join segments at the ends of the path
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "crate::utils::is_default")]
     pub line_cap: LineCap,
 }
 
@@ -816,7 +817,7 @@ impl<'de> Deserialize<'de> for Path {
     where
         D: serde::Deserializer<'de>,
     {
-        String::deserialize(deserializer)?
+        Cow::<'de, str>::deserialize(deserializer)?
             .parse()
             .map_err(serde::de::Error::custom)
     }

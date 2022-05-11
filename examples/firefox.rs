@@ -321,12 +321,17 @@ fn main() -> Result<()> {
     let view = BBox::new((0.0, 0.0), (953.37, 984.0));
     let size = BBox::new((0.0, 0.0), (512.0, 512.0));
     let tr = Transform::fit_bbox(view, size, Align::Mid);
-
-    let rasterizer = ActiveEdgeRasterizer::default();
+    let scene = scene.transform(tr);
+    eprintln!("{}", serde_json::to_string_pretty(&scene)?);
 
     let span = tracing::info_span!("render");
     let img = span.in_scope(|| {
-        let img = scene.render_pipeline(&rasterizer, tr, Some(size), Some("#00000000".parse()?));
+        let img = scene.render(
+            &ActiveEdgeRasterizer::default(),
+            Transform::identity(),
+            Some(size),
+            Some("#00000000".parse()?),
+        );
         Result::Ok(img)
     })?;
     img.write_bmp(std::io::stdout())?;

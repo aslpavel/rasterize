@@ -149,7 +149,7 @@ impl fmt::Display for ColorU8 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let [r, g, b, a] = self.to_rgba();
         write!(f, "#{:02x}{:02x}{:02x}", r, g, b)?;
-        if a != 0 {
+        if a != 255 {
             write!(f, "{:02x}", a)?;
         }
         Ok(())
@@ -423,9 +423,8 @@ pub fn lerp_u8x4(a: u32, b: u32, t: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::assert_approx_eq;
-
     use super::*;
+    use crate::assert_approx_eq;
 
     #[test]
     fn test_color_u8() {
@@ -465,6 +464,20 @@ mod tests {
             assert_approx_eq!(v, srgb_to_linear(linear_to_srgb(v)), 1e-4);
         }
     }
+
+    #[test]
+    fn test_display_parse() -> Result<(), ColorError> {
+        let c: ColorU8 = "#01020304".parse()?;
+        assert_eq!(c, ColorU8::new(1, 2, 3, 4));
+        assert_eq!(c.to_string(), "#01020304");
+
+        let c: ColorU8 = "#010203".parse()?;
+        assert_eq!(c, ColorU8::new(1, 2, 3, 255));
+        assert_eq!(c.to_string(), "#010203");
+
+        Ok(())
+    }
+
     /*
     #[test]
     fn test_mul_u8x4() {

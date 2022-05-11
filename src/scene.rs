@@ -9,7 +9,7 @@ use std::{cmp, fmt, sync::Arc};
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum SceneInner {
     Fill {
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "crate::utils::is_default")]
         fill_rule: FillRule,
         #[serde(with = "serde_paint")]
         paint: Arc<dyn Paint>,
@@ -36,7 +36,7 @@ pub enum SceneInner {
     },
     Clip {
         fill_rule: FillRule,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "crate::utils::is_default")]
         units: Units,
         clip: Arc<Path>,
         child: Scene,
@@ -741,17 +741,17 @@ mod serde_paint {
                 let color = color.parse::<LinColor>().map_err(de::Error::custom)?;
                 Ok(Arc::new(color))
             }
-            Value::Object(mut map) => {
+            Value::Object(map) => {
                 let paint_type = map
-                    .remove("type")
+                    .get("type")
                     .ok_or_else(|| de::Error::missing_field("type"))?;
                 match paint_type.as_str() {
-                    Some("radial-gradient") => {
+                    Some(GradRadial::GRAD_TYPE) => {
                         let grad =
                             GradRadial::from_json(Value::Object(map)).map_err(de::Error::custom)?;
                         Ok(Arc::new(grad))
                     }
-                    Some("linear-gradient") => {
+                    Some(GradLinear::GRAD_TYPE) => {
                         let grad =
                             GradLinear::from_json(Value::Object(map)).map_err(de::Error::custom)?;
                         Ok(Arc::new(grad))

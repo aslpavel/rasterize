@@ -9,7 +9,7 @@ include = [
   "Cargo.toml",
   "README.md",
   "LICENSE",
-  "paths/squirrel.png",
+  "data/squirrel.png",
 ]
 homepage = "https://github.com/aslpavel/rasterize"
 repository = "https://github.com/aslpavel/rasterize.git"
