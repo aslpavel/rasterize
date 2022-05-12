@@ -1,3 +1,4 @@
+//! Basic PostScript rasterizer
 use rasterize::*;
 use std::{
     cell::{self, RefCell},
@@ -1228,8 +1229,18 @@ fn main() -> Result<(), PSError> {
         io::{BufReader, BufWriter},
     };
 
-    // let file = BufReader::new(File::open("/mnt/data/downloads/tiger.eps")?);
-    let file = BufReader::new(File::open("/mnt/data/downloads/escher.ps")?);
+    let args = std::env::args().collect::<Vec<_>>();
+    let (input, output) = match args.as_slice() {
+        [_, input, output] => (input, output),
+        [cmd, ..] => {
+            eprintln!("Basic PostScript renderer");
+            eprintln!("USAGE: {} <input.eps> <output>", cmd);
+            std::process::exit(1);
+        }
+        _ => unreachable!(),
+    };
+
+    let file = BufReader::new(File::open(input)?);
     let parser = PSParser::new(file);
     let mut state = PSState::new();
     for val in parser {
@@ -1249,8 +1260,12 @@ fn main() -> Result<(), PSError> {
         }
     }
 
-    let mut image = BufWriter::new(File::create("/tmp/eps.bmp")?);
-    state.image.write_bmp(&mut image)?;
+    if output != "-" {
+        let mut image_file = BufWriter::new(File::create(output)?);
+        state.image.write_bmp(&mut image_file)?;
+    } else {
+        state.image.write_bmp(std::io::stdout())?;
+    }
 
     Ok(())
 }

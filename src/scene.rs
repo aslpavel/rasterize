@@ -1,5 +1,5 @@
 use crate::{
-    utils::clamp, BBox, Color, FillRule, Image, ImageMut, ImageOwned, LinColor, Paint, Path, Point,
+    utils::clamp, BBox, Color, FillRule, Image, ImageMut, ImageOwned, LinColor, Paint, Path,
     Rasterizer, Scalar, Shape, Size, StrokeStyle, Transform, Units,
 };
 use serde::{Deserialize, Serialize};
@@ -7,7 +7,7 @@ use std::{cmp, fmt, sync::Arc};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
-pub enum SceneInner {
+enum SceneInner {
     Fill {
         #[serde(default, skip_serializing_if = "crate::utils::is_default")]
         fill_rule: FillRule,
@@ -35,6 +35,7 @@ pub enum SceneInner {
         opacity: Scalar,
     },
     Clip {
+        #[serde(default, skip_serializing_if = "crate::utils::is_default")]
         fill_rule: FillRule,
         #[serde(default, skip_serializing_if = "crate::utils::is_default")]
         units: Units,
@@ -161,7 +162,8 @@ impl Scene {
         }
     }
 
-    pub fn render_pipeline(
+    /// Render scene
+    pub fn render(
         &self,
         rasterizer: &dyn Rasterizer,
         tr: Transform,
@@ -174,188 +176,6 @@ impl Scene {
             Some(root_id) => root_id,
         };
         pipeline.render(rasterizer, root_id, bg)
-    }
-
-    pub fn render(
-        &self,
-        rasterizer: &dyn Rasterizer,
-        tr: Transform,
-        view: Option<BBox>,
-        bg: Option<LinColor>,
-    ) -> Layer<LinColor> {
-        let view = match view.or_else(|| self.bbox(tr)) {
-            None => return Layer::empty(),
-            Some(view) => view,
-        };
-        let mut layer = Layer::new(view, bg);
-        self.render_rec(rasterizer, &mut layer, tr, None);
-        layer
-    }
-
-    fn render_rec(
-        &self,
-        rasterizer: &dyn Rasterizer,
-        layer: &mut Layer<LinColor>,
-        tr: Transform,
-        quick_opacity: Option<Scalar>,
-    ) {
-        use SceneInner::*;
-        match self.as_ref() {
-            Fill {
-                path,
-                paint,
-                fill_rule,
-            } => {
-                let align =
-                    crate::Transform::new_translate(-layer.x() as Scalar, -layer.y() as Scalar);
-                match quick_opacity {
-                    None => {
-                        path.fill(rasterizer, align * tr, *fill_rule, paint, layer);
-                    }
-                    Some(opacity) => {
-                        let paint = OpacityPaint {
-                            paint,
-                            opacity: opacity as f32,
-                        };
-                        path.fill(rasterizer, align * tr, *fill_rule, paint, layer);
-                    }
-                }
-            }
-            Stroke { path, paint, style } => {
-                let path = path.stroke(*style);
-                let align =
-                    crate::Transform::new_translate(-layer.x() as Scalar, -layer.y() as Scalar);
-                match quick_opacity {
-                    None => {
-                        path.fill(rasterizer, align * tr, FillRule::NonZero, paint, layer);
-                    }
-                    Some(opacity) => {
-                        let paint = OpacityPaint {
-                            paint,
-                            opacity: opacity as f32,
-                        };
-                        path.fill(rasterizer, align * tr, FillRule::NonZero, paint, layer);
-                    }
-                }
-            }
-            Group { children } => {
-                for child in children {
-                    child.render_rec(rasterizer, layer, tr, quick_opacity)
-                }
-            }
-            Transform {
-                child,
-                tr: child_tr,
-            } => {
-                child.render_rec(rasterizer, layer, tr * *child_tr, quick_opacity);
-            }
-            Opacity { child, opacity } => {
-                match quick_opacity {
-                    Some(quick_opacity) => {
-                        child.render_rec(rasterizer, layer, tr, Some(opacity * quick_opacity))
-                    }
-                    None if child.is_quick_opacity() => {
-                        child.render_rec(rasterizer, layer, tr, Some(*opacity))
-                    }
-                    None => {
-                        let bbox = match child.bbox(tr) {
-                            None => return,
-                            Some(bbox) => bbox,
-                        };
-                        // account for anti-aliasing
-                        let bbox = bbox.extend(bbox.max() + Point::new(1.0, 1.0));
-
-                        let child_layer = child.render(rasterizer, tr, Some(bbox), None);
-
-                        let opacity = *opacity as f32;
-                        layer.compose(&child_layer, |dst, src| {
-                            let src = src * opacity;
-                            dst.blend_over(&src)
-                        });
-                    }
-                }
-            }
-            Clip {
-                child,
-                clip,
-                units,
-                fill_rule,
-            } => {
-                let bbox = match self.bbox(tr) {
-                    None => return,
-                    Some(bbox) => bbox,
-                };
-                let bbox = bbox.extend(bbox.max() + Point::new(1.0, 1.0));
-
-                // mask
-                let clip_tr = match units {
-                    Units::UserSpaceOnUse => tr,
-                    Units::BoundingBox => {
-                        let bbox = match child.bbox(Default::default()) {
-                            None => return,
-                            Some(bbox) => bbox,
-                        };
-                        tr * bbox.unit_transform()
-                    }
-                };
-                let mut mask = Layer::new(bbox, None);
-                let align =
-                    crate::Transform::new_translate(-mask.x() as Scalar, -mask.y() as Scalar);
-                clip.mask(rasterizer, align * clip_tr, *fill_rule, mask.as_mut());
-
-                // child
-                let mut child_layer = child.render(rasterizer, tr, Some(bbox), None);
-
-                // compose
-                child_layer.compose(&mask, |dst, src| dst * (src as f32));
-                layer.compose(&child_layer, |dst, src| dst.blend_over(&src));
-            }
-        }
-    }
-
-    // Check if quick opacity can be used
-    //
-    // This function checks if all rendering nodes are non-intersecting, and as the result
-    // it is safe to pre-multiply brush with opacity instead of doing offscreen rendering
-    fn is_quick_opacity(&self) -> bool {
-        fn is_quick_opacity_rec(scene: &Scene, boxes: &mut Vec<BBox>, tr: Transform) -> bool {
-            use SceneInner::*;
-            match scene.as_ref() {
-                Fill { path, .. } => disjoint(boxes, path.bbox(tr)),
-                Stroke { path, .. } => disjoint(boxes, path.bbox(tr)),
-                Group { children } => {
-                    for child in children {
-                        if !is_quick_opacity_rec(child, boxes, tr) {
-                            return false;
-                        }
-                    }
-                    true
-                }
-                Transform {
-                    child,
-                    tr: child_tr,
-                } => is_quick_opacity_rec(child, boxes, tr * *child_tr),
-                Opacity { child, .. } => is_quick_opacity_rec(child, boxes, tr),
-                Clip { child, .. } => is_quick_opacity_rec(child, boxes, tr),
-            }
-        }
-
-        fn disjoint(boxes: &mut Vec<BBox>, other: Option<BBox>) -> bool {
-            let other = match other {
-                None => return true,
-                Some(other) => other,
-            };
-            for bbox in boxes.iter() {
-                if bbox.intersect(other).is_some() {
-                    return false;
-                }
-            }
-            boxes.push(other);
-            true
-        }
-
-        let mut boxes = Vec::new();
-        is_quick_opacity_rec(self, &mut boxes, Transform::identity())
     }
 }
 
@@ -397,6 +217,8 @@ struct PipelineNode {
     tr: Transform,
 }
 
+/// Scene with enriched with additional information (such as bounding box)
+/// which allows for better rendering optimizations.
 struct Pipeline {
     nodes: Vec<PipelineNode>,
 }
@@ -521,6 +343,7 @@ impl Pipeline {
         }
     }
 
+    /// Simple single pass rendering
     pub fn render(
         &self,
         rasterizer: &dyn Rasterizer,
@@ -582,31 +405,7 @@ impl Pipeline {
     }
 }
 
-#[derive(Debug)]
-struct OpacityPaint<P> {
-    paint: P,
-    opacity: f32,
-}
-
-impl<P: Paint> Paint for OpacityPaint<P> {
-    fn at(&self, point: Point) -> LinColor {
-        self.paint.at(point) * self.opacity
-    }
-
-    fn units(&self) -> Option<Units> {
-        self.paint.units()
-    }
-
-    fn transform(&self) -> Transform {
-        self.paint.transform()
-    }
-
-    fn to_json(&self) -> Result<serde_json::Value, crate::SvgParserError> {
-        todo!()
-    }
-}
-
-/// An `OwnedImage` together with an offset
+/// Image with top left corner at (x, y) coordinates
 #[derive(Debug, Clone)]
 pub struct Layer<C> {
     image: ImageOwned<C>,
@@ -636,6 +435,7 @@ impl<C: Default + Copy> Layer<C> {
         }
     }
 
+    /// Create an empty layer
     pub fn empty() -> Self {
         Self {
             image: ImageOwned::empty(),
@@ -644,14 +444,17 @@ impl<C: Default + Copy> Layer<C> {
         }
     }
 
+    /// X coordinate of the layer
     pub fn x(&self) -> i32 {
         self.x
     }
 
+    /// Y coordinate of the layer
     pub fn y(&self) -> i32 {
         self.y
     }
 
+    /// Translate layer by (dx, dy)
     pub fn translate(self, dx: i32, dy: i32) -> Self {
         Self {
             image: self.image,

@@ -1,0 +1,25 @@
+{
+    "type": "transform",
+    "tr": "scale(3)",
+    "child": {
+        "type": "clip",
+        "clip": "M0,0 h80,0 v0,80 h-80,0 z",
+        "child": {
+            "type": "transform",
+            "tr": "rotate(30) translate(10 10)",
+            "child": {
+                "type": "fill",
+                "paint": {
+                    "type": "radial-gradient",
+                    "units": "userSpaceOnUse",
+                    "spread": "reflect",
+                    "tr": "skewX(30) translate(-30, -20) rotate(20)",
+                    "center": [50, 50],
+                    "radius": 40,
+                    "stops": [ [0, "#ffbd4f"], [0.5, "#ff0000"], [0.7, "#ff00ff"], [1, "#000000"] ]
+                },
+                "path": "M10,10 70,10 70,70 10,70z"
+            }
+        }
+    }
+}

@@ -1,3 +1,4 @@
+//! Render Firefox Logo
 #![deny(warnings)]
 use rasterize::*;
 use std::sync::Arc;
@@ -322,7 +323,7 @@ fn main() -> Result<()> {
     let size = BBox::new((0.0, 0.0), (512.0, 512.0));
     let tr = Transform::fit_bbox(view, size, Align::Mid);
     let scene = scene.transform(tr);
-    eprintln!("{}", serde_json::to_string_pretty(&scene)?);
+    // eprintln!("{}", serde_json::to_string_pretty(&scene)?);
 
     let span = tracing::info_span!("render");
     let img = span.in_scope(|| {

@@ -96,7 +96,7 @@ fn main() -> Result<(), Error> {
         _ => args.tr,
     };
 
-    let image = scene.render_pipeline(&ActiveEdgeRasterizer::default(), tr, None, args.bg);
+    let image = scene.render(&ActiveEdgeRasterizer::default(), tr, None, args.bg);
 
     if args.output_file != "-" {
         let mut image_file = BufWriter::new(File::create(args.output_file)?);

@@ -1,3 +1,4 @@
+//! Generate SVG font containing vertical gauge symbols
 #![deny(warnings)]
 
 use rasterize::*;
@@ -19,7 +20,7 @@ struct Intersection {
     segment_id: (usize, usize),
     // parameter `t` of the intersection
     segment_t: Scalar,
-    // whether to follow segminet or line
+    // whether to follow segment or line
     segment_follow: bool,
     // winding delta introduced by intersection
     winding_delta: i32,
@@ -103,7 +104,7 @@ fn intersect(segments: &Vec<Vec<Segment>>, tr: Transform, y_low: bool) -> Vec<In
             let int_prev = output[output.len() - 1];
             if (int.x_coord - int_prev.x_coord).abs() < EPSILON {
                 if int.winding_delta + int_prev.winding_delta == 0 {
-                    // this might happend when line touches the corner of the path
+                    // this might happened when line touches the corner of the path
                     winding -= int_prev.winding_delta;
                     output.pop();
                 }
@@ -121,7 +122,7 @@ fn intersect(segments: &Vec<Vec<Segment>>, tr: Transform, y_low: bool) -> Vec<In
 
 /// Convert path to hatched version of the path
 ///
-/// All hatches are perpendicular to `normal` with perioud of `normal.lenght()`,
+/// All hatches are perpendicular to `normal` with period of `normal.length()`,
 /// with covered width equal to `period * ratio`.
 fn hatch(path: &Path, normal: Line, ratio: Scalar) -> Path {
     if ratio <= 0.0 || ratio >= 1.0 {
@@ -145,7 +146,7 @@ fn hatch(path: &Path, normal: Line, ratio: Scalar) -> Path {
     let offset_y = -(bbox_tr.y() / period).floor() * period;
     let tr = Transform::new_translate(-bbox_tr.x(), offset_y) * tr;
 
-    // all segmentes grouped by subpaths with included closing lines
+    // all segments grouped by subpath with included closing lines
     let segments: Vec<_> = path
         .subpaths()
         .iter()
@@ -287,7 +288,7 @@ fn hatch(path: &Path, normal: Line, ratio: Scalar) -> Path {
         }
 
         // TODO:
-        //   - include subpaths, when bounding box fits between low and high lines
+        //   - include subpath, when bounding box fits between low and high lines
         offset_y += period;
     }
 
