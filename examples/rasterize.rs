@@ -3,7 +3,7 @@
 
 use rasterize::*;
 use std::{
-    env, fmt,
+    env,
     fs::File,
     io::{BufWriter, Read},
     sync::Arc,
@@ -19,23 +19,6 @@ fn timeit<F: FnOnce() -> R, R>(msg: impl AsRef<str>, f: F) -> R {
 }
 
 type Error = Box<dyn std::error::Error>;
-
-#[derive(Debug)]
-struct ArgsError(String);
-
-impl ArgsError {
-    fn new(err: impl Into<String>) -> Self {
-        Self(err.into())
-    }
-}
-
-impl fmt::Display for ArgsError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl std::error::Error for ArgsError {}
 
 #[derive(Debug, Clone, Copy)]
 enum RasterizerType {
@@ -65,112 +48,104 @@ impl Args {
             ActiveEdge => Box::new(ActiveEdgeRasterizer::new(self.flatness)),
         }
     }
-}
 
-fn parse_args() -> Result<Args, Error> {
-    let mut result = Args {
-        input_file: String::new(),
-        output_file: String::new(),
-        outline: false,
-        width: None,
-        stroke: None,
-        flatness: DEFAULT_FLATNESS,
-        rasterizer: RasterizerType::SignedDifference,
-        tr: Transform::identity(),
-        fg: LinColor::new(0.0, 0.0, 0.0, 1.0),
-        bg: LinColor::new(1.0, 1.0, 1.0, 1.0),
-    };
-    let mut positional = 0;
-    let mut args = env::args();
-    let cmd = args.next().unwrap();
-    while let Some(arg) = args.next() {
-        match arg.as_ref() {
-            "-h" => {
-                positional = 0;
-                break;
-            }
-            "-w" => {
-                let width = args
-                    .next()
-                    .ok_or_else(|| ArgsError::new("-w requires argument"))?;
-                result.width = Some(width.parse()?);
-            }
-            "-t" => {
-                let tr_str = args
-                    .next()
-                    .ok_or_else(|| ArgsError::new("-t requires argument"))?;
-                result.tr = tr_str.parse()?;
-            }
-            "-s" => {
-                let stroke = args
-                    .next()
-                    .ok_or_else(|| ArgsError::new("-s requres argument"))?;
-                result.stroke = Some(stroke.parse()?);
-            }
-            "-o" => {
-                result.outline = true;
-            }
-            "-a" => {
-                result.rasterizer = RasterizerType::ActiveEdge;
-            }
-            "-f" => {
-                let flatness: Scalar = args
-                    .next()
-                    .ok_or_else(|| ArgsError::new("-f requres argument"))?
-                    .parse()?;
-                if flatness < EPSILON {
-                    return Err(Box::new(ArgsError::new("flatness is too small")));
+    fn parse() -> Result<Args, Error> {
+        let mut result = Args {
+            input_file: String::new(),
+            output_file: String::new(),
+            outline: false,
+            width: None,
+            stroke: None,
+            flatness: DEFAULT_FLATNESS,
+            rasterizer: RasterizerType::SignedDifference,
+            tr: Transform::identity(),
+            fg: LinColor::new(0.0, 0.0, 0.0, 1.0),
+            bg: LinColor::new(1.0, 1.0, 1.0, 1.0),
+        };
+        let mut positional = 0;
+        let mut args = env::args();
+        let cmd = args.next().unwrap();
+        while let Some(arg) = args.next() {
+            match arg.as_ref() {
+                "-h" => {
+                    positional = 0;
+                    break;
                 }
-                result.flatness = flatness;
-            }
-            "-fg" => {
-                result.fg = args
-                    .next()
-                    .ok_or_else(|| ArgsError::new("-fg requres color #rrggbb(aa) argument"))?
-                    .parse()?;
-            }
-            "-bg" => {
-                result.bg = args
-                    .next()
-                    .ok_or_else(|| ArgsError::new("-bg requres color #rrggbb(aa) argument"))?
-                    .parse()?;
-            }
-            _ => {
-                positional += 1;
-                match positional {
-                    1 => result.input_file = arg,
-                    2 => result.output_file = arg,
-                    _ => return Err(ArgsError::new("unexpected positional argment").into()),
+                "-w" => {
+                    let width = args.next().ok_or("-w requires argument")?;
+                    result.width = Some(width.parse()?);
+                }
+                "-t" => {
+                    result.tr = args.next().ok_or("-t requires argument")?.parse()?;
+                }
+                "-s" => {
+                    let stroke = args.next().ok_or("-s requres argument")?;
+                    result.stroke = Some(stroke.parse()?);
+                }
+                "-o" => {
+                    result.outline = true;
+                }
+                "-a" => {
+                    result.rasterizer = RasterizerType::ActiveEdge;
+                }
+                "-f" => {
+                    let flatness: Scalar = args.next().ok_or("-f requres argument")?.parse()?;
+                    if flatness < EPSILON {
+                        return Err("flatness is too small".into());
+                    }
+                    result.flatness = flatness;
+                }
+                "-fg" => {
+                    result.fg = args
+                        .next()
+                        .ok_or("-fg requres color #rrggbb(aa) argument")?
+                        .parse()?;
+                }
+                "-bg" => {
+                    result.bg = args
+                        .next()
+                        .ok_or("-bg requres color #rrggbb(aa) argument")?
+                        .parse()?;
+                }
+                _ => {
+                    positional += 1;
+                    match positional {
+                        1 => result.input_file = arg,
+                        2 => result.output_file = arg,
+                        _ => return Err("unexpected positional argment".into()),
+                    }
                 }
             }
         }
+        if positional < 2 {
+            eprintln!(
+                "Very simple tool that accepts SVG path as an input and produces rasterized image"
+            );
+            eprintln!("\nUSAGE:");
+            eprintln!(
+                "    {} [-w <width>] [-s <stroke>] [-f <flatness>] [-o] [-a] [-fg <color>] [-bg <color>] <file.path> <out.bmp>",
+                cmd
+            );
+            eprintln!("\nARGS:");
+            eprintln!("    -w <width>         width in pixels of the output image");
+            eprintln!("    -t <transform>     apply transform");
+            eprintln!("    -s <stroke_width>  stroke path before rendering");
+            eprintln!("    -o                 show outline with control points instead of filling");
+            eprintln!(
+                "    -a                 use active-edge instead of signed-difference rasterizer"
+            );
+            eprintln!("    -fg <color>        foreground color");
+            eprintln!("    -bg <color>        background color");
+            eprintln!(
+                "    -f <flatness>      flatness used by rasterizer (defualt: {})",
+                DEFAULT_FLATNESS
+            );
+            eprintln!("    <file.path>        file containing SVG path ('-' means stdin)");
+            eprintln!("    <out.bmp>          image rendered in the BMP format ('-' means stdout)");
+            std::process::exit(1);
+        }
+        Ok(result)
     }
-    if positional < 2 {
-        eprintln!(
-            "Very simple tool that accepts SVG path as an input and produces rasterized image"
-        );
-        eprintln!("\nUSAGE:");
-        eprintln!(
-            "    {} [-w <width>] [-s <stroke>] [-f <flatness>] [-o] [-a] [-fg <color>] [-bg <color>] <file.path> <out.bmp>",
-            cmd
-        );
-        eprintln!("\nARGS:");
-        eprintln!("    -w <width>         width in pixels of the output image");
-        eprintln!("    -t <transform>     apply transform");
-        eprintln!("    -s <stroke_width>  stroke path before rendering");
-        eprintln!("    -o                 show outline with control points instead of filling");
-        eprintln!("    -a                 use active-edge instead of signed-difference rasterizer");
-        eprintln!("    -fg <color>        foreground color");
-        eprintln!("    -bg <color>        background color");
-        eprintln!(
-            "    -f <flatness>      flatness used by rasterizer (defualt: {})",
-            DEFAULT_FLATNESS
-        );
-        eprintln!("    <file.path>        file containing SVG path ('-' means stdin)");
-        eprintln!("    <out.bmp>          image rendered in the BMP format ('-' means stdout)");
-        std::process::exit(1);
-    }
-    Ok(result)
 }
 
 /// Load path for the file
@@ -254,7 +229,7 @@ fn main() -> Result<(), Error> {
         .with_writer(std::io::stderr)
         .init();
 
-    let args = parse_args()?;
+    let args = Args::parse()?;
     let rasterizer = args.get_rasterizer();
 
     let path = match args.stroke {
@@ -275,9 +250,7 @@ fn main() -> Result<(), Error> {
     // transform if needed
     let tr = match args.width {
         Some(width) if width > 2 => {
-            let src_bbox = path
-                .bbox(args.tr)
-                .ok_or_else(|| ArgsError::new("path is empty"))?;
+            let src_bbox = path.bbox(args.tr).ok_or("path is empty")?;
             let width = width as Scalar;
             let height = src_bbox.height() * width / src_bbox.width();
             let dst_bbox = BBox::new(Point::new(1.0, 1.0), Point::new(width - 1.0, height - 1.0));

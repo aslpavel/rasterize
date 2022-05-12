@@ -9,7 +9,7 @@ include = [
   "Cargo.toml",
   "README.md",
   "LICENSE",
-  "paths/squirrel.png",
+  "data/squirrel.png",
 ]
 homepage = "https://github.com/aslpavel/rasterize"
 repository = "https://github.com/aslpavel/rasterize.git"
@@ -23,6 +23,8 @@ default = []
 
 [dependencies]
 tracing = "^0.1"
+serde = { version = "1.0", features = ["rc", "derive"]}
+serde_json = { version = "1.0", features = ["preserve_order"] }
 png = { version = "^0.17", optional = true }
 
 [dev-dependencies]

@@ -1,14 +1,18 @@
-use crate::{utils::quadratic_solve, LinColor, Paint, Point, Scalar, Transform, Units};
-use std::cmp::Ordering;
+use crate::{
+    utils::quadratic_solve, LinColor, Paint, Point, Scalar, SvgParserError, Transform, Units,
+};
+use serde::{de, Deserialize, Serialize};
+use std::{borrow::Cow, cmp::Ordering};
 
 /// Gradient spread logic for the parameter smaller than 0 and greater than 1
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum GradSpread {
     /// Use the same colors as the edge of the gradient
     Pad,
     /// Repeat gradient
     Repeat,
-    /// Repeat gradient but alternate reflected and non reflectet versions
+    /// Repeat gradient but alternate reflected and non reflected versions
     Reflect,
 }
 
@@ -29,7 +33,7 @@ impl Default for GradSpread {
     }
 }
 
-/// Specifies color at a particular parmeter offset of the gradient
+/// Specifies color at a particular parameter offset of the gradient
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GradStop {
     pub position: Scalar,
@@ -42,8 +46,32 @@ impl GradStop {
     }
 }
 
+impl Serialize for GradStop {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let color = self.color.to_string();
+        (self.position, color).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for GradStop {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let (position, color): (Scalar, Cow<'de, str>) = Deserialize::deserialize(deserializer)?;
+        Ok(Self {
+            position,
+            color: color.parse::<LinColor>().map_err(de::Error::custom)?,
+        })
+    }
+}
+
 /// List of all `GradStop` in the gradient
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct GradStops {
     stops: Vec<GradStop>,
 }
@@ -67,6 +95,12 @@ impl GradStops {
     fn convert_to_srgb(&mut self) {
         for stop in self.stops.iter_mut() {
             stop.color = stop.color.into_srgb()
+        }
+    }
+
+    fn convert_to_linear(&mut self) {
+        for stop in self.stops.iter_mut() {
+            stop.color = stop.color.into_linear()
         }
     }
 }
@@ -105,19 +139,22 @@ impl From<Vec<GradStop>> for GradStops {
 }
 
 /// Linear Gradient
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GradLinear {
-    stops: GradStops,
     units: Units,
     linear_colors: bool,
     spread: GradSpread,
     tr: Transform,
     start: Point,
+    end: Point,
     // precomputed value equal to `(end - start) / |end - start| ^ 2`
     dir: Point,
+    stops: GradStops,
 }
 
 impl GradLinear {
+    pub const GRAD_TYPE: &'static str = "linear-gradient";
+
     pub fn new(
         stops: impl Into<GradStops>,
         units: Units,
@@ -141,8 +178,15 @@ impl GradLinear {
             spread,
             tr,
             start,
+            end,
             dir: dir / dir.dot(dir),
         }
+    }
+
+    /// Construct linear gradient from JSON value
+    pub fn from_json(value: serde_json::Value) -> Result<Self, SvgParserError> {
+        let value: GradLinearSerialize = serde_json::from_value(value)?;
+        Ok(value.into())
     }
 }
 
@@ -165,12 +209,88 @@ impl Paint for GradLinear {
     fn units(&self) -> Option<Units> {
         Some(self.units)
     }
+
+    fn to_json(&self) -> Result<serde_json::Value, SvgParserError> {
+        let ser: GradLinearSerialize = self.clone().into();
+        Ok(serde_json::to_value(ser)?)
+    }
+}
+
+impl Serialize for GradLinear {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        GradLinearSerialize::from(self.clone()).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for GradLinear {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(GradLinearSerialize::deserialize(deserializer)?.into())
+    }
+}
+
+/// Intermediate type for linear gradient (de)serialization
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct GradLinearSerialize {
+    #[serde(rename = "type")]
+    grad_type: String,
+    #[serde(default, skip_serializing_if = "crate::utils::is_default")]
+    units: Units,
+    #[serde(default, skip_serializing_if = "crate::utils::is_default")]
+    linear_colors: bool,
+    #[serde(default, skip_serializing_if = "crate::utils::is_default")]
+    spread: GradSpread,
+    #[serde(
+        with = "crate::utils::serde_from_str",
+        default,
+        skip_serializing_if = "crate::utils::is_default"
+    )]
+    tr: Transform,
+    start: Point,
+    end: Point,
+    stops: GradStops,
+}
+
+impl From<GradLinear> for GradLinearSerialize {
+    fn from(mut grad: GradLinear) -> Self {
+        if !grad.linear_colors {
+            grad.stops.convert_to_linear();
+        }
+        GradLinearSerialize {
+            grad_type: GradLinear::GRAD_TYPE.into(),
+            units: grad.units,
+            linear_colors: grad.linear_colors,
+            spread: grad.spread,
+            tr: grad.tr,
+            start: grad.start,
+            end: grad.end,
+            stops: grad.stops,
+        }
+    }
+}
+
+impl From<GradLinearSerialize> for GradLinear {
+    fn from(value: GradLinearSerialize) -> Self {
+        Self::new(
+            value.stops,
+            value.units,
+            value.linear_colors,
+            value.spread,
+            value.tr,
+            value.start,
+            value.end,
+        )
+    }
 }
 
 /// Radial Gradient
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GradRadial {
-    stops: GradStops,
     units: Units,
     linear_colors: bool,
     spread: GradSpread,
@@ -179,9 +299,12 @@ pub struct GradRadial {
     radius: Scalar,
     fcenter: Point,
     fradius: Scalar,
+    stops: GradStops,
 }
 
 impl GradRadial {
+    pub const GRAD_TYPE: &'static str = "radial-gradient";
+
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         stops: impl Into<GradStops>,
@@ -211,6 +334,12 @@ impl GradRadial {
             fcenter,
             fradius,
         }
+    }
+
+    /// Construct radial gradient from JSON value
+    pub fn from_json(value: serde_json::Value) -> Result<Self, SvgParserError> {
+        let value: GradRadialSerialize = serde_json::from_value(value)?;
+        Ok(value.into())
     }
 
     /// Calculate gradient offset at a given point
@@ -273,6 +402,87 @@ impl Paint for GradRadial {
     fn units(&self) -> Option<Units> {
         Some(self.units)
     }
+
+    fn to_json(&self) -> Result<serde_json::Value, SvgParserError> {
+        let ser: GradRadialSerialize = self.clone().into();
+        Ok(serde_json::to_value(ser)?)
+    }
+}
+
+impl Serialize for GradRadial {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        GradRadialSerialize::from(self.clone()).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for GradRadial {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(GradRadialSerialize::deserialize(deserializer)?.into())
+    }
+}
+
+/// Intermediate type for radial gradient (de)serialization
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct GradRadialSerialize {
+    #[serde(rename = "type")]
+    grad_type: String,
+    #[serde(default, skip_serializing_if = "crate::utils::is_default")]
+    units: Units,
+    #[serde(default, skip_serializing_if = "crate::utils::is_default")]
+    linear_colors: bool,
+    #[serde(default, skip_serializing_if = "crate::utils::is_default")]
+    spread: GradSpread,
+    #[serde(with = "crate::utils::serde_from_str")]
+    tr: Transform,
+    center: Point,
+    radius: Scalar,
+    #[serde(default, skip_serializing_if = "crate::utils::is_default")]
+    fcenter: Option<Point>,
+    #[serde(default, skip_serializing_if = "crate::utils::is_default")]
+    fradius: Scalar,
+    stops: GradStops,
+}
+
+impl From<GradRadial> for GradRadialSerialize {
+    fn from(mut grad: GradRadial) -> Self {
+        if !grad.linear_colors {
+            grad.stops.convert_to_linear();
+        }
+        Self {
+            grad_type: GradRadial::GRAD_TYPE.into(),
+            units: grad.units,
+            linear_colors: grad.linear_colors,
+            spread: grad.spread,
+            tr: grad.tr,
+            center: grad.center,
+            radius: grad.radius,
+            fcenter: (grad.center != grad.fcenter).then(|| grad.fcenter),
+            fradius: grad.fradius,
+            stops: grad.stops,
+        }
+    }
+}
+
+impl From<GradRadialSerialize> for GradRadial {
+    fn from(value: GradRadialSerialize) -> Self {
+        Self::new(
+            value.stops,
+            value.units,
+            value.linear_colors,
+            value.spread,
+            value.tr,
+            value.center,
+            value.radius,
+            value.fcenter.unwrap_or(value.center),
+            value.fradius,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -308,7 +518,7 @@ mod tests {
     }
 
     #[test]
-    fn test_radial_grad() {
+    fn test_radial_grad() -> Result<(), Box<dyn std::error::Error>> {
         let fcenter = Point::new(0.25, 0.0);
         let center = Point::new(0.5, 0.0);
         let grad = GradRadial::new(
@@ -325,6 +535,11 @@ mod tests {
         assert!(grad.offset(fcenter).unwrap() < 0.0);
         assert_approx_eq!(grad.offset(Point::new(0.675, 0.0)).unwrap(), 0.5);
         assert_approx_eq!(grad.offset(Point::new(1.0, 0.0)).unwrap(), 1.0);
+
+        let grad_str = serde_json::to_string(&grad)?;
+        assert_eq!(grad, serde_json::from_str(grad_str.as_str())?);
+
+        Ok(())
     }
 
     #[test]
@@ -352,6 +567,9 @@ mod tests {
         assert_eq!(grad.at(Point::new(0.0, 1.0)), c1);
         assert_eq!(grad.at(Point::new(1.0, 1.0)), c2);
         assert_eq!(grad.at(Point::new(1.5, 1.5)), c2);
+
+        let grad_str = serde_json::to_string(&grad)?;
+        assert_eq!(grad, serde_json::from_str(grad_str.as_str())?);
 
         Ok(())
     }

@@ -426,7 +426,7 @@ impl<I: Read> SvgTransformParser<I> {
         match units {
             b"" | b"deg" => Ok(value * crate::PI / 180.0),
             b"rad" => Ok(value),
-            _ => Err(SvgParserError::InvalidAngleUnits),
+            _ => Err(SvgParserError::InvalidUnits),
         }
     }
 
@@ -570,10 +570,14 @@ pub enum SvgParserError {
     UnexpectedSegmentType,
     /// Invalid transform operation
     InvalidTransformOp,
-    /// Invalid Angle
-    InvalidAngleUnits,
+    /// Invalid (Angle|Gradient|Length)
+    InvalidUnits,
+    /// Invalid Fill Rule
+    InvalidFillRule,
     /// Bracket expected,
     BracketExpected,
+    /// JSON error
+    Json(serde_json::Error),
     /// IO error propagated while reading input stream
     IoError(std::io::Error),
 }
@@ -587,6 +591,12 @@ impl fmt::Display for SvgParserError {
 impl From<std::io::Error> for SvgParserError {
     fn from(error: std::io::Error) -> Self {
         Self::IoError(error)
+    }
+}
+
+impl From<serde_json::Error> for SvgParserError {
+    fn from(error: serde_json::Error) -> Self {
+        Self::Json(error)
     }
 }
 

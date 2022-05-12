@@ -3,7 +3,9 @@ use crate::{
     ImageMut, LinColor, Line, Paint, Point, Quad, Scalar, Segment, Size, SvgParserError,
     SvgPathParser, Transform, EPSILON,
 };
+use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Cow,
     fmt,
     io::{Cursor, Read, Write},
     str::FromStr,
@@ -15,11 +17,13 @@ use std::{
 pub const DEFAULT_FLATNESS: Scalar = 0.05;
 
 /// The algorithm to use to determine the inside part of a shape, when filling it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum FillRule {
     /// Fill area with non-zero winding number
+    #[serde(rename = "nonzero")]
     NonZero,
     /// Fill area with odd winding number
+    #[serde(rename = "evenodd")]
     EvenOdd,
 }
 
@@ -49,15 +53,18 @@ impl Default for FillRule {
 
 /// `LineJoin` defines the shape to be used at the corners of paths when they are stroked.
 /// See [SVG specification](https://www.w3.org/TR/SVG2/painting.html#LineJoin) for more details.
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub enum LineJoin {
     /// Continue path segments with lines until they intersect. But only
     /// if `miter_length = stroke-width / sin(0.5 * eta)` is less than the miter argument.
+    #[serde(rename = "miter")]
     Miter(Scalar),
     /// Connect path segments with straight line.
+    #[serde(rename = "bevel")]
     Bevel,
     /// Round corner is to be used to join path segments.
     /// The corner is a circular sector centered on the join point.
+    #[serde(rename = "round")]
     Round,
 }
 
@@ -69,13 +76,16 @@ impl Default for LineJoin {
 
 /// `LineCap` specifies the shape to be used at the end of open sub-paths when they are stroked.
 /// See [SVG specification](https://www.w3.org/TR/SVG2/painting.html#LineCaps) for more details.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum LineCap {
     /// Connect path segments with straight line.
+    #[serde(rename = "butt")]
     Butt,
     /// Add half-square to the end of the segments
+    #[serde(rename = "square")]
     Square,
     /// Add half-circle to the end of the segments
+    #[serde(rename = "round")]
     Round,
 }
 
@@ -86,13 +96,15 @@ impl Default for LineCap {
 }
 
 /// Style used to generate stroke
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct StrokeStyle {
     /// Width of the stroke
     pub width: Scalar,
     /// How to join offset segments
+    #[serde(default, skip_serializing_if = "crate::utils::is_default")]
     pub line_join: LineJoin,
     /// How to join segments at the ends of the path
+    #[serde(default, skip_serializing_if = "crate::utils::is_default")]
     pub line_cap: LineCap,
 }
 
@@ -214,6 +226,12 @@ impl fmt::Debug for Path {
             }
         }
         Ok(())
+    }
+}
+
+impl fmt::Display for Path {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_svg_path())
     }
 }
 
@@ -782,6 +800,26 @@ impl FromStr for Path {
             cmd?.apply(&mut builder);
         }
         Ok(builder.build())
+    }
+}
+
+impl Serialize for Path {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        self.to_svg_path().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Path {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Cow::<'de, str>::deserialize(deserializer)?
+            .parse()
+            .map_err(serde::de::Error::custom)
     }
 }
 

@@ -3,7 +3,7 @@ use rasterize::*;
 use std::{fs::File, sync::Arc};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let path = Arc::new(Path::read_svg_path(File::open("./paths/squirrel.path")?)?);
+    let path = Arc::new(Path::read_svg_path(File::open("./data/squirrel.path")?)?);
     let fill_rule = FillRule::default();
     // let tr = Transform::identity();
     // let bbox = path.bbox(tr).expect("path is empty");

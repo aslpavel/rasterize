@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         (0.0, 0.0),
         (1.0, 1.0),
     );
-    let path = Arc::new(Path::read_svg_path(File::open("./paths/squirrel.path")?)?);
+    let path = Arc::new(Path::read_svg_path(File::open("./data/squirrel.path")?)?);
     let scene = Scene::group(vec![Scene::fill(path.clone(), Arc::new(paint), fill_rule)]);
      */
 

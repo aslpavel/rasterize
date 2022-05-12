@@ -14,8 +14,8 @@ This is a fully functional 2D rasterizer and SVG path parser.
 ### Usage example
 There is a very simple binary in examples folder that can be used to render SVG path
 ```
-$ cargo run --release --example rasterize -- paths/squirrel.path -w 512 -o squirrel.bmp
+$ cargo run --release --example rasterize -- data/squirrel.path -w 512 -o squirrel.bmp
 ```
 This will produce:
 
-![squirrel](https://raw.githubusercontent.com/aslpavel/rasterize/main/paths/squirrel.png)
+![squirrel](https://raw.githubusercontent.com/aslpavel/rasterize/main/data/squirrel.png)

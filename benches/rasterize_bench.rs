@@ -8,8 +8,8 @@ use std::{
     time::Duration,
 };
 
-const SQUIRREL_FILE: &str = "paths/squirrel.path";
-const MATERIAL_FILE: &str = "paths/material-big.path";
+const SQUIRREL_FILE: &str = "data/squirrel.path";
+const MATERIAL_FILE: &str = "data/material-big.path";
 
 fn rasterizers() -> impl Iterator<Item = Box<dyn Rasterizer>> {
     let r0: Box<dyn Rasterizer> = Box::new(SignedDifferenceRasterizer::default());

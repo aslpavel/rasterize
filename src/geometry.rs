@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::{utils::clamp, Line, Size};
 use std::{
     fmt,
@@ -28,7 +30,8 @@ pub fn scalar_fmt(f: &mut fmt::Formatter<'_>, value: Scalar) -> fmt::Result {
 }
 
 /// Value representing a 2D point or vector.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Point(pub [Scalar; 2]);
 
 impl fmt::Debug for Point {

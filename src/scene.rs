@@ -2,40 +2,49 @@ use crate::{
     utils::clamp, BBox, Color, FillRule, Image, ImageMut, ImageOwned, LinColor, Paint, Path, Point,
     Rasterizer, Scalar, Shape, Size, StrokeStyle, Transform, Units,
 };
+use serde::{Deserialize, Serialize};
 use std::{cmp, fmt, sync::Arc};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "lowercase")]
 pub enum SceneInner {
     Fill {
-        path: Arc<Path>,
-        paint: Arc<dyn Paint>,
+        #[serde(default, skip_serializing_if = "crate::utils::is_default")]
         fill_rule: FillRule,
+        #[serde(with = "serde_paint")]
+        paint: Arc<dyn Paint>,
+        path: Arc<Path>,
     },
     Stroke {
-        path: Arc<Path>,
-        paint: Arc<dyn Paint>,
+        #[serde(flatten)]
         style: StrokeStyle,
+        #[serde(with = "serde_paint")]
+        paint: Arc<dyn Paint>,
+        path: Arc<Path>,
     },
     Group {
         children: Vec<Scene>,
     },
     Transform {
-        child: Scene,
+        #[serde(with = "crate::utils::serde_from_str")]
         tr: Transform,
+        child: Scene,
     },
     Opacity {
         child: Scene,
         opacity: Scalar,
     },
     Clip {
-        child: Scene,
-        clip: Arc<Path>,
-        units: Units,
         fill_rule: FillRule,
+        #[serde(default, skip_serializing_if = "crate::utils::is_default")]
+        units: Units,
+        clip: Arc<Path>,
+        child: Scene,
     },
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Scene {
     inner: Arc<SceneInner>,
 }
@@ -591,6 +600,10 @@ impl<P: Paint> Paint for OpacityPaint<P> {
     fn transform(&self) -> Transform {
         self.paint.transform()
     }
+
+    fn to_json(&self) -> Result<serde_json::Value, crate::SvgParserError> {
+        todo!()
+    }
 }
 
 /// An `OwnedImage` together with an offset
@@ -699,6 +712,61 @@ impl<C> Image for Layer<C> {
 impl<C> ImageMut for Layer<C> {
     fn data_mut(&mut self) -> &mut [Self::Pixel] {
         self.image.data_mut()
+    }
+}
+
+mod serde_paint {
+    use crate::{GradLinear, GradRadial, LinColor};
+
+    use super::{Arc, Paint};
+    use serde::{de, ser, Deserialize, Deserializer, Serialize, Serializer};
+    use serde_json::Value;
+
+    pub fn serialize<S>(paint: &Arc<dyn Paint>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        paint
+            .to_json()
+            .map_err(ser::Error::custom)?
+            .serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Arc<dyn Paint>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        match Value::deserialize(deserializer)? {
+            Value::String(color) => {
+                let color = color.parse::<LinColor>().map_err(de::Error::custom)?;
+                Ok(Arc::new(color))
+            }
+            Value::Object(map) => {
+                let paint_type = map
+                    .get("type")
+                    .ok_or_else(|| de::Error::missing_field("type"))?;
+                match paint_type.as_str() {
+                    Some(GradRadial::GRAD_TYPE) => {
+                        let grad =
+                            GradRadial::from_json(Value::Object(map)).map_err(de::Error::custom)?;
+                        Ok(Arc::new(grad))
+                    }
+                    Some(GradLinear::GRAD_TYPE) => {
+                        let grad =
+                            GradLinear::from_json(Value::Object(map)).map_err(de::Error::custom)?;
+                        Ok(Arc::new(grad))
+                    }
+                    _ => Err(de::Error::custom(format!(
+                        "unknown paint type: {}",
+                        paint_type
+                    ))),
+                }
+            }
+            value => Err(de::Error::custom(format!(
+                "failed to parse paint: {}",
+                value
+            ))),
+        }
     }
 }
 
