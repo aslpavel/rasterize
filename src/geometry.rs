@@ -596,10 +596,31 @@ impl fmt::Debug for BBox {
     }
 }
 
+impl Serialize for BBox {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        (self.x(), self.y(), self.width(), self.height()).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for BBox {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let (minx, miny, width, height): (Scalar, Scalar, Scalar, Scalar) =
+            Deserialize::deserialize(deserializer)?;
+        Ok(BBox::new((minx, miny), (minx + width, miny + height)))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{assert_approx_eq, Curve};
+    type Error = Box<dyn std::error::Error>;
 
     #[test]
     fn test_trasform() {
@@ -675,5 +696,15 @@ mod tests {
             .is_close_to((d.min + d.max) / 2.0));
         assert!(tr4.apply(s2.min).is_close_to(Point::new(3.0, 7.5)));
         assert!(tr4.apply(s2.max).is_close_to(Point::new(13.0, 12.5)));
+    }
+
+    #[test]
+    fn test_bbox_serde() -> Result<(), Error> {
+        let expected = BBox::new((1.0, 2.0), (4.0, 6.0));
+        let result: BBox = serde_json::from_str(&serde_json::to_string(&expected)?)?;
+        assert_eq!(result, expected);
+        let result: BBox = serde_json::from_str("[1, 2, 3, 4]")?;
+        assert_eq!(result, expected);
+        Ok(())
     }
 }
