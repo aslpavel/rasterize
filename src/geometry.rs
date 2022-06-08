@@ -15,18 +15,28 @@ pub const EPSILON_SQRT: f64 = 1.490_116_119_384_765_6e-8;
 /// Mathematical pi constant
 pub const PI: f64 = std::f64::consts::PI;
 
+pub struct ScalarFmt(pub Scalar);
+
+impl fmt::Debug for ScalarFmt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let value = self.0;
+        let value_abs = value.abs();
+        if value_abs.fract() < EPSILON {
+            write!(f, "{}", value.trunc() as i64)
+        } else if value_abs > 9999.0 || value_abs <= 0.0001 {
+            write!(f, "{:.3e}", value)
+        } else {
+            let ten: Scalar = 10.0;
+            let round = ten.powi(6 - (value_abs.trunc() + 1.0).log10().ceil() as i32);
+            write!(f, "{}", (value * round).round() / round)
+        }
+    }
+}
+
 /// Format floats in a compact way suitable for SVG path
 pub fn scalar_fmt(f: &mut fmt::Formatter<'_>, value: Scalar) -> fmt::Result {
-    let value_abs = value.abs();
-    if value_abs.fract() < EPSILON {
-        write!(f, "{}", value.trunc() as i64)
-    } else if value_abs > 9999.0 || value_abs <= 0.0001 {
-        write!(f, "{:.3e}", value)
-    } else {
-        let ten: Scalar = 10.0;
-        let round = ten.powi(6 - (value_abs.trunc() + 1.0).log10().ceil() as i32);
-        write!(f, "{}", (value * round).round() / round)
-    }
+    use std::fmt::Debug;
+    ScalarFmt(value).fmt(f)
 }
 
 /// Value representing a 2D point or vector.
@@ -585,14 +595,12 @@ fn range_intersect(
 
 impl fmt::Debug for BBox {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "BBox x=")?;
-        scalar_fmt(f, self.x())?;
-        write!(f, ", y=")?;
-        scalar_fmt(f, self.y())?;
-        write!(f, ", w=")?;
-        scalar_fmt(f, self.width())?;
-        write!(f, ", h=")?;
-        scalar_fmt(f, self.height())
+        f.debug_struct("BBox")
+            .field("x", &ScalarFmt(self.x()))
+            .field("y", &ScalarFmt(self.y()))
+            .field("w", &ScalarFmt(self.width()))
+            .field("h", &ScalarFmt(self.height()))
+            .finish()
     }
 }
 

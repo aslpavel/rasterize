@@ -175,7 +175,7 @@ impl Scene {
             None => return Layer::empty(),
             Some(root_id) => root_id,
         };
-        pipeline.render(rasterizer, root_id, bg)
+        pipeline.render(rasterizer, root_id, view, bg)
     }
 }
 
@@ -344,73 +344,88 @@ impl Pipeline {
     }
 
     /// Simple single pass rendering
+    ///
+    /// NOTE: `view` argument here is used to force layer to be of a specific size,
+    ///       it is usually only used on the top level call.
     pub fn render(
         &self,
         rasterizer: &dyn Rasterizer,
         node_id: PipelineNodeId,
+        view: Option<BBox>,
         bg: Option<LinColor>,
     ) -> Layer<LinColor> {
-        fn render_rec(
-            pipeline: &Pipeline,
-            rasterizer: &dyn Rasterizer,
-            node_id: PipelineNodeId,
-            layer: &mut Layer<LinColor>,
-        ) {
-            let node = pipeline.get(node_id);
+        // Force layer to be at least the size of the view
+        let mut layer = Layer::new(view.unwrap_or_else(|| self.get(node_id).bbox), bg);
+        self.render_rec(rasterizer, node_id, &mut layer);
+        layer
+    }
 
-            use PipelineItem::*;
-            match &node.item {
-                Fill {
-                    path,
-                    paint,
-                    fill_rule,
-                } => {
-                    let align =
-                        Transform::new_translate(-layer.x() as Scalar, -layer.y() as Scalar);
-                    path.fill(rasterizer, align * node.tr, *fill_rule, paint, layer);
-                }
-                Group { children } => {
-                    for child in children {
-                        render_rec(pipeline, rasterizer, *child, layer);
-                    }
-                }
-                Opacity { child, opacity } => {
-                    let child_layer = pipeline.render(rasterizer, *child, None);
-                    let opacity = *opacity as f32;
-                    layer.compose(&child_layer, |dst, src| {
-                        let src = src * opacity;
-                        dst.blend_over(&src)
-                    });
-                }
-                Clip {
-                    child,
-                    clip,
-                    clip_tr,
-                    fill_rule,
-                } => {
-                    let mut mask = Layer::new(node.bbox, None);
-                    let align = Transform::new_translate(-mask.x() as Scalar, -mask.y() as Scalar);
-                    let mut child_layer = pipeline.render(rasterizer, *child, None);
-                    clip.mask(rasterizer, align * *clip_tr, *fill_rule, mask.as_mut());
-                    // TOOD: do compose in a single pass?
-                    child_layer.compose(&mask, |dst, src| dst * (src as f32));
-                    layer.compose(&child_layer, |dst, src| dst.blend_over(&src));
+    fn render_rec(
+        &self,
+        rasterizer: &dyn Rasterizer,
+        node_id: PipelineNodeId,
+        layer: &mut Layer<LinColor>,
+    ) {
+        let node = self.get(node_id);
+
+        use PipelineItem::*;
+        match &node.item {
+            Fill {
+                path,
+                paint,
+                fill_rule,
+            } => {
+                let align = Transform::new_translate(-layer.x() as Scalar, -layer.y() as Scalar);
+                path.fill(rasterizer, align * node.tr, *fill_rule, paint, layer);
+            }
+            Group { children } => {
+                for child in children {
+                    self.render_rec(rasterizer, *child, layer);
                 }
             }
+            Opacity { child, opacity } => {
+                let child_layer = self.render(rasterizer, *child, None, None);
+                let opacity = *opacity as f32;
+                layer.compose(&child_layer, |dst, src| {
+                    let src = src * opacity;
+                    dst.blend_over(&src)
+                });
+            }
+            Clip {
+                child,
+                clip,
+                clip_tr,
+                fill_rule,
+            } => {
+                let mut mask = Layer::new(node.bbox, None);
+                let align = Transform::new_translate(-mask.x() as Scalar, -mask.y() as Scalar);
+                let mut child_layer = self.render(rasterizer, *child, None, None);
+                clip.mask(rasterizer, align * *clip_tr, *fill_rule, mask.as_mut());
+                // TOOD: do compose in a single pass?
+                child_layer.compose(&mask, |dst, src| dst * (src as f32));
+                layer.compose(&child_layer, |dst, src| dst.blend_over(&src));
+            }
         }
-
-        let mut layer = Layer::new(self.get(node_id).bbox, bg);
-        render_rec(self, rasterizer, node_id, &mut layer);
-        layer
     }
 }
 
 /// Image with top left corner at (x, y) coordinates
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Layer<C> {
     image: ImageOwned<C>,
     x: i32,
     y: i32,
+}
+
+impl<C> fmt::Debug for Layer<C> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Layer")
+            .field("x", &self.x)
+            .field("y", &self.y)
+            .field("w", &self.width())
+            .field("h", &self.height())
+            .finish()
+    }
 }
 
 impl<C: Default + Copy> Layer<C> {
@@ -575,23 +590,48 @@ mod serde_paint {
 
 #[cfg(test)]
 mod tests {
+    use crate::ActiveEdgeRasterizer;
+
     use super::*;
-    use crate::Path;
 
     type Error = Box<dyn std::error::Error>;
 
     #[test]
-    fn test_scene() -> Result<(), Error> {
-        let path = Path::builder()
-            .move_to((5.0, 5.0))
-            .circle(4.5)
-            .close()
-            .build()
-            .into();
-        let tomato: Arc<LinColor> = Arc::new("#ff8040".parse()?);
-        let scene = Scene::fill(path, tomato, FillRule::EvenOdd);
-        println!("{:?}", scene.bbox(Transform::identity()));
-        // TODO: add scene parser to simplify writing tests
+    fn test_scene_view() -> Result<(), Error> {
+        let rasterizer = ActiveEdgeRasterizer::default();
+
+        let scene_str = r##"
+        {
+            "type": "transform",
+            "tr": "translate(7, 7) rotate(45, 7, 7) scale(10)",
+            "child": {
+                "type": "fill",
+                "paint": "#ff8040",
+                "path": "M0,0 h1 v1 h-1 z"
+            }
+        }
+        "##;
+        let scene: Scene = serde_json::from_str(scene_str)?;
+
+        // make sure that view is respected
+        let img = scene.render(
+            &rasterizer,
+            Transform::identity(),
+            Some(BBox::new((1.0, 2.0), (23.0, 23.0))),
+            None,
+        );
+        assert_eq!(img.x(), 1);
+        assert_eq!(img.y(), 2);
+        assert_eq!(img.width(), 22);
+        assert_eq!(img.height(), 21);
+
+        // check image size with out view
+        let img = scene.render(&rasterizer, Transform::identity(), None, None);
+        assert_eq!(img.x(), 6);
+        assert_eq!(img.y(), 4);
+        assert_eq!(img.width(), 16);
+        assert_eq!(img.height(), 15);
+
         Ok(())
     }
 }
