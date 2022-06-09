@@ -1,6 +1,6 @@
 [package]
 name = "rasterize"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Pavel Aslanov <asl.pavel@gmail.com>"]
 description = "Simple and small 2D rendering library"
 edition = "2021"
@@ -19,12 +19,13 @@ keywords = ["2d", "rendering"]
 categories = ["rendering"]
 
 [features]
-default = []
+default = ["serde"]
+serde = ["dep:serde", "dep:serde_json"]
 
 [dependencies]
 tracing = "^0.1"
-serde = { version = "1.0", features = ["rc", "derive"]}
-serde_json = { version = "1.0", features = ["preserve_order"] }
+serde = { version = "1.0", features = ["rc", "derive"], optional = true }
+serde_json = { version = "1.0", features = ["preserve_order"], optional = true }
 png = { version = "^0.17", optional = true }
 
 [dev-dependencies]
@@ -34,3 +35,7 @@ tracing-subscriber = { version = "^0.3", features = ["env-filter"] }
 [[bench]]
 harness = false
 name = "rasterize_bench"
+
+[[example]]
+name = "scene"
+required-features = ["serde"]

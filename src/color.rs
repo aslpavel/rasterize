@@ -1,4 +1,4 @@
-use crate::{Paint, Point, Scalar, SvgParserError, Transform, Units};
+use crate::{Paint, Point, Scalar, Transform, Units};
 use std::{
     fmt,
     ops::{Add, Mul},
@@ -247,7 +247,8 @@ impl Paint for LinColor {
         Transform::identity()
     }
 
-    fn to_json(&self) -> Result<serde_json::Value, SvgParserError> {
+    #[cfg(feature = "serde")]
+    fn to_json(&self) -> Result<serde_json::Value, crate::SvgParserError> {
         Ok(serde_json::Value::String(self.to_string()))
     }
 }

@@ -1,3 +1,4 @@
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 use crate::{utils::clamp, Line, Size};
@@ -40,8 +41,8 @@ pub fn scalar_fmt(f: &mut fmt::Formatter<'_>, value: Scalar) -> fmt::Result {
 }
 
 /// Value representing a 2D point or vector.
-#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(transparent)]
+#[derive(Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(transparent))]
 pub struct Point(pub [Scalar; 2]);
 
 impl fmt::Debug for Point {
@@ -604,6 +605,7 @@ impl fmt::Debug for BBox {
     }
 }
 
+#[cfg(feature = "serde")]
 impl Serialize for BBox {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -613,6 +615,7 @@ impl Serialize for BBox {
     }
 }
 
+#[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for BBox {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -631,7 +634,7 @@ mod tests {
     type Error = Box<dyn std::error::Error>;
 
     #[test]
-    fn test_trasform() {
+    fn test_trasform() -> Result<(), Error> {
         let tr = Transform::identity()
             .pre_translate(1.0, 2.0)
             .pre_rotate(PI / 3.0)
@@ -670,10 +673,12 @@ mod tests {
         assert_approx_eq!(o0.direction().dot(o1.direction()), 0.0);
         // uniform scale
         assert_approx_eq!(o1.length(), d0.length() / s0.length());
+
+        Ok(())
     }
 
     #[test]
-    fn test_transform_fit() {
+    fn test_transform_fit() -> Result<(), Error> {
         let s0 = BBox::new(Point::new(1.0, 1.0), Point::new(2.0, 2.0));
         let s1 = BBox::new(Point::new(1.0, 1.0), Point::new(1.5, 2.0));
         let s2 = BBox::new(Point::new(1.0, 1.0), Point::new(2.0, 1.5));
@@ -704,8 +709,11 @@ mod tests {
             .is_close_to((d.min + d.max) / 2.0));
         assert!(tr4.apply(s2.min).is_close_to(Point::new(3.0, 7.5)));
         assert!(tr4.apply(s2.max).is_close_to(Point::new(13.0, 12.5)));
+
+        Ok(())
     }
 
+    #[cfg(feature = "serde")]
     #[test]
     fn test_bbox_serde() -> Result<(), Error> {
         let expected = BBox::new((1.0, 2.0), (4.0, 6.0));

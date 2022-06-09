@@ -26,9 +26,10 @@
 //!  - this method is slower
 //!  - but requires less memory
 use crate::{
-    Color, Curve, FillRule, ImageMut, ImageOwned, LinColor, Line, Path, Point, Scalar,
-    SvgParserError, Transform, DEFAULT_FLATNESS, EPSILON, EPSILON_SQRT,
+    Color, Curve, FillRule, ImageMut, ImageOwned, LinColor, Line, Path, Point, Scalar, Transform,
+    DEFAULT_FLATNESS, EPSILON, EPSILON_SQRT,
 };
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{cmp::min, collections::VecDeque, fmt, rc::Rc, sync::Arc};
 
@@ -165,11 +166,12 @@ impl Rasterizer for Box<dyn Rasterizer> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Units {
-    #[serde(rename = "userSpaceOnUse")]
+    #[cfg_attr(feature = "serde", serde(rename = "userSpaceOnUse"))]
     UserSpaceOnUse,
-    #[serde(rename = "objectBoundingBox")]
+    #[cfg_attr(feature = "serde", serde(rename = "objectBoundingBox"))]
     BoundingBox,
 }
 
@@ -191,7 +193,8 @@ pub trait Paint: fmt::Debug {
     fn transform(&self) -> Transform;
 
     /// Convert paint to JSON value
-    fn to_json(&self) -> Result<serde_json::Value, SvgParserError>;
+    #[cfg(feature = "serde")]
+    fn to_json(&self) -> Result<serde_json::Value, crate::SvgParserError>;
 }
 
 impl<'a, P: Paint> Paint for &'a P {
@@ -207,7 +210,8 @@ impl<'a, P: Paint> Paint for &'a P {
         (**self).transform()
     }
 
-    fn to_json(&self) -> Result<serde_json::Value, SvgParserError> {
+    #[cfg(feature = "serde")]
+    fn to_json(&self) -> Result<serde_json::Value, crate::SvgParserError> {
         (**self).to_json()
     }
 }
@@ -225,7 +229,8 @@ impl Paint for Box<dyn Paint> {
         (**self).transform()
     }
 
-    fn to_json(&self) -> Result<serde_json::Value, SvgParserError> {
+    #[cfg(feature = "serde")]
+    fn to_json(&self) -> Result<serde_json::Value, crate::SvgParserError> {
         (**self).to_json()
     }
 }
@@ -243,7 +248,8 @@ impl Paint for Rc<dyn Paint> {
         (**self).transform()
     }
 
-    fn to_json(&self) -> Result<serde_json::Value, SvgParserError> {
+    #[cfg(feature = "serde")]
+    fn to_json(&self) -> Result<serde_json::Value, crate::SvgParserError> {
         (**self).to_json()
     }
 }
@@ -261,7 +267,8 @@ impl Paint for Arc<dyn Paint> {
         (**self).transform()
     }
 
-    fn to_json(&self) -> Result<serde_json::Value, SvgParserError> {
+    #[cfg(feature = "serde")]
+    fn to_json(&self) -> Result<serde_json::Value, crate::SvgParserError> {
         (**self).to_json()
     }
 }

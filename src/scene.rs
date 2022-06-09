@@ -2,23 +2,31 @@ use crate::{
     utils::clamp, BBox, Color, FillRule, Image, ImageMut, ImageOwned, LinColor, Paint, Path,
     Rasterizer, Scalar, Shape, Size, StrokeStyle, Transform, Units,
 };
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 use std::{cmp, fmt, sync::Arc};
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[derive(Debug)]
+#[cfg_attr(
+    feature = "serde",
+    derive(Serialize, Deserialize),
+    serde(tag = "type", rename_all = "lowercase")
+)]
 enum SceneInner {
     Fill {
-        #[serde(default, skip_serializing_if = "crate::utils::is_default")]
+        #[cfg_attr(
+            feature = "serde",
+            serde(default, skip_serializing_if = "crate::utils::is_default")
+        )]
         fill_rule: FillRule,
-        #[serde(with = "serde_paint")]
+        #[cfg_attr(feature = "serde", serde(with = "serde_paint"))]
         paint: Arc<dyn Paint>,
         path: Arc<Path>,
     },
     Stroke {
-        #[serde(flatten)]
+        #[cfg_attr(feature = "serde", serde(flatten))]
         style: StrokeStyle,
-        #[serde(with = "serde_paint")]
+        #[cfg_attr(feature = "serde", serde(with = "serde_paint"))]
         paint: Arc<dyn Paint>,
         path: Arc<Path>,
     },
@@ -26,7 +34,7 @@ enum SceneInner {
         children: Vec<Scene>,
     },
     Transform {
-        #[serde(with = "crate::utils::serde_from_str")]
+        #[cfg_attr(feature = "serde", serde(with = "crate::utils::serde_from_str"))]
         tr: Transform,
         child: Scene,
     },
@@ -35,17 +43,23 @@ enum SceneInner {
         opacity: Scalar,
     },
     Clip {
-        #[serde(default, skip_serializing_if = "crate::utils::is_default")]
+        #[cfg_attr(
+            feature = "serde",
+            serde(default, skip_serializing_if = "crate::utils::is_default")
+        )]
         fill_rule: FillRule,
-        #[serde(default, skip_serializing_if = "crate::utils::is_default")]
+        #[cfg_attr(
+            feature = "serde",
+            serde(default, skip_serializing_if = "crate::utils::is_default")
+        )]
         units: Units,
         clip: Arc<Path>,
         child: Scene,
     },
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(transparent)]
+#[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(transparent))]
 pub struct Scene {
     inner: Arc<SceneInner>,
 }
@@ -533,6 +547,7 @@ impl<C> ImageMut for Layer<C> {
     }
 }
 
+#[cfg(feature = "serde")]
 mod serde_paint {
     use crate::{GradLinear, GradRadial, LinColor};
 
@@ -588,12 +603,11 @@ mod serde_paint {
     }
 }
 
+#[cfg(feature = "serde")]
 #[cfg(test)]
 mod tests {
-    use crate::ActiveEdgeRasterizer;
-
     use super::*;
-
+    use crate::ActiveEdgeRasterizer;
     type Error = Box<dyn std::error::Error>;
 
     #[test]

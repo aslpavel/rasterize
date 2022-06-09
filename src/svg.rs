@@ -577,6 +577,7 @@ pub enum SvgParserError {
     /// Bracket expected,
     BracketExpected,
     /// JSON error
+    #[cfg(feature = "serde")]
     Json(serde_json::Error),
     /// IO error propagated while reading input stream
     IoError(std::io::Error),
@@ -594,6 +595,7 @@ impl From<std::io::Error> for SvgParserError {
     }
 }
 
+#[cfg(feature = "serde")]
 impl From<serde_json::Error> for SvgParserError {
     fn from(error: serde_json::Error) -> Self {
         Self::Json(error)
