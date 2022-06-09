@@ -14,6 +14,10 @@ jobs:
         rust:
           - stable
           - nightly
+        features:
+          - ""
+          - "--no-default-features"
+          - "--features-all"
     
     steps:
       - name: Checkout sources
@@ -29,3 +33,4 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
+          args: ${{ matrix.features }}
