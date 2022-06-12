@@ -802,6 +802,28 @@ impl PathBuilder {
         self.close().move_to(init)
     }
 
+    /// Create checker board path inside bounding, useful to draw transparent area
+    pub fn checkerboard(&mut self, bbox: BBox, cell_size: Scalar) -> &mut Self {
+        let mut x = bbox.x();
+        let mut y = bbox.y();
+        while y < bbox.max().y() {
+            while x < bbox.max().x() {
+                let offset = Point::new(x, y);
+                self.move_to(offset)
+                    .line_to(offset + Point::new(cell_size, 0.0))
+                    .line_to(offset + Point::new(cell_size, 2.0 * cell_size))
+                    .line_to(offset + Point::new(2.0 * cell_size, 2.0 * cell_size))
+                    .line_to(offset + Point::new(2.0 * cell_size, cell_size))
+                    .line_to(offset + Point::new(0.0, cell_size))
+                    .close();
+                x += 2.0 * cell_size;
+            }
+            x = bbox.x();
+            y += 2.0 * cell_size;
+        }
+        self.move_to(bbox.min())
+    }
+
     /// Current position of the builder
     pub fn position(&self) -> Point {
         self.position

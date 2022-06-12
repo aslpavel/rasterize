@@ -37,7 +37,7 @@ struct Args {
     rasterizer: RasterizerType,
     tr: Transform,
     fg: LinColor,
-    bg: LinColor,
+    bg: Option<LinColor>,
 }
 
 impl Args {
@@ -60,7 +60,7 @@ impl Args {
             rasterizer: RasterizerType::SignedDifference,
             tr: Transform::identity(),
             fg: LinColor::new(0.0, 0.0, 0.0, 1.0),
-            bg: LinColor::new(1.0, 1.0, 1.0, 1.0),
+            bg: None,
         };
         let mut positional = 0;
         let mut args = env::args();
@@ -102,10 +102,11 @@ impl Args {
                         .parse()?;
                 }
                 "-bg" => {
-                    result.bg = args
+                    let bg: LinColor = args
                         .next()
                         .ok_or("-bg requres color #rrggbb(aa) argument")?
                         .parse()?;
+                    result.bg.replace(bg);
                 }
                 _ => {
                     positional += 1;
@@ -262,7 +263,7 @@ fn main() -> Result<(), Error> {
     // scene
     let mut group = Vec::new();
     let fg = if args.outline {
-        LinColor::new(0.4, 0.4, 0.4, 1.0)
+        LinColor::new(0.35, 0.35, 0.35, 1.0)
     } else {
         args.fg
     };
@@ -272,9 +273,28 @@ fn main() -> Result<(), Error> {
     }
     let scene = Scene::group(group);
 
-    let bg = args.bg;
+    // add background or checkerboard
+    let bbox = scene
+        .bbox(Transform::identity())
+        .ok_or("nothing to render")?;
+    let bbox = BBox::new((bbox.x().round(), bbox.y().round()), bbox.max());
+    let (scene, bg) = match args.bg {
+        None => {
+            let scene = Scene::group(vec![
+                Scene::fill(
+                    Arc::new(Path::builder().checkerboard(bbox, 16.0).build()),
+                    Arc::new("#808080".parse::<LinColor>()?),
+                    FillRule::EvenOdd,
+                ),
+                scene,
+            ]);
+            (scene, "#cccccc".parse()?)
+        }
+        Some(bg) => (scene, bg),
+    };
+
     let image = timeit(format!("[render:{}]", rasterizer.name()), || {
-        scene.render(&rasterizer, Transform::identity(), None, Some(bg))
+        scene.render(&rasterizer, Transform::identity(), Some(bbox), Some(bg))
     });
 
     // save

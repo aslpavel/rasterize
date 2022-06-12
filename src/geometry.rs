@@ -57,19 +57,19 @@ impl fmt::Debug for Point {
 
 impl Point {
     #[inline]
-    pub fn new(x: Scalar, y: Scalar) -> Self {
+    pub const fn new(x: Scalar, y: Scalar) -> Self {
         Self([x, y])
     }
 
     /// Get `x` component of the point
     #[inline]
-    pub fn x(self) -> Scalar {
+    pub const fn x(self) -> Scalar {
         self.0[0]
     }
 
     /// Get `y` component of the point
     #[inline]
-    pub fn y(self) -> Scalar {
+    pub const fn y(self) -> Scalar {
         self.0[1]
     }
 

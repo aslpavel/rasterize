@@ -21,6 +21,28 @@ where
     }
 }
 
+#[inline(always)]
+#[cold]
+fn cold() {}
+
+/// Hint to the compiler that boolean likely false
+#[inline(always)]
+pub fn unlikely(b: bool) -> bool {
+    if b {
+        cold()
+    }
+    b
+}
+
+/// Hint to the compiler that boolean likely true
+#[inline(always)]
+pub fn likely(b: bool) -> bool {
+    if !b {
+        cold()
+    }
+    b
+}
+
 /// Fixed sized iterator
 ///
 /// This type is similar to a `smallvec` but it never allocates and just panics

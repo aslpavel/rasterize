@@ -436,7 +436,10 @@ fn signed_difference_line(mut img: impl ImageMut<Pixel = Scalar>, line: Line) {
             // only goes through one pixel (with the total coverage of `d` spread over two pixels)
             let xmf = 0.5 * (x + x_next) - x0_floor; // effective height
             data[row_offset + (x0i as usize) * stride] += d * (1.0 - xmf);
-            data[row_offset + ((x0i + 1) as usize) * stride] += d * xmf;
+            let offset = row_offset + ((x0i + 1) as usize) * stride;
+            if crate::utils::likely(offset < data.len()) {
+                data[offset] += d * xmf;
+            }
         } else {
             let s = (x1 - x0).recip();
             let x0f = x0 - x0_floor; // fractional part of x0
@@ -933,6 +936,7 @@ fn split_at_zero_x(line: Line) -> (Line, Option<Line>) {
 mod tests {
     use super::*;
     use crate::{assert_approx_eq, Image};
+    type Error = Box<dyn std::error::Error>;
 
     #[test]
     fn test_signed_difference_line() {
@@ -1054,7 +1058,7 @@ mod tests {
         assert!(edge.next_row().is_none());
     }
 
-    fn test_rasterizer(rasterizer: &dyn Rasterizer) {
+    fn test_rasterizer(rasterizer: &dyn Rasterizer) -> Result<(), Error> {
         #[rustfmt::skip]
         let expected = [
         //x 0    1    2     3     4    5     6     7    8
@@ -1084,15 +1088,30 @@ mod tests {
         for (expected, pixel) in expected.iter().zip(img.data()) {
             assert_approx_eq!(expected, pixel);
         }
+
+        // square that goes exactly through the sides of the image
+        let path: Path = "M1,1 v2 h1 v-2 Z".parse()?;
+        let mut img = ImageOwned::new_default(Size {
+            width: 3,
+            height: 3,
+        });
+        rasterizer.mask(&path, Transform::identity(), &mut img, FillRule::EvenOdd);
+
+        {
+            let file = std::fs::File::create("/tmp/bla.bmp")?;
+            img.write_bmp(file)?;
+        }
+
+        Ok(())
     }
 
     #[test]
-    fn test_active_edge_rasterizer() {
+    fn test_active_edge_rasterizer() -> Result<(), Error> {
         test_rasterizer(&ActiveEdgeRasterizer::default())
     }
 
     #[test]
-    fn test_sigend_difference_rasterizer() {
+    fn test_sigend_difference_rasterizer() -> Result<(), Error> {
         test_rasterizer(&SignedDifferenceRasterizer::default())
     }
 

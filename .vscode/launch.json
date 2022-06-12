@@ -1,0 +1,28 @@
+{
+    "configurations": [
+        {
+            "name": "rasterize",
+            "type": "lldb",
+            "request": "launch",
+            "sourceLanguages": [
+                "rust"
+            ],
+            "cargo": {
+                "args": [
+                    "build",
+                    "--example",
+                    "rasterize",
+                ],
+            },
+            "program": "${workspaceFolder}/target/debug/examples/rasterize",
+            "args": [
+                "data/squirrel.path",
+                "-w",
+                "1024",
+                "-o",
+                "/tmp/output.bmp"
+            ],
+            "cwd": "${workspaceFolder}",
+        }
+    ]
+}
