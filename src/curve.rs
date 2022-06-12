@@ -921,7 +921,7 @@ impl FromStr for Cubic {
 // Segment
 // -----------------------------------------------------------------------------
 
-/// `Segment` is an enum of either `Line`, `Quad` or `Cubic`
+/// `Segment` is an enum of either [`Line`], [`Quad`] or [`Cubic`]
 #[derive(Clone, Copy, PartialEq)]
 pub enum Segment {
     Line(Line),

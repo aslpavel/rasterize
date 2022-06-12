@@ -222,7 +222,8 @@ impl SubPath {
     }
 }
 
-/// Collection of the SubPath treated as a single unit
+/// Collection of the SubPath treated as a single unit. Represents the same concept
+/// as an [SVG path](https://www.w3.org/TR/SVG11/paths.html)
 #[derive(Clone, PartialEq, Default)]
 pub struct Path {
     subpaths: Vec<SubPath>,
@@ -260,19 +261,22 @@ impl Path {
         }
     }
 
+    /// Check if the path is empty
     pub fn is_empty(&self) -> bool {
         self.subpaths.is_empty()
     }
 
+    /// List of sub-paths
     pub fn subpaths(&self) -> &[SubPath] {
         &self.subpaths
     }
 
-    /// Convenience method to create `PathBuilder`
+    /// Convenience method to create [`PathBuilder`]
     pub fn builder() -> PathBuilder {
         PathBuilder::new()
     }
 
+    /// Convert path into a path builder so it can be extended
     pub fn into_builder(self) -> PathBuilder {
         PathBuilder::from_path(self)
     }
@@ -284,6 +288,7 @@ impl Path {
         }
     }
 
+    /// Number of segments in the path
     pub fn segments_count(&self) -> usize {
         self.subpaths
             .iter()

@@ -58,6 +58,8 @@ enum SceneInner {
     },
 }
 
+/// Represents an image that has not been rendered yet, multiple scenes
+/// can be composed to construct more complex scene.
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(transparent))]
 pub struct Scene {
@@ -129,7 +131,7 @@ impl Scene {
         .into()
     }
 
-    /// Apply transform to the scene
+    /// Apply transformation to the scene
     pub fn transform(&self, tr: Transform) -> Self {
         match self.as_ref() {
             SceneInner::Transform {

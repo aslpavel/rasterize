@@ -87,6 +87,19 @@ pub trait Image {
         }
     }
 
+    /// Write raw RGBA data
+    fn write_rgba<W>(&self, mut out: W) -> Result<(), std::io::Error>
+    where
+        W: Write,
+        Self::Pixel: Color,
+        Self: Sized,
+    {
+        for color in self.iter() {
+            out.write_all(&color.to_rgba())?;
+        }
+        Ok(())
+    }
+
     /// Write image in PPM format
     fn write_ppm<W>(&self, mut out: W) -> Result<(), std::io::Error>
     where
