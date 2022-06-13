@@ -8,15 +8,8 @@ use std::{
     io::{BufWriter, Read},
     sync::Arc,
 };
-use tracing::{debug, info};
-
-/// Add debug log message with time taken to execute provided function
-fn timeit<F: FnOnce() -> R, R>(msg: impl AsRef<str>, f: F) -> R {
-    let start = std::time::Instant::now();
-    let result = f();
-    debug!("{} {:?}", msg.as_ref(), start.elapsed());
-    result
-}
+use tracing::{debug_span, info};
+use tracing_subscriber::fmt::format::FmtSpan;
 
 type Error = Box<dyn std::error::Error>;
 
@@ -158,7 +151,7 @@ fn path_load(path: String) -> Result<Path, Error> {
     } else {
         std::io::stdin().read_to_string(&mut contents)?;
     }
-    Ok(timeit("[parse]", || contents.parse())?)
+    Ok(debug_span!("[parse]").in_scope(|| contents.parse())?)
 }
 
 /// Convert path to the outline with control points.
@@ -226,6 +219,7 @@ fn outline(path: &Path, tr: Transform) -> Scene {
 
 fn main() -> Result<(), Error> {
     tracing_subscriber::fmt()
+        .with_span_events(FmtSpan::CLOSE)
         .with_env_filter("debug")
         .with_writer(std::io::stderr)
         .init();
@@ -242,7 +236,7 @@ fn main() -> Result<(), Error> {
                 line_join: LineJoin::Round,
                 line_cap: LineCap::Round,
             };
-            timeit("[stroke]", || path.stroke(stroke_style))
+            debug_span!("[stroke]").in_scope(|| path.stroke(stroke_style))
         }
     };
     let path = Arc::new(path);
@@ -293,16 +287,19 @@ fn main() -> Result<(), Error> {
         Some(bg) => (scene, bg),
     };
 
-    let image = timeit(format!("[render:{}]", rasterizer.name()), || {
-        scene.render(&rasterizer, Transform::identity(), Some(bbox), Some(bg))
-    });
+    let image = debug_span!("[render]", rasterizer = rasterizer.name())
+        .in_scope(|| scene.render(&rasterizer, Transform::identity(), Some(bbox), Some(bg)));
 
     // save
-    if args.output_file != "-" {
-        let mut image_file = BufWriter::new(File::create(args.output_file)?);
-        timeit("[save:bmp]", || image.write_bmp(&mut image_file))?;
-    } else {
-        timeit("[save:bmp]", || image.write_bmp(std::io::stdout()))?;
+    let save = debug_span!("[save]");
+    {
+        let _ = save.enter();
+        if args.output_file != "-" {
+            let mut image_file = BufWriter::new(File::create(args.output_file)?);
+            image.write_bmp(&mut image_file)?;
+        } else {
+            image.write_bmp(std::io::stdout())?;
+        }
     }
 
     Ok(())
