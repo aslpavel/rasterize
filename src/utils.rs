@@ -21,8 +21,8 @@ where
     }
 }
 
-#[inline(always)]
 #[cold]
+#[inline(never)]
 fn cold() {}
 
 /// Hint to the compiler that boolean likely false
