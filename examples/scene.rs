@@ -5,6 +5,9 @@ use std::{
     fs::File,
     io::{BufReader, BufWriter},
 };
+use tracing::debug_span;
+use tracing_subscriber::fmt::format::FmtSpan;
+
 type Error = Box<dyn std::error::Error>;
 
 #[derive(Default)]
@@ -76,6 +79,12 @@ impl Args {
 }
 
 fn main() -> Result<(), Error> {
+    tracing_subscriber::fmt()
+        .with_span_events(FmtSpan::CLOSE)
+        .with_env_filter("debug")
+        .with_writer(std::io::stderr)
+        .init();
+
     let args = Args::parse()?;
 
     let scene: Scene = if args.input_file != "-" {
@@ -96,13 +105,18 @@ fn main() -> Result<(), Error> {
         _ => args.tr,
     };
 
-    let image = scene.render(&ActiveEdgeRasterizer::default(), tr, None, args.bg);
+    let image = debug_span!("[render]")
+        .in_scope(|| scene.render(&ActiveEdgeRasterizer::default(), tr, None, args.bg));
 
-    if args.output_file != "-" {
-        let mut image_file = BufWriter::new(File::create(args.output_file)?);
-        image.write_bmp(&mut image_file)?;
-    } else {
-        image.write_bmp(std::io::stdout())?;
+    let save = debug_span!("[save]");
+    {
+        let _ = save.enter();
+        if args.output_file != "-" {
+            let mut image_file = BufWriter::new(File::create(args.output_file)?);
+            image.write_bmp(&mut image_file)?;
+        } else {
+            image.write_bmp(std::io::stdout())?;
+        }
     }
 
     Ok(())
