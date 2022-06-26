@@ -277,12 +277,12 @@ fn main() -> Result<(), Error> {
             let scene = Scene::group(vec![
                 Scene::fill(
                     Arc::new(Path::builder().checkerboard(bbox, 16.0).build()),
-                    Arc::new("#808080".parse::<LinColor>()?),
+                    Arc::new("#d0d0d0".parse::<LinColor>()?),
                     FillRule::EvenOdd,
                 ),
                 scene,
             ]);
-            (scene, "#cccccc".parse()?)
+            (scene, "#f0f0f0".parse()?)
         }
         Some(bg) => (scene, bg),
     };
