@@ -391,8 +391,24 @@ impl Pipeline {
                 paint,
                 fill_rule,
             } => {
-                let align = Transform::new_translate(-layer.x() as Scalar, -layer.y() as Scalar);
-                path.fill(rasterizer, align * node.tr, *fill_rule, paint, layer);
+                // max bounds are not inclusive that is why we have `max + 1`
+                let col_min = node.bbox.min().x().floor() as i32 - layer.x();
+                let col_max = node.bbox.max().x().ceil() as i32 - layer.x() + 1;
+                let row_min = node.bbox.min().y().floor() as i32 - layer.y();
+                let row_max = node.bbox.max().y().ceil() as i32 - layer.y() + 1;
+                // reduce the size of the image to only iterate over visible pixels
+                let mut view = layer.view_mut(
+                    row_min as usize,
+                    row_max as usize,
+                    col_min as usize,
+                    col_max as usize,
+                );
+                // shift to account for view position
+                let align = Transform::new_translate(
+                    -node.bbox.min().x().floor(),
+                    -node.bbox.min().y().floor(),
+                );
+                path.fill(rasterizer, align * node.tr, *fill_rule, paint, &mut view);
             }
             Group { children } => {
                 for child in children {
