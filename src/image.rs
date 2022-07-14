@@ -4,6 +4,8 @@ use std::{any::type_name, fmt, io::Write, sync::Arc};
 /// Shape defines size and layout of the data inside an image
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Shape {
+    /// Offset of the first element
+    pub start: usize,
     /// Width of the image
     pub width: usize,
     /// Height of the image
@@ -17,7 +19,7 @@ pub struct Shape {
 impl Shape {
     #[inline]
     pub fn offset(&self, row: usize, col: usize) -> usize {
-        row * self.row_stride + col * self.col_stride
+        self.start + row * self.row_stride + col * self.col_stride
     }
 
     #[inline]
@@ -68,6 +70,20 @@ pub trait Image {
     fn get(&self, row: usize, col: usize) -> Option<&Self::Pixel> {
         let offset = self.shape().offset(row, col);
         self.data().get(offset)
+    }
+
+    /// Create sub-image bounded by constraints, `_max` values are not inclusive.
+    fn view(
+        &self,
+        row_min: usize,
+        row_max: usize,
+        col_min: usize,
+        col_max: usize,
+    ) -> ImageRef<'_, Self::Pixel> {
+        ImageRef {
+            shape: view_shape(self.shape(), row_min, row_max, col_min, col_max),
+            data: self.data(),
+        }
     }
 
     /// Create immutable view to the image of the concrete type of `ImageRef`
@@ -224,6 +240,20 @@ pub trait ImageMut: Image {
         self.data_mut().get_mut(index)
     }
 
+    /// Create mutable sub-image bounded by constraints, `_max` values are not inclusive.
+    fn view_mut(
+        &mut self,
+        row_min: usize,
+        row_max: usize,
+        col_min: usize,
+        col_max: usize,
+    ) -> ImageMutRef<'_, Self::Pixel> {
+        ImageMutRef {
+            shape: view_shape(self.shape(), row_min, row_max, col_min, col_max),
+            data: self.data_mut(),
+        }
+    }
+
     /// Create concrete type reference to the image
     fn as_mut(&mut self) -> ImageMutRef<'_, Self::Pixel> {
         ImageMutRef {
@@ -339,6 +369,7 @@ impl<P> ImageOwned<P> {
         }
         Self {
             shape: Shape {
+                start: 0,
                 width: size.width,
                 height: size.height,
                 row_stride: size.width,
@@ -352,6 +383,7 @@ impl<P> ImageOwned<P> {
     pub fn empty() -> Self {
         Self {
             shape: Shape {
+                start: 0,
                 width: 0,
                 height: 0,
                 row_stride: 0,
@@ -506,5 +538,24 @@ impl<P> Image for Arc<dyn Image<Pixel = P>> {
 
     fn data(&self) -> &[Self::Pixel] {
         (**self).data()
+    }
+}
+
+fn view_shape(
+    shape: Shape,
+    row_min: usize,
+    row_max: usize,
+    col_min: usize,
+    col_max: usize,
+) -> Shape {
+    let row_min = row_min.min(shape.height);
+    let row_max = row_max.clamp(row_min, shape.height);
+    let col_min = col_min.min(shape.width);
+    let col_max = col_max.clamp(col_min, shape.width);
+    Shape {
+        start: shape.offset(row_min, col_min),
+        width: col_max - col_min,
+        height: row_max - row_min,
+        ..shape
     }
 }
