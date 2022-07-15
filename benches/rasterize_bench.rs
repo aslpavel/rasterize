@@ -98,8 +98,8 @@ fn large_path_benchmark(c: &mut Criterion) {
 }
 
 criterion_group!(
-    name = benches;
+    name = rasterize;
     config = Criterion::default().sample_size(10).warm_up_time(Duration::new(1, 0));
     targets = curve_benchmark, large_path_benchmark, stroke_benchmark
 );
-criterion_main!(benches);
+criterion_main!(rasterize);

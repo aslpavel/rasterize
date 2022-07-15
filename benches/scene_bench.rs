@@ -1,10 +1,52 @@
-use std::{sync::Arc, time::Instant};
+#![deny(warnings)]
+use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use rasterize::{BBox, ColorU8, FillRule, LinColor, Path, Point, Scalar, Scene, Size, Transform};
+use std::sync::Arc;
 
-use rasterize::{
-    BBox, ColorU8, FillRule, Image, LinColor, Path, Point, Scalar, Scene, Size, Transform,
-};
+fn many_cirles_benchmark(c: &mut Criterion) {
+    let mut rnd = Rnd::new();
 
-type Error = Box<dyn std::error::Error>;
+    // scene
+    let size = Size {
+        height: 1024,
+        width: 1024,
+    };
+    let fsize = Point::new(size.height as Scalar, size.width as Scalar);
+    let count = 1024;
+
+    let mut group = Vec::new();
+    for _ in 0..count {
+        let circle = Path::builder()
+            .move_to(rnd.point() * fsize)
+            .circle(rnd.uniform() * 10.0 + 30.0)
+            .build();
+        group.push(Scene::fill(
+            circle.into(),
+            Arc::new(rnd.color()),
+            FillRule::default(),
+        ))
+    }
+    let scene = Scene::group(group);
+    let view = Some(BBox::new((0.0, 0.0), fsize));
+
+    let mut group = c.benchmark_group("many-cirles");
+    group.throughput(Throughput::Elements(count));
+
+    // signed difference
+    let rasterizer = &rasterize::SignedDifferenceRasterizer::default();
+    group.bench_function("signed-difference", |b| {
+        b.iter(|| scene.render(rasterizer, Transform::identity(), view, None))
+    });
+
+    // signed difference
+    let rasterizer = &rasterize::ActiveEdgeRasterizer::default();
+    group.bench_function("active-edge", |b| {
+        b.iter(|| scene.render(rasterizer, Transform::identity(), view, None))
+    });
+}
+
+criterion_group!(scene, many_cirles_benchmark);
+criterion_main!(scene);
 
 /// Very basic random number generator
 #[derive(Default)]
@@ -67,41 +109,4 @@ impl Rnd {
     pub fn point(&mut self) -> Point {
         Point::new(self.uniform(), self.uniform())
     }
-}
-
-fn main() -> Result<(), Error> {
-    let size = Size {
-        height: 1024,
-        width: 1024,
-    };
-    let fsize = Point::new(size.height as Scalar, size.width as Scalar);
-    let count = 1024;
-    let mut rnd = Rnd::new();
-
-    let mut group = Vec::new();
-    for _ in 0..count {
-        let circle = Path::builder()
-            .move_to(rnd.point() * fsize)
-            .circle(rnd.uniform() * 10.0 + 30.0)
-            .build();
-        group.push(Scene::fill(
-            circle.into(),
-            Arc::new(rnd.color()),
-            FillRule::default(),
-        ))
-    }
-    let scene = Scene::group(group);
-    let now = Instant::now();
-    // let rasterize = &rasterize::ActiveEdgeRasterizer::default();
-    let rasterize = &rasterize::SignedDifferenceRasterizer::default();
-    let img = scene.render(
-        rasterize,
-        Transform::identity(),
-        Some(BBox::new((0.0, 0.0), fsize)),
-        Some("#ffffff".parse()?),
-    );
-    eprintln!("{:?}", now.elapsed());
-    img.write_bmp(std::io::stdout())?;
-
-    Ok(())
 }

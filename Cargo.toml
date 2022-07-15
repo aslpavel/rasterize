@@ -36,6 +36,10 @@ tracing-subscriber = { version = "^0.3", features = ["env-filter"] }
 harness = false
 name = "rasterize_bench"
 
+[[bench]]
+harness = false
+name = "scene_bench"
+
 [[example]]
 name = "scene"
 required-features = ["serde"]
