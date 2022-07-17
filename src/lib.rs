@@ -31,6 +31,7 @@ mod image;
 mod path;
 mod rasterize;
 mod scene;
+pub mod simd;
 mod svg;
 pub mod utils;
 

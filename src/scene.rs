@@ -4,7 +4,11 @@ use crate::{
 };
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use std::{cmp, fmt, sync::Arc};
+use std::{
+    cmp, fmt,
+    hash::{Hash, Hasher},
+    sync::Arc,
+};
 
 #[derive(Debug)]
 #[cfg_attr(
@@ -192,6 +196,20 @@ impl Scene {
             Some(root_id) => root_id,
         };
         pipeline.render(rasterizer, root_id, view, bg)
+    }
+}
+
+impl PartialEq for Scene {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+
+impl Eq for Scene {}
+
+impl Hash for Scene {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        Arc::as_ptr(&self.inner).hash(state)
     }
 }
 

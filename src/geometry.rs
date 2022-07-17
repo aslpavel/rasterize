@@ -45,6 +45,14 @@ pub fn scalar_fmt(f: &mut fmt::Formatter<'_>, value: Scalar) -> fmt::Result {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(transparent))]
 pub struct Point(pub [Scalar; 2]);
 
+impl std::hash::Hash for Point {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let Point([x, y]) = self;
+        x.to_be_bytes().hash(state);
+        y.to_be_bytes().hash(state);
+    }
+}
+
 impl fmt::Debug for Point {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Point([x, y]) = self;
@@ -455,7 +463,7 @@ impl Mul<Transform> for Transform {
 }
 
 /// Bounding box with sides directed along the axes
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Hash)]
 pub struct BBox {
     /// Point with minimal x and y values
     min: Point,
