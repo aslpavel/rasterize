@@ -159,6 +159,7 @@ impl fmt::Display for ColorU8 {
 /// Alpha premultiplied RGBA color in the linear color space (no gamma correction)
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct LinColor([f32; 4]);
+// pub struct LinColor(crate::simd::f32x4);
 
 impl LinColor {
     pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
