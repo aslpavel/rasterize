@@ -35,13 +35,13 @@ fn many_cirles_benchmark(c: &mut Criterion) {
     // signed difference
     let rasterizer = &rasterize::SignedDifferenceRasterizer::default();
     group.bench_function("signed-difference", |b| {
-        b.iter(|| scene.render(rasterizer, Transform::identity(), view, None))
+        b.iter_with_large_drop(|| scene.render(rasterizer, Transform::identity(), view, None))
     });
 
     // signed difference
     let rasterizer = &rasterize::ActiveEdgeRasterizer::default();
     group.bench_function("active-edge", |b| {
-        b.iter(|| scene.render(rasterizer, Transform::identity(), view, None))
+        b.iter_with_large_drop(|| scene.render(rasterizer, Transform::identity(), view, None))
     });
 }
 
