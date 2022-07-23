@@ -29,7 +29,7 @@ fn many_cirles_benchmark(c: &mut Criterion) {
     let scene = Scene::group(group);
     let view = Some(BBox::new((0.0, 0.0), fsize));
 
-    let mut group = c.benchmark_group("many-cirles");
+    let mut group = c.benchmark_group("many-circles");
     group.throughput(Throughput::Elements(count));
 
     // signed difference
