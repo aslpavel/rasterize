@@ -5,11 +5,10 @@ use std::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
-use std::ops::{Div, Sub};
 use std::{
     fmt,
     mem::transmute,
-    ops::{Add, Mul},
+    ops::{Add, Div, Mul, Sub},
 };
 
 #[derive(Copy, Clone)]

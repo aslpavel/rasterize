@@ -1,10 +1,10 @@
 #![allow(non_camel_case_types)]
 use std::{
     fmt,
-    ops::{Add, Mul},
+    ops::{Add, Div, Mul, Sub},
 };
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Default)]
 #[repr(transparent)]
 pub struct f32x4([f32; 4]);
 
@@ -14,18 +14,45 @@ impl f32x4 {
         Self([x0, x1, x2, x3])
     }
 
-    #[inline]
+    #[inline(always)]
+    pub fn x0(self) -> f32 {
+        self.0[0]
+    }
+
+    #[inline(always)]
+    pub fn x1(self) -> f32 {
+        self.0[1]
+    }
+
+    #[inline(always)]
+    pub fn x2(self) -> f32 {
+        self.0[2]
+    }
+
+    #[inline(always)]
+    pub fn x3(self) -> f32 {
+        self.0[3]
+    }
+
+    #[inline(always)]
     pub fn splat(val: f32) -> Self {
         Self([val, val, val, val])
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn zero() -> Self {
         Self::splat(0.0)
     }
 
+    #[inline(always)]
     pub fn to_array(self) -> [f32; 4] {
         self.into()
+    }
+
+    #[inline(always)]
+    pub fn sqrt(self) -> Self {
+        let [x0, x1, x2, x3] = self.0;
+        Self([x0.sqrt(), x1.sqrt(), x2.sqrt(), x3.sqrt()])
     }
 }
 
@@ -44,7 +71,7 @@ impl fmt::Debug for f32x4 {
 impl Add<Self> for f32x4 {
     type Output = Self;
 
-    #[inline]
+    #[inline(always)]
     fn add(self, other: Self) -> Self::Output {
         let Self([a0, a1, a2, a3]) = self;
         let Self([b0, b1, b2, b3]) = other;
@@ -52,10 +79,21 @@ impl Add<Self> for f32x4 {
     }
 }
 
+impl Sub<Self> for f32x4 {
+    type Output = Self;
+
+    #[inline(always)]
+    fn sub(self, rhs: Self) -> Self::Output {
+        let Self([a0, a1, a2, a3]) = self;
+        let Self([b0, b1, b2, b3]) = rhs;
+        Self([a0 - b0, a1 - b1, a2 - b2, a3 - b3])
+    }
+}
+
 impl Mul for f32x4 {
     type Output = Self;
 
-    #[inline]
+    #[inline(always)]
     fn mul(self, other: Self) -> Self::Output {
         let Self([a0, a1, a2, a3]) = self;
         let Self([b0, b1, b2, b3]) = other;
@@ -66,10 +104,30 @@ impl Mul for f32x4 {
 impl Mul<f32> for f32x4 {
     type Output = Self;
 
-    #[inline]
+    #[inline(always)]
     fn mul(self, val: f32) -> Self::Output {
         let Self([x0, x1, x2, x3]) = self;
         Self([x0 * val, x1 * val, x2 * val, x3 * val])
+    }
+}
+
+impl Mul<f32x4> for f32 {
+    type Output = f32x4;
+
+    #[inline(always)]
+    fn mul(self, rhs: f32x4) -> Self::Output {
+        rhs * f32x4::splat(self)
+    }
+}
+
+impl Div<f32x4> for f32x4 {
+    type Output = Self;
+
+    #[inline(always)]
+    fn div(self, rhs: f32x4) -> Self::Output {
+        let Self([a0, a1, a2, a3]) = self;
+        let Self([b0, b1, b2, b3]) = rhs;
+        Self([a0 / b0, a1 / b1, a2 / b2, a3 / b3])
     }
 }
 

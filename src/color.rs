@@ -94,7 +94,7 @@ impl Color for ColorU8 {
 
 impl From<LinColor> for ColorU8 {
     fn from(lin: LinColor) -> Self {
-        let LinColor([r, g, b, a]) = lin;
+        let [r, g, b, a]: [f32; 4] = lin.into();
         if a <= std::f32::EPSILON {
             return ColorU8::default();
         }
@@ -191,9 +191,9 @@ impl LinColor {
     ///
     /// Used by gradients, do not make public
     pub(crate) fn into_srgb(self) -> Self {
-        let Self([r, g, b, a]) = self;
+        let [r, g, b, a]: [f32; 4] = self.into();
         if a <= 1e-6 {
-            Self([0.0, 0.0, 0.0, 0.0])
+            Self::new(0.0, 0.0, 0.0, 0.0)
         } else {
             Self::new(
                 linear_to_srgb(r / a) * a,
@@ -208,9 +208,9 @@ impl LinColor {
     ///
     /// Used by gradient, do not make public
     pub(crate) fn into_linear(self) -> Self {
-        let Self([r, g, b, a]) = self;
+        let [r, g, b, a]: [f32; 4] = self.into();
         if a <= 1e-6 {
-            return Self([0.0, 0.0, 0.0, 0.0]);
+            return Self::new(0.0, 0.0, 0.0, 0.0);
         }
         Self::new(
             srgb_to_linear(r / a) * a,
@@ -282,6 +282,12 @@ impl From<ColorU8> for LinColor {
         let g = srgb_to_linear(color.green() as f32 / 255.0) * a;
         let b = srgb_to_linear(color.blue() as f32 / 255.0) * a;
         LinColor::new(r, g, b, a)
+    }
+}
+
+impl From<LinColor> for [f32; 4] {
+    fn from(color: LinColor) -> Self {
+        color.0.into()
     }
 }
 
