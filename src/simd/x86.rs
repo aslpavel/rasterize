@@ -4,11 +4,11 @@
 use std::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
-use std::mem::transmute;
 
 use std::ops::{Div, Sub};
 use std::{
     fmt,
+    mem::transmute,
     ops::{Add, Mul},
 };
 
