@@ -438,7 +438,7 @@ impl Pipeline {
                 let opacity = *opacity as f32;
                 layer.compose(&child_layer, |dst, src| {
                     let src = src * opacity;
-                    dst.blend_over(&src)
+                    dst.blend_over(src)
                 });
             }
             Clip {
@@ -453,7 +453,7 @@ impl Pipeline {
                 clip.mask(rasterizer, align * *clip_tr, *fill_rule, mask.as_mut());
                 // TOOD: do compose in a single pass?
                 child_layer.compose(&mask, |dst, src| dst * (src as f32));
-                layer.compose(&child_layer, |dst, src| dst.blend_over(&src));
+                layer.compose(&child_layer, |dst, src| dst.blend_over(src));
             }
         }
     }

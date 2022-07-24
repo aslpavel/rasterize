@@ -110,7 +110,7 @@ fn fill_impl(
     for pixel in pixels {
         let dst = &mut data[shape.offset(pixel.y, pixel.x)];
         let color = color_at(pixel);
-        *dst = dst.blend_over(&color.with_alpha(pixel.alpha));
+        *dst = dst.blend_over(color.with_alpha(pixel.alpha));
     }
 }
 

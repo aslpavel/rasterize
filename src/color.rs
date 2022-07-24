@@ -6,18 +6,18 @@ use std::{
 };
 
 /// Common interface to all color representations
-pub trait Color {
+pub trait Color: Copy {
     /// Blend other color on top of this color
-    fn blend_over(&self, other: &Self) -> Self;
+    fn blend_over(self, other: Self) -> Self;
 
     /// Override alpha component of the color
-    fn with_alpha(&self, alpha: Scalar) -> Self;
+    fn with_alpha(self, alpha: Scalar) -> Self;
 
     /// Convert color to sRGBA list
-    fn to_rgba(&self) -> [u8; 4];
+    fn to_rgba(self) -> [u8; 4];
 
     /// Convert color to sRGB list (alpha is discarded)
-    fn to_rgb(&self) -> [u8; 3]
+    fn to_rgb(self) -> [u8; 3]
     where
         Self: Sized,
     {
@@ -79,15 +79,15 @@ impl ColorU8 {
 }
 
 impl Color for ColorU8 {
-    fn to_rgba(&self) -> [u8; 4] {
+    fn to_rgba(self) -> [u8; 4] {
         self.0.to_le_bytes()
     }
 
-    fn blend_over(&self, _other: &Self) -> Self {
+    fn blend_over(self, _other: Self) -> Self {
         todo!()
     }
 
-    fn with_alpha(&self, _alpha: Scalar) -> Self {
+    fn with_alpha(self, _alpha: Scalar) -> Self {
         todo!()
     }
 }
@@ -222,16 +222,16 @@ impl LinColor {
 }
 
 impl Color for LinColor {
-    fn to_rgba(&self) -> [u8; 4] {
-        ColorU8::from(*self).to_rgba()
+    fn to_rgba(self) -> [u8; 4] {
+        ColorU8::from(self).to_rgba()
     }
 
-    fn blend_over(&self, other: &Self) -> Self {
-        *other + *self * (1.0 - other.alpha())
+    fn blend_over(self, other: Self) -> Self {
+        other + self * (1.0 - other.alpha())
     }
 
-    fn with_alpha(&self, alpha: Scalar) -> Self {
-        *self * (alpha as f32)
+    fn with_alpha(self, alpha: Scalar) -> Self {
+        self * (alpha as f32)
     }
 }
 
@@ -300,16 +300,16 @@ impl fmt::Display for LinColor {
 }
 
 impl Color for Scalar {
-    fn to_rgba(&self) -> [u8; 4] {
-        let color = (linear_to_srgb(1.0 - (*self as f32)) * 255.0 + 0.5) as u8;
+    fn to_rgba(self) -> [u8; 4] {
+        let color = (linear_to_srgb(1.0 - (self as f32)) * 255.0 + 0.5) as u8;
         [color, color, color, 255]
     }
 
-    fn blend_over(&self, other: &Self) -> Self {
+    fn blend_over(self, other: Self) -> Self {
         other + self * (1.0 - other)
     }
 
-    fn with_alpha(&self, alpha: Scalar) -> Self {
+    fn with_alpha(self, alpha: Scalar) -> Self {
         self * alpha
     }
 }
