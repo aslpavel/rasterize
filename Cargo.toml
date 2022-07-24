@@ -19,7 +19,8 @@ keywords = ["2d", "rendering"]
 categories = ["rendering"]
 
 [features]
-default = ["serde"]
+default = ["serde", "simd"]
+simd = []
 serde = ["dep:serde", "dep:serde_json"]
 
 [dependencies]

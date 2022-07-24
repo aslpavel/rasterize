@@ -1,4 +1,4 @@
-use crate::{Paint, Point, Scalar, Transform, Units};
+use crate::{simd::f32x4, Paint, Point, Scalar, Transform, Units};
 use std::{
     fmt,
     ops::{Add, Mul},
@@ -158,30 +158,35 @@ impl fmt::Display for ColorU8 {
 
 /// Alpha premultiplied RGBA color in the linear color space (no gamma correction)
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct LinColor([f32; 4]);
-// pub struct LinColor(crate::simd::f32x4);
+pub struct LinColor(crate::simd::f32x4);
 
 impl LinColor {
-    pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
-        LinColor([r, g, b, a])
+    #[inline]
+    pub fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
+        LinColor(f32x4::new(r, g, b, a))
     }
 
-    pub const fn red(&self) -> f32 {
-        self.0[0]
+    #[inline]
+    pub fn red(self) -> f32 {
+        self.0.x0()
     }
 
-    pub const fn green(&self) -> f32 {
-        self.0[1]
+    #[inline]
+    pub fn green(self) -> f32 {
+        self.0.x1()
     }
 
-    pub const fn blue(&self) -> f32 {
-        self.0[2]
+    #[inline]
+    pub fn blue(self) -> f32 {
+        self.0.x2()
     }
 
-    pub const fn alpha(&self) -> f32 {
-        self.0[3]
+    #[inline]
+    pub fn alpha(self) -> f32 {
+        self.0.x3()
     }
 
+    #[inline(always)]
     pub fn lerp(self, other: LinColor, t: Scalar) -> Self {
         let t = t as f32;
         other * t + self * (1.0 - t)
@@ -190,6 +195,7 @@ impl LinColor {
     /// Convert into alpha-premultiplied SRGB from Linear RGB
     ///
     /// Used by gradients, do not make public
+    #[inline(always)]
     pub(crate) fn into_srgb(self) -> Self {
         let [r, g, b, a]: [f32; 4] = self.into();
         if a <= 1e-6 {
@@ -207,6 +213,7 @@ impl LinColor {
     /// Convert into alpha-premultiplied Linear RGB from SRGB
     ///
     /// Used by gradient, do not make public
+    #[inline(always)]
     pub(crate) fn into_linear(self) -> Self {
         let [r, g, b, a]: [f32; 4] = self.into();
         if a <= 1e-6 {
@@ -222,14 +229,17 @@ impl LinColor {
 }
 
 impl Color for LinColor {
+    #[inline(always)]
     fn to_rgba(self) -> [u8; 4] {
         ColorU8::from(self).to_rgba()
     }
 
+    #[inline(always)]
     fn blend_over(self, other: Self) -> Self {
         other + self * (1.0 - other.alpha())
     }
 
+    #[inline(always)]
     fn with_alpha(self, alpha: Scalar) -> Self {
         self * (alpha as f32)
     }
@@ -257,21 +267,18 @@ impl Paint for LinColor {
 impl Add<Self> for LinColor {
     type Output = Self;
 
-    #[inline]
+    #[inline(always)]
     fn add(self, other: Self) -> Self::Output {
-        let Self([r0, g0, b0, a0]) = self;
-        let Self([r1, g1, b1, a1]) = other;
-        Self([r0 + r1, g0 + g1, b0 + b1, a0 + a1])
+        Self(self.0 + other.0)
     }
 }
 
 impl Mul<f32> for LinColor {
     type Output = Self;
 
-    #[inline]
+    #[inline(always)]
     fn mul(self, scale: f32) -> Self::Output {
-        let Self([r, g, b, a]) = self;
-        Self([scale * r, scale * g, scale * b, scale * a])
+        Self(self.0 * scale)
     }
 }
 
