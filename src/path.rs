@@ -266,6 +266,61 @@ impl Path {
         self.subpaths.is_empty()
     }
 
+    /// Calculate winding number of a point
+    pub fn winding_at(&self, point: impl Into<Point>) -> i32 {
+        let point = point.into();
+        // We are using horizontal line `y = point.y` to calculate winding number
+        // - Find all segments that can potentially intersect this line.
+        //   If all control points are on one side of the line then it is not going to
+        //   intersect it as bezier curve is always bound by all its control points.
+        // - Find intersection and based on tangent direction assign 1 or -1, throw away
+        //   all intersections with `x > point.x`
+        let y = point.y();
+        let tr = Transform::new_translate(0.0, -y);
+        let mut winding = 0;
+        for subpath in &self.subpaths {
+            let last = if subpath.closed {
+                Some(Line::new(subpath.end(), subpath.start()).into())
+            } else {
+                None
+            };
+            for segment in subpath.segments().into_iter().chain(&last) {
+                let points: &[Point] = match segment {
+                    Segment::Line(Line(points)) => points,
+                    Segment::Quad(Quad(points)) => points,
+                    Segment::Cubic(Cubic(points)) => points,
+                };
+                let (above, below) =
+                    points
+                        .into_iter()
+                        .fold((false, false), |(above, below), ctrl| {
+                            if ctrl.y() > point.y() {
+                                (true, below)
+                            } else {
+                                (above, true)
+                            }
+                        });
+                if !above || !below {
+                    // will not intersect horizontal line
+                    continue;
+                }
+                for root_t in segment.transform(tr).roots() {
+                    let root = segment.at(root_t);
+                    if root.x() > point.x() {
+                        continue;
+                    }
+                    let deriv = segment.deriv().at(root_t);
+                    if deriv.y() > 0.0 {
+                        winding += 1;
+                    } else if deriv.y() < 0.0 {
+                        winding -= 1;
+                    }
+                }
+            }
+        }
+        winding
+    }
+
     /// List of sub-paths
     pub fn subpaths(&self) -> &[SubPath] {
         &self.subpaths
@@ -986,6 +1041,17 @@ mod tests {
             assert!(l0.start().is_close_to(l1.start()));
             assert!(l0.end().is_close_to(l1.end()));
         }
+        Ok(())
+    }
+
+    #[test]
+    fn test_winding() -> Result<(), SvgParserError> {
+        let path: Path = SQUIRREL.parse()?;
+        assert_eq!(path.winding_at((2.4, 5.4)), 0);
+        assert_eq!(path.winding_at((3.5, 3.155)), 1);
+        assert_eq!(path.winding_at((3.92, 3.155)), 0);
+        assert_eq!(path.winding_at((12.46, 6.87)), 0);
+        assert_eq!(path.winding_at((14.24, 7.455)), 1);
         Ok(())
     }
 }
