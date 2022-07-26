@@ -942,29 +942,29 @@ impl Segment {
     ///
     /// This might not be the fastest method possible but works for any two curves.
     /// Divide curves as long as there is intersection between bounding boxes, if
-    /// the intersection is smaller then tolerance we can treat it as an intersection point.
+    /// the intersection is smaller than tolerance we can treat it as an intersection point.
+    ///
+    /// NOTE: This produces duplicate results which are close to each other. Why?
     pub fn intersect(self, other: impl Into<Segment>, tolerance: Scalar) -> Vec<Point> {
         let mut queue = vec![(self, other.into())];
-        let mut result = Vec::new();
+        let mut result: Vec<Point> = Vec::new();
         while let Some((s0, s1)) = queue.pop() {
             let b0 = s0.bbox(None);
             let b1 = s1.bbox(None);
-            match b0.intersect(b1) {
-                None => continue,
-                Some(b) => {
-                    let b0_is_small = b0.width() < tolerance && b0.height() < tolerance;
-                    let b1_is_small = b1.width() < tolerance && b1.height() < tolerance;
-                    if b0_is_small && b1_is_small {
-                        result.push(b.diag().at(0.5));
-                    } else {
-                        // TODO: can be optimized by splitting only curves with large bounding box
-                        let (s00, s01) = s0.split_at(0.5);
-                        let (s10, s11) = s1.split_at(0.5);
-                        queue.push((s00, s10));
-                        queue.push((s00, s11));
-                        queue.push((s01, s10));
-                        queue.push((s01, s11));
+            if let Some(b) = b0.intersect(b1) {
+                if b.diag().length() < tolerance {
+                    let p_new = b.diag().at(0.5);
+                    if result.iter().all(|p| p.dist(p_new) > tolerance) {
+                        result.push(p_new);
                     }
+                } else {
+                    // TODO: can be optimized by splitting only curves with large bounding box
+                    let (s00, s01) = s0.split();
+                    let (s10, s11) = s1.split();
+                    queue.push((s00, s10));
+                    queue.push((s00, s11));
+                    queue.push((s01, s10));
+                    queue.push((s01, s11));
                 }
             }
         }
@@ -1691,5 +1691,16 @@ mod tests {
             let t = cubic.param_at_length(l, Some(error));
             assert_approx_eq!(cubic.length(0.0, t), l, error)
         }
+    }
+
+    #[test]
+    fn test_intersect() -> Result<(), SvgParserError> {
+        let c0: Segment = "M97,177 C120,20 220,95 47,148".parse()?;
+        let c1: Segment = "M136,82 C59,184 108,228 153,34".parse()?;
+        // TODO: Fix duplicate results
+        for (i, p) in c0.intersect(c1, 1e-3).into_iter().enumerate() {
+            println!("{i}: ({}, {})", p.x(), p.y());
+        }
+        Ok(())
     }
 }
