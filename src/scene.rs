@@ -1,6 +1,6 @@
 use crate::{
-    utils::clamp, BBox, Color, FillRule, Image, ImageMut, ImageOwned, LinColor, Paint, Path,
-    Rasterizer, Scalar, Shape, Size, StrokeStyle, Transform, Units,
+    utils::clamp, ArcPaint, BBox, Color, FillRule, Image, ImageMut, ImageOwned, LinColor, Paint,
+    Path, Rasterizer, Scalar, Shape, Size, StrokeStyle, Transform, Units,
 };
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -24,14 +24,14 @@ enum SceneInner {
         )]
         fill_rule: FillRule,
         #[cfg_attr(feature = "serde", serde(with = "serde_paint"))]
-        paint: Arc<dyn Paint>,
+        paint: ArcPaint,
         path: Arc<Path>,
     },
     Stroke {
         #[cfg_attr(feature = "serde", serde(flatten))]
         style: StrokeStyle,
         #[cfg_attr(feature = "serde", serde(with = "serde_paint"))]
-        paint: Arc<dyn Paint>,
+        paint: ArcPaint,
         path: Arc<Path>,
     },
     Group {
@@ -86,7 +86,7 @@ impl From<SceneInner> for Scene {
 
 impl Scene {
     /// Fill path
-    pub fn fill(path: Arc<Path>, paint: Arc<dyn Paint>, fill_rule: FillRule) -> Self {
+    pub fn fill(path: Arc<Path>, paint: ArcPaint, fill_rule: FillRule) -> Self {
         SceneInner::Fill {
             path,
             paint,
@@ -96,7 +96,7 @@ impl Scene {
     }
 
     /// Stroke path
-    pub fn stroke(path: Arc<Path>, paint: Arc<dyn Paint>, style: StrokeStyle) -> Self {
+    pub fn stroke(path: Arc<Path>, paint: ArcPaint, style: StrokeStyle) -> Self {
         SceneInner::Stroke { path, paint, style }.into()
     }
 
@@ -587,11 +587,11 @@ impl<C> ImageMut for Layer<C> {
 mod serde_paint {
     use crate::{GradLinear, GradRadial, LinColor};
 
-    use super::{Arc, Paint};
+    use super::{Arc, ArcPaint};
     use serde::{de, ser, Deserialize, Deserializer, Serialize, Serializer};
     use serde_json::Value;
 
-    pub fn serialize<S>(paint: &Arc<dyn Paint>, serializer: S) -> Result<S::Ok, S::Error>
+    pub fn serialize<S>(paint: &ArcPaint, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -601,7 +601,7 @@ mod serde_paint {
             .serialize(serializer)
     }
 
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Arc<dyn Paint>, D::Error>
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<ArcPaint, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -645,23 +645,30 @@ mod tests {
     use super::*;
     use crate::ActiveEdgeRasterizer;
     type Error = Box<dyn std::error::Error>;
+    const SCENE: &'static str = r##"
+    {
+        "type": "transform",
+        "tr": "translate(7, 7) rotate(45, 7, 7) scale(10)",
+        "child": {
+            "type": "fill",
+            "paint": "#ff8040",
+            "path": "M0,0 h1 v1 h-1 z"
+        }
+    }
+    "##;
+
+    #[test]
+    fn secne_send_test() -> Result<(), Error> {
+        fn witness_send(_: impl Send) {}
+        let scene: Scene = serde_json::from_str(SCENE)?;
+        witness_send(scene);
+        Ok(())
+    }
 
     #[test]
     fn test_scene_view() -> Result<(), Error> {
         let rasterizer = ActiveEdgeRasterizer::default();
-
-        let scene_str = r##"
-        {
-            "type": "transform",
-            "tr": "translate(7, 7) rotate(45, 7, 7) scale(10)",
-            "child": {
-                "type": "fill",
-                "paint": "#ff8040",
-                "path": "M0,0 h1 v1 h-1 z"
-            }
-        }
-        "##;
-        let scene: Scene = serde_json::from_str(scene_str)?;
+        let scene: Scene = serde_json::from_str(SCENE)?;
 
         // make sure that view is respected
         let img = scene.render(

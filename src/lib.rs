@@ -36,8 +36,8 @@ mod svg;
 pub mod utils;
 
 pub use crate::rasterize::{
-    ActiveEdgeIter, ActiveEdgeRasterizer, Paint, Pixel, Rasterizer, SignedDifferenceRasterizer,
-    Size, Units,
+    ActiveEdgeIter, ActiveEdgeRasterizer, ArcPaint, Paint, Pixel, Rasterizer,
+    SignedDifferenceRasterizer, Size, Units,
 };
 pub use color::{linear_to_srgb, srgb_to_linear, Color, ColorU8, LinColor};
 pub use curve::{

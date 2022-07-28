@@ -273,6 +273,8 @@ impl Paint for Arc<dyn Paint> {
     }
 }
 
+pub type ArcPaint = Arc<dyn Paint + Send + Sync + 'static>;
+
 /// Signed difference based rasterizer
 #[derive(Debug, Clone)]
 pub struct SignedDifferenceRasterizer {
