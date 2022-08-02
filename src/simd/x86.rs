@@ -202,37 +202,43 @@ pub fn l2s(x0: f32x4) -> f32x4 {
 }
 
 #[inline(always)]
-pub fn s2l(x0: f32x4) -> f32x4 {
-    //
-    // -0.08159365203948196 +
-    // x^1 * 0.4560241868217581 +
-    // x^2 * 0.6057074470970819 +
-    // x^3 * 0.018045663927566468 +
-    // x^4 * 0.001694035470181541
-    let x1 = x0 * x0;
-    let x2 = x1 * x0;
-    let x3 = x2 * x0;
-    let high = f32x4::splat(-0.08159365203948196)
-        + x0 * 0.4560241868217581
-        + x1 * 0.6057074470970819
-        + x2 * 0.018045663927566468
-        + x3 * 0.001694035470181541;
+pub fn s2l(vs: f32x4) -> f32x4 {
+    // def s2l(value):
+    //   if value <= 0.04045:
+    //     return value / 12.92
+    //   else:
+    //     return ((value + 0.055) / 1.055) ** 2.4
+    // x = np.linspace(0.04045, 1, 16000)
+    // y = np.array([s2l(v) for v in x])
+    // np.polynomial.Polynomial.fit(x, y, 3)
+    // 𝑥 ↦ 0.23361048543711943 +
+    //      0.4665843122387033 * (-1.0843103538116827 + 2.0843103538116825 * 𝑥) +
+    //      0.26901741378006355 * (-1.0843103538116827 + 2.0843103538116825 * 𝑥) ^2 +
+    //      0.031661580753065945 * (-1.0843103538116827 + 2.0843103538116825 * 𝑥) ^ 3
+    let x1 = 2.0843103538116825 * vs - f32x4::splat(1.0843103538116827);
+    let x2 = x1 * x1;
+    let x3 = x2 * x1;
+    let vs_high = f32x4::splat(0.23361048543711943)
+        + 0.4665843122387033 * x1
+        + 0.26901741378006355 * x2
+        + 0.031661580753065945 * x3;
     unsafe {
         f32x4(_mm_blendv_ps(
-            high.0,
-            (x0 * 0.07739938080495357).0,
-            _mm_cmple_ps(x0.0, _mm_set1_ps(0.04045)),
+            vs_high.0,
+            (vs * 0.07739938080495357).0,
+            _mm_cmple_ps(vs.0, _mm_set1_ps(0.04045)),
         ))
     }
+}
+
+/// Create shuffle/permute mask
+pub const fn shuffle_mask(x0: u32, x1: u32, x2: u32, x3: u32) -> i32 {
+    ((x3 << 6) | (x2 << 4) | (x1 << 2) | x0) as i32
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const fn shuffle_mask(z: u32, y: u32, x: u32, w: u32) -> i32 {
-        ((z << 6) | (y << 4) | (x << 2) | w) as i32
-    }
 
     #[test]
     fn test_simd() {
@@ -244,10 +250,15 @@ mod tests {
 
         let b = f32x4::new(5.0, 6.0, 7.0, 8.0);
         unsafe {
-            println!("{:?}", _mm_shuffle_ps::<0b00110011>(a.0, b.0));
-            println!("{:?}", _mm_permute_ps::<{ shuffle_mask(0, 3, 3, 3) }>(b.0));
+            assert_eq!(
+                f32x4(_mm_shuffle_ps::<{ shuffle_mask(0, 3, 0, 3) }>(a.0, b.0)),
+                f32x4::new(1.0, 4.0, 5.0, 8.0),
+            );
+            assert_eq!(
+                f32x4(_mm_permute_ps::<{ shuffle_mask(0, 3, 3, 2) }>(b.0)),
+                f32x4::new(5.0, 8.0, 8.0, 7.0)
+            );
         }
-        println!("{}", b.x0());
 
         let c = f32x4::new(0.001, 0.1, 0.2, 0.7);
         println!("{c:?}");

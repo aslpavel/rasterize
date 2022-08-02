@@ -50,32 +50,6 @@ impl ColorU8 {
     pub const fn red(self) -> u8 {
         (self.0 & 0xff) as u8
     }
-
-    /*
-    ```
-    fn blend_over(self, other: Self) -> Self {
-        // Sa - source alpha
-        // Sc - source color
-        // Da - destination alpha
-        // Dc - destination color
-        // Output color would be (prime means premultiplied):
-        //   Oc' = Sc * Sa + Dc * Da * (1 - Sa)
-        //   Oa = Sa + Da * (1 - Sa)
-        //   Oc = Oc' / Oa
-        //
-        //   Oc' = lerp(Dc * Da, Sc, Sa)
-        //   Oa = Sa + Da - Sa * Da
-        let da = u32::from(self.alpha());
-        let sa = u32::from(other.alpha());
-        let _oa = sa + da - mul_u8(sa, da);
-
-        let dc = self.0;
-        let sc = other.0;
-        let _oc = lerp_u8x4(mul_u8x4(dc, da), sc, sa);
-        todo!()
-    }
-    ```
-    */
 }
 
 impl Color for ColorU8 {
@@ -161,27 +135,27 @@ impl fmt::Display for ColorU8 {
 pub struct LinColor(crate::simd::f32x4);
 
 impl LinColor {
-    #[inline]
+    #[inline(always)]
     pub fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
         LinColor(f32x4::new(r, g, b, a))
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn red(self) -> f32 {
         self.0.x0()
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn green(self) -> f32 {
         self.0.x1()
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn blue(self) -> f32 {
         self.0.x2()
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn alpha(self) -> f32 {
         self.0.x3()
     }
@@ -197,6 +171,10 @@ impl LinColor {
     /// Used by gradients, do not make public
     #[inline(always)]
     pub(crate) fn into_srgb(self) -> Self {
+        // !!! check firefox scene
+        // let alpha = f32x4::splat(self.alpha());
+        // Self(l2s(self.0 / alpha) * alpha)
+
         let [r, g, b, a]: [f32; 4] = self.into();
         if a <= 1e-6 {
             Self::new(0.0, 0.0, 0.0, 0.0)
@@ -284,6 +262,10 @@ impl Mul<f32> for LinColor {
 
 impl From<ColorU8> for LinColor {
     fn from(color: ColorU8) -> Self {
+        // !!! overshots at 1.0
+        // let [r, g, b, a] = color.to_rgba();
+        // let rgba = f32x4::new(r as f32, g as f32, b as f32, 255.0) * 0.00392156862745098;
+        // LinColor(s2l(rgba) * f32x4::splat(a as f32 / 255.0))
         let a = color.alpha() as f32 / 255.0;
         let r = srgb_to_linear(color.red() as f32 / 255.0) * a;
         let g = srgb_to_linear(color.green() as f32 / 255.0) * a;
@@ -383,58 +365,6 @@ impl fmt::Display for ColorError {
 }
 
 impl std::error::Error for ColorError {}
-
-/*
-```ignore
-const MASK_LOW: u32 = 0x00FF00FF;
-
-/// Calculate `[_, a1, _, a3] * b / 255`, where `a{0-3}` and `b` are `u8`
-///
-/// Those optimization comes from for these two formulas:
-///   1. `a + ar + ar^2 ... = a / (1 - r)` for all r in [0..1)
-///   2. `t / 255 = (t / 256) / (1 - r)` where if `r = 1 / 256`
-///
-/// Applying this 1 and 2, takin only first two arguments from 1.
-///   `(v >> 8) + (v >> 16)` => `((v >> 8) + v) >> 8` where `v = a * b`
-///
-/// Basically we get `v / 255 = ((v >> 8) + v) >> 8`
-///
-/// This function also doing this operation at on two u8 at once by means of masking
-/// and then recomposing everything in one value.
-///
-/// References:
-///   - [Image Compositing Fundamentals](https://www.cs.princeton.edu/courses/archive/fall00/cs426/papers/smith95a.pdf)
-///   - [Double blend trick](http://stereopsis.com/doubleblend.html)
-fn mul_u8x2(a: u32, b: u32) -> u32 {
-    let m0 = (a & MASK_LOW) * b + 0x00800080;
-    ((((m0 >> 8) & MASK_LOW) + m0) >> 8) & MASK_LOW
-}
-
-fn mul_u8(a: u32, b: u32) -> u32 {
-    let t = (a * b) + 0x80;
-    ((t >> 8) + t) >> 8
-}
-
-pub fn mul_u8x4(a: u32, b: u32) -> u32 {
-    let low = mul_u8x2(a, b);
-    let high = mul_u8x2(a >> 8, b) << 8;
-    low + high
-}
-
-fn lerp_u8x2(a: u32, b: u32, t: u32) -> u32 {
-    let a_low = a & MASK_LOW;
-    let b_low = b & MASK_LOW;
-    let delta_low = b_low.wrapping_sub(a_low).wrapping_mul(t) >> 8;
-    (a_low + delta_low) & MASK_LOW
-}
-
-pub fn lerp_u8x4(a: u32, b: u32, t: u32) -> u32 {
-    let low = lerp_u8x2(a, b, t);
-    let high = lerp_u8x2(a >> 8, b >> 8, t) << 8;
-    low | high
-}
-```
-*/
 
 #[cfg(test)]
 mod tests {
