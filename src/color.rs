@@ -171,20 +171,13 @@ impl LinColor {
     /// Used by gradients, do not make public
     #[inline(always)]
     pub(crate) fn into_srgb(self) -> Self {
-        // !!! check firefox scene
-        // let alpha = f32x4::splat(self.alpha());
-        // Self(l2s(self.0 / alpha) * alpha)
-
-        let [r, g, b, a]: [f32; 4] = self.into();
-        if a <= 1e-6 {
+        let alpha = self.alpha();
+        if alpha <= 1e-6 {
+            // avoid division by zero, check firefox scene.
             Self::new(0.0, 0.0, 0.0, 0.0)
         } else {
-            Self::new(
-                linear_to_srgb(r / a) * a,
-                linear_to_srgb(g / a) * a,
-                linear_to_srgb(b / a) * a,
-                a,
-            )
+            let alpha = f32x4::splat(alpha);
+            Self(crate::simd::l2s(self.0 / alpha) * alpha)
         }
     }
 
@@ -193,16 +186,14 @@ impl LinColor {
     /// Used by gradient, do not make public
     #[inline(always)]
     pub(crate) fn into_linear(self) -> Self {
-        let [r, g, b, a]: [f32; 4] = self.into();
-        if a <= 1e-6 {
-            return Self::new(0.0, 0.0, 0.0, 0.0);
+        let alpha = self.alpha();
+        if alpha <= 1e-6 {
+            // avoid division by zero, check firefox scene.
+            Self::new(0.0, 0.0, 0.0, 0.0)
+        } else {
+            let alpha = f32x4::splat(alpha);
+            Self(crate::simd::s2l(self.0 / alpha) * alpha)
         }
-        Self::new(
-            srgb_to_linear(r / a) * a,
-            srgb_to_linear(g / a) * a,
-            srgb_to_linear(b / a) * a,
-            a,
-        )
     }
 }
 

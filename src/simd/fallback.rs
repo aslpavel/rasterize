@@ -4,6 +4,8 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
+use crate::{linear_to_srgb, srgb_to_linear};
+
 #[derive(Copy, Clone, PartialEq, Default)]
 #[repr(transparent)]
 pub struct f32x4([f32; 4]);
@@ -141,4 +143,16 @@ impl From<f32x4> for [f32; 4] {
     fn from(val: f32x4) -> Self {
         val.0
     }
+}
+
+#[inline(always)]
+pub fn l2s(x0: f32x4) -> f32x4 {
+    let [r, g, b, a]: [f32; 4] = x0.into();
+    f32x4::new(linear_to_srgb(r), linear_to_srgb(g), linear_to_srgb(b), a)
+}
+
+#[inline(always)]
+pub fn s2l(x0: f32x4) -> f32x4 {
+    let [r, g, b, a]: [f32; 4] = x0.into();
+    f32x4::new(srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b), a)
 }
