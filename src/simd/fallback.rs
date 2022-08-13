@@ -56,6 +56,13 @@ impl f32x4 {
         let [x0, x1, x2, x3] = self.0;
         Self([x0.sqrt(), x1.sqrt(), x2.sqrt(), x3.sqrt()])
     }
+
+    #[inline(always)]
+    pub fn dot(self, other: Self) -> f32 {
+        let [a0, a1, a2, a3] = self.0;
+        let [b0, b1, b2, b3] = other.0;
+        a0 * b0 + a1 * b1 + a2 * b2 + a3 * b3
+    }
 }
 
 impl fmt::Debug for f32x4 {

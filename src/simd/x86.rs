@@ -21,6 +21,11 @@ impl f32x4 {
         Self(unsafe { _mm_set_ps(x3, x2, x1, x0) })
     }
 
+    pub fn fallback(self) -> super::fallback::f32x4 {
+        let this: [f32; 4] = self.into();
+        this.into()
+    }
+
     #[inline(always)]
     pub fn x0(self) -> f32 {
         unsafe { transmute(_mm_extract_ps::<0>(self.0)) }
@@ -69,6 +74,15 @@ impl f32x4 {
     #[inline(always)]
     pub fn add_mul(self, a: f32x4, b: f32x4) -> Self {
         a.mul_add(b, self)
+    }
+
+    #[inline(always)]
+    pub fn dot(self, other: Self) -> f32 {
+        unsafe {
+            transmute(_mm_extract_ps::<0>(_mm_dp_ps::<0b1111_1111>(
+                self.0, other.0,
+            )))
+        }
     }
 }
 
@@ -265,5 +279,13 @@ mod tests {
         println!("{:?}", l2s(c));
         println!("{:?}", s2l(l2s(c)));
         dbg!(s2l(f32x4::splat(1.0)));
+    }
+
+    #[test]
+    fn test_dot() {
+        let a = f32x4::new(1.0, 2.0, 3.0, 4.0);
+        let b = f32x4::new(5.0, 6.0, 7.0, 8.0);
+        assert_eq!(70.0, a.dot(b));
+        assert_eq!(70.0, a.fallback().dot(b.fallback()));
     }
 }

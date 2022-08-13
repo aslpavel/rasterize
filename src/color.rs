@@ -17,12 +17,25 @@ pub trait Color: Copy {
     fn to_rgba(self) -> [u8; 4];
 
     /// Convert color to sRGB list (alpha is discarded)
-    fn to_rgb(self) -> [u8; 3]
-    where
-        Self: Sized,
-    {
+    fn to_rgb(self) -> [u8; 3] {
         let [r, g, b, _] = self.to_rgba();
         [r, g, b]
+    }
+
+    /// Calculate LUMA of the color.
+    fn luma(self) -> f32 {
+        let [r, g, b] = self.to_rgb();
+        0.2126 * (r as f32 / 255.0) + 0.7152 * (g as f32 / 255.0) + 0.0722 * (b as f32 / 255.0)
+    }
+
+    /// Pick color that produces the best contrast with self
+    fn best_contrast(self, c0: Self, c1: Self) -> Self {
+        let luma = self.luma();
+        if (luma - c0.luma()).abs() < (luma - c1.luma()).abs() {
+            c1
+        } else {
+            c0
+        }
     }
 }
 
@@ -57,12 +70,14 @@ impl Color for ColorU8 {
         self.0.to_le_bytes()
     }
 
-    fn blend_over(self, _other: Self) -> Self {
-        todo!()
+    fn blend_over(self, other: Self) -> Self {
+        LinColor::from(self)
+            .blend_over(LinColor::from(other))
+            .into()
     }
 
-    fn with_alpha(self, _alpha: Scalar) -> Self {
-        todo!()
+    fn with_alpha(self, alpha: Scalar) -> Self {
+        LinColor::from(self).with_alpha(alpha).into()
     }
 }
 
@@ -82,12 +97,28 @@ impl From<LinColor> for ColorU8 {
 
 impl fmt::Debug for ColorU8 {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_struct("ColorU8")
-            .field("r", &self.red())
-            .field("g", &self.green())
-            .field("b", &self.blue())
-            .field("a", &self.alpha())
-            .finish()
+        let [bg_r, bg_g, bg_b] = self.to_rgb();
+        let [fg_r, fg_g, fg_b] = self
+            .best_contrast(ColorU8::new(255, 255, 255, 255), ColorU8::new(0, 0, 0, 255))
+            .to_rgb();
+        write!(
+            fmt,
+            "\x1b[38;2;{};{};{};48;2;{};{};{}m",
+            fg_r, fg_g, fg_b, bg_r, bg_g, bg_b
+        )?;
+        write!(fmt, "{}", self)?;
+        write!(fmt, "\x1b[m")
+    }
+}
+
+impl fmt::Display for ColorU8 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let [r, g, b, a] = self.to_rgba();
+        write!(f, "#{:02x}{:02x}{:02x}", r, g, b)?;
+        if a != 255 {
+            write!(f, "{:02x}", a)?;
+        }
+        Ok(())
     }
 }
 
@@ -116,17 +147,6 @@ impl FromStr for ColorU8 {
         } else {
             Err(ColorError::HexExpected)
         }
-    }
-}
-
-impl fmt::Display for ColorU8 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let [r, g, b, a] = self.to_rgba();
-        write!(f, "#{:02x}{:02x}{:02x}", r, g, b)?;
-        if a != 255 {
-            write!(f, "{:02x}", a)?;
-        }
-        Ok(())
     }
 }
 
@@ -161,9 +181,28 @@ impl LinColor {
     }
 
     #[inline(always)]
-    pub fn lerp(self, other: LinColor, t: Scalar) -> Self {
+    pub fn lerp(self, other: Self, t: Scalar) -> Self {
         let t = t as f32;
         other * t + self * (1.0 - t)
+    }
+
+    #[inline(always)]
+    pub fn distance(self, other: Self) -> f32 {
+        let diff = self.unmultiply().0 - other.unmultiply().0;
+        diff.dot(diff).sqrt()
+    }
+
+    /// Linear color is by default pre-multiplied by alpha, this function removes
+    /// pre-multiplication.
+    #[inline(always)]
+    pub fn unmultiply(self) -> Self {
+        let alpha = self.alpha();
+        if alpha <= 1e-6 {
+            // avoid division by zero, check firefox scene.
+            Self::new(0.0, 0.0, 0.0, 0.0)
+        } else {
+            Self(self.0 / f32x4::splat(alpha))
+        }
     }
 
     /// Convert into alpha-premultiplied SRGB from Linear RGB
