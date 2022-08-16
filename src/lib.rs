@@ -39,7 +39,7 @@ pub use crate::rasterize::{
     ActiveEdgeIter, ActiveEdgeRasterizer, ArcPaint, Paint, Pixel, Rasterizer,
     SignedDifferenceRasterizer, Size, Units,
 };
-pub use color::{linear_to_srgb, srgb_to_linear, Color, ColorU8, LinColor};
+pub use color::{linear_to_srgb, srgb_to_linear, Color, ColorError, LinColor, RGBA};
 pub use curve::{
     Cubic, Curve, CurveExtremities, CurveFlattenIter, CurveRoots, Line, Quad, Segment,
 };

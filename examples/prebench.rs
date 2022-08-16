@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Instant};
 
 use rasterize::{
-    BBox, ColorU8, FillRule, Image, LinColor, Path, Point, Scalar, Scene, Size, Transform,
+    BBox, FillRule, Image, LinColor, Path, Point, Scalar, Scene, Size, Transform, RGBA,
 };
 
 type Error = Box<dyn std::error::Error>;
@@ -54,7 +54,7 @@ impl Rnd {
 
     /// Generate random color
     pub fn color(&mut self) -> LinColor {
-        ColorU8::new(
+        RGBA::new(
             (self.uniform_u32() % 256) as u8,
             (self.uniform_u32() % 256) as u8,
             (self.uniform_u32() % 256) as u8,

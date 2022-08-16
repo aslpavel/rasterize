@@ -37,13 +37,16 @@ pub trait Color: Copy {
             c0
         }
     }
+
+    /// Linear interpolation between self and other colors.
+    fn lerp(self, other: Self, t: f32) -> Self;
 }
 
 /// ABGR color packed as u32 value (most of the platforms are little-endian)
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct ColorU8(u32);
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+pub struct RGBA(u32);
 
-impl ColorU8 {
+impl RGBA {
     pub const fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self(((a as u32) << 24) | ((b as u32) << 16) | ((g as u32) << 8) | (r as u32))
     }
@@ -65,7 +68,7 @@ impl ColorU8 {
     }
 }
 
-impl Color for ColorU8 {
+impl Color for RGBA {
     fn to_rgba(self) -> [u8; 4] {
         self.0.to_le_bytes()
     }
@@ -79,27 +82,31 @@ impl Color for ColorU8 {
     fn with_alpha(self, alpha: Scalar) -> Self {
         LinColor::from(self).with_alpha(alpha).into()
     }
+
+    fn lerp(self, other: Self, t: f32) -> Self {
+        LinColor::from(self).lerp(LinColor::from(other), t).into()
+    }
 }
 
-impl From<LinColor> for ColorU8 {
+impl From<LinColor> for RGBA {
     fn from(lin: LinColor) -> Self {
         let [r, g, b, a]: [f32; 4] = lin.into();
         if a <= std::f32::EPSILON {
-            return ColorU8::default();
+            return RGBA::default();
         }
         let r = (linear_to_srgb(r / a) * 255.0 + 0.5) as u8;
         let g = (linear_to_srgb(g / a) * 255.0 + 0.5) as u8;
         let b = (linear_to_srgb(b / a) * 255.0 + 0.5) as u8;
         let a = (a * 255.0 + 0.5) as u8;
-        ColorU8::new(r, g, b, a)
+        RGBA::new(r, g, b, a)
     }
 }
 
-impl fmt::Debug for ColorU8 {
+impl fmt::Debug for RGBA {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         let [bg_r, bg_g, bg_b] = self.to_rgb();
         let [fg_r, fg_g, fg_b] = self
-            .best_contrast(ColorU8::new(255, 255, 255, 255), ColorU8::new(0, 0, 0, 255))
+            .best_contrast(RGBA::new(255, 255, 255, 255), RGBA::new(0, 0, 0, 255))
             .to_rgb();
         write!(
             fmt,
@@ -111,7 +118,7 @@ impl fmt::Debug for ColorU8 {
     }
 }
 
-impl fmt::Display for ColorU8 {
+impl fmt::Display for RGBA {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let [r, g, b, a] = self.to_rgba();
         write!(f, "#{:02x}{:02x}{:02x}", r, g, b)?;
@@ -122,7 +129,7 @@ impl fmt::Display for ColorU8 {
     }
 }
 
-impl FromStr for ColorU8 {
+impl FromStr for RGBA {
     type Err = ColorError;
 
     fn from_str(color: &str) -> Result<Self, Self::Err> {
@@ -138,7 +145,7 @@ impl FromStr for ColorU8 {
             let mut hex = bytes
                 .chunks(2)
                 .map(|pair| Ok(digit(pair[0])? << 4 | digit(pair[1])?));
-            Ok(ColorU8::new(
+            Ok(RGBA::new(
                 hex.next().unwrap_or(Ok(0))?,
                 hex.next().unwrap_or(Ok(0))?,
                 hex.next().unwrap_or(Ok(0))?,
@@ -178,12 +185,6 @@ impl LinColor {
     #[inline(always)]
     pub fn alpha(self) -> f32 {
         self.0.x3()
-    }
-
-    #[inline(always)]
-    pub fn lerp(self, other: Self, t: Scalar) -> Self {
-        let t = t as f32;
-        other * t + self * (1.0 - t)
     }
 
     #[inline(always)]
@@ -239,7 +240,7 @@ impl LinColor {
 impl Color for LinColor {
     #[inline(always)]
     fn to_rgba(self) -> [u8; 4] {
-        ColorU8::from(self).to_rgba()
+        RGBA::from(self).to_rgba()
     }
 
     #[inline(always)]
@@ -250,6 +251,11 @@ impl Color for LinColor {
     #[inline(always)]
     fn with_alpha(self, alpha: Scalar) -> Self {
         self * (alpha as f32)
+    }
+
+    #[inline(always)]
+    fn lerp(self, other: Self, t: f32) -> Self {
+        other * t + self * (1.0 - t)
     }
 }
 
@@ -290,8 +296,8 @@ impl Mul<f32> for LinColor {
     }
 }
 
-impl From<ColorU8> for LinColor {
-    fn from(color: ColorU8) -> Self {
+impl From<RGBA> for LinColor {
+    fn from(color: RGBA) -> Self {
         // !!! overshots at 1.0
         // let [r, g, b, a] = color.to_rgba();
         // let rgba = f32x4::new(r as f32, g as f32, b as f32, 255.0) * 0.00392156862745098;
@@ -314,13 +320,13 @@ impl FromStr for LinColor {
     type Err = ColorError;
 
     fn from_str(color: &str) -> Result<Self, Self::Err> {
-        Ok(ColorU8::from_str(color)?.into())
+        Ok(RGBA::from_str(color)?.into())
     }
 }
 
 impl fmt::Display for LinColor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        ColorU8::from(*self).fmt(f)
+        RGBA::from(*self).fmt(f)
     }
 }
 
@@ -336,6 +342,11 @@ impl Color for Scalar {
 
     fn with_alpha(self, alpha: Scalar) -> Self {
         self * alpha
+    }
+
+    fn lerp(self, other: Self, t: f32) -> Self {
+        let t = t as Scalar;
+        self * (1.0 - t) + other * t
     }
 }
 
@@ -403,7 +414,7 @@ mod tests {
 
     #[test]
     fn test_color_u8() {
-        let c = ColorU8::new(1, 2, 3, 4);
+        let c = RGBA::new(1, 2, 3, 4);
         assert_eq!([1, 2, 3, 4], c.to_rgba());
         assert_eq!(1, c.red());
         assert_eq!(2, c.green());
@@ -413,20 +424,17 @@ mod tests {
 
     #[test]
     fn test_color_u8_parse() -> Result<(), ColorError> {
-        assert_eq!(ColorU8::new(1, 2, 3, 4), "#01020304".parse::<ColorU8>()?);
-        assert_eq!(
-            ColorU8::new(170, 187, 204, 255),
-            "#aabbcc".parse::<ColorU8>()?
-        );
-        assert_eq!(ColorU8::new(0, 0, 0, 255), "#000000".parse::<ColorU8>()?);
+        assert_eq!(RGBA::new(1, 2, 3, 4), "#01020304".parse::<RGBA>()?);
+        assert_eq!(RGBA::new(170, 187, 204, 255), "#aabbcc".parse::<RGBA>()?);
+        assert_eq!(RGBA::new(0, 0, 0, 255), "#000000".parse::<RGBA>()?);
         Ok(())
     }
 
     #[test]
     fn test_conversion() -> Result<(), ColorError> {
-        let c: ColorU8 = "#ff804010".parse()?;
+        let c: RGBA = "#ff804010".parse()?;
         let l: LinColor = c.into();
-        let r: ColorU8 = l.into();
+        let r: RGBA = l.into();
         assert_eq!(c, r);
         Ok(())
     }
@@ -442,21 +450,14 @@ mod tests {
 
     #[test]
     fn test_display_parse() -> Result<(), ColorError> {
-        let c: ColorU8 = "#01020304".parse()?;
-        assert_eq!(c, ColorU8::new(1, 2, 3, 4));
+        let c: RGBA = "#01020304".parse()?;
+        assert_eq!(c, RGBA::new(1, 2, 3, 4));
         assert_eq!(c.to_string(), "#01020304");
 
-        let c: ColorU8 = "#010203".parse()?;
-        assert_eq!(c, ColorU8::new(1, 2, 3, 255));
+        let c: RGBA = "#010203".parse()?;
+        assert_eq!(c, RGBA::new(1, 2, 3, 255));
         assert_eq!(c.to_string(), "#010203");
 
         Ok(())
     }
-
-    /*
-    #[test]
-    fn test_mul_u8x4() {
-        assert_eq!(mul_u8x4(0xff804020, 0x20), 0x20100804);
-    }
-    */
 }

@@ -1,4 +1,4 @@
-use crate::{utils::quadratic_solve, LinColor, Paint, Point, Scalar, Transform, Units};
+use crate::{utils::quadratic_solve, Color, LinColor, Paint, Point, Scalar, Transform, Units};
 #[cfg(feature = "serde")]
 use serde::{de, Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -134,7 +134,7 @@ impl GradStops {
             let p0 = &self.stops[index - 1];
             let p1 = &self.stops[index];
             let ratio = (t - p0.position) / (p1.position - p0.position);
-            p0.color.lerp(p1.color, ratio)
+            p0.color.lerp(p1.color, ratio as f32)
         }
     }
 }

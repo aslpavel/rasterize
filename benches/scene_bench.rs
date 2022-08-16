@@ -1,6 +1,6 @@
 #![deny(warnings)]
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
-use rasterize::{BBox, ColorU8, FillRule, LinColor, Path, Point, Scalar, Scene, Size, Transform};
+use rasterize::{BBox, FillRule, LinColor, Path, Point, Scalar, Scene, Size, Transform, RGBA};
 use std::sync::Arc;
 
 fn many_cirles_benchmark(c: &mut Criterion) {
@@ -96,7 +96,7 @@ impl Rnd {
 
     /// Generate random color
     pub fn color(&mut self) -> LinColor {
-        ColorU8::new(
+        RGBA::new(
             (self.uniform_u32() % 256) as u8,
             (self.uniform_u32() % 256) as u8,
             (self.uniform_u32() % 256) as u8,
