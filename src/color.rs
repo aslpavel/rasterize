@@ -89,16 +89,15 @@ impl Color for RGBA {
 }
 
 impl From<LinColor> for RGBA {
+    #[inline(always)]
     fn from(lin: LinColor) -> Self {
-        let [r, g, b, a]: [f32; 4] = lin.into();
-        if a <= std::f32::EPSILON {
-            return RGBA::default();
-        }
-        let r = (linear_to_srgb(r / a) * 255.0 + 0.5) as u8;
-        let g = (linear_to_srgb(g / a) * 255.0 + 0.5) as u8;
-        let b = (linear_to_srgb(b / a) * 255.0 + 0.5) as u8;
-        let a = (a * 255.0 + 0.5) as u8;
-        RGBA::new(r, g, b, a)
+        let [r, g, b, _]: [f32; 4] = crate::simd::l2s(lin.unmultiply()).into();
+        RGBA::new(
+            (r * 255.0 + 0.5) as u8,
+            (g * 255.0 + 0.5) as u8,
+            (b * 255.0 + 0.5) as u8,
+            (lin.alpha() * 255.0 + 0.5) as u8,
+        )
     }
 }
 
@@ -189,20 +188,20 @@ impl LinColor {
 
     #[inline(always)]
     pub fn distance(self, other: Self) -> f32 {
-        let diff = self.unmultiply().0 - other.unmultiply().0;
+        let diff = self.unmultiply() - other.unmultiply();
         diff.dot(diff).sqrt()
     }
 
     /// Linear color is by default pre-multiplied by alpha, this function removes
     /// pre-multiplication.
     #[inline(always)]
-    pub fn unmultiply(self) -> Self {
+    pub fn unmultiply(self) -> f32x4 {
         let alpha = self.alpha();
         if alpha <= 1e-6 {
             // avoid division by zero, check firefox scene.
-            Self::new(0.0, 0.0, 0.0, 0.0)
+            f32x4::zero()
         } else {
-            Self(self.0 / f32x4::splat(alpha))
+            self.0 / f32x4::splat(alpha)
         }
     }
 
@@ -211,14 +210,7 @@ impl LinColor {
     /// Used by gradients, do not make public
     #[inline(always)]
     pub(crate) fn into_srgb(self) -> Self {
-        let alpha = self.alpha();
-        if alpha <= 1e-6 {
-            // avoid division by zero, check firefox scene.
-            Self::new(0.0, 0.0, 0.0, 0.0)
-        } else {
-            let alpha = f32x4::splat(alpha);
-            Self(crate::simd::l2s(self.0 / alpha) * alpha)
-        }
+        Self(crate::simd::l2s(self.unmultiply()) * f32x4::splat(self.alpha()))
     }
 
     /// Convert into alpha-premultiplied Linear RGB from SRGB
@@ -226,14 +218,7 @@ impl LinColor {
     /// Used by gradient, do not make public
     #[inline(always)]
     pub(crate) fn into_linear(self) -> Self {
-        let alpha = self.alpha();
-        if alpha <= 1e-6 {
-            // avoid division by zero, check firefox scene.
-            Self::new(0.0, 0.0, 0.0, 0.0)
-        } else {
-            let alpha = f32x4::splat(alpha);
-            Self(crate::simd::s2l(self.0 / alpha) * alpha)
-        }
+        Self(crate::simd::s2l(self.unmultiply()) * f32x4::splat(self.alpha()))
     }
 }
 
