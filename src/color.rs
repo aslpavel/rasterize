@@ -42,35 +42,35 @@ pub trait Color: Copy {
     fn lerp(self, other: Self, t: f32) -> Self;
 }
 
-/// ABGR color packed as u32 value (most of the platforms are little-endian)
+/// sRGBA color packed as [u8; 4]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
-pub struct RGBA(u32);
+pub struct RGBA([u8; 4]);
 
 impl RGBA {
     pub const fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
-        Self(((a as u32) << 24) | ((b as u32) << 16) | ((g as u32) << 8) | (r as u32))
-    }
-
-    pub const fn alpha(self) -> u8 {
-        ((self.0 >> 24) & 0xff) as u8
-    }
-
-    pub const fn blue(self) -> u8 {
-        ((self.0 >> 16) & 0xff) as u8
-    }
-
-    pub const fn green(self) -> u8 {
-        ((self.0 >> 8) & 0xff) as u8
+        Self([r, g, b, a])
     }
 
     pub const fn red(self) -> u8 {
-        (self.0 & 0xff) as u8
+        self.0[0]
+    }
+
+    pub const fn green(self) -> u8 {
+        self.0[1]
+    }
+
+    pub const fn blue(self) -> u8 {
+        self.0[2]
+    }
+
+    pub const fn alpha(self) -> u8 {
+        self.0[3]
     }
 }
 
 impl Color for RGBA {
     fn to_rgba(self) -> [u8; 4] {
-        self.0.to_le_bytes()
+        self.0
     }
 
     fn blend_over(self, other: Self) -> Self {
@@ -98,6 +98,20 @@ impl From<LinColor> for RGBA {
             (b * 255.0 + 0.5) as u8,
             (lin.alpha() * 255.0 + 0.5) as u8,
         )
+    }
+}
+
+impl From<[u8; 4]> for RGBA {
+    #[inline]
+    fn from(rgba: [u8; 4]) -> Self {
+        RGBA(rgba)
+    }
+}
+
+impl From<[u8; 3]> for RGBA {
+    #[inline]
+    fn from([r, g, b]: [u8; 3]) -> Self {
+        RGBA::new(r, g, b, 255)
     }
 }
 
