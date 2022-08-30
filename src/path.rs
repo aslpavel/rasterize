@@ -231,20 +231,34 @@ pub struct Path {
 
 impl fmt::Debug for Path {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.subpaths.is_empty() {
-            write!(f, "Empty")?;
-        } else {
-            for subpath in self.subpaths.iter() {
-                subpath.fmt(f)?
-            }
-        }
-        Ok(())
+        write!(f, "{}", self)
     }
 }
 
 impl fmt::Display for Path {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_svg_path())
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        struct FormatterWrite<'a, 'b> {
+            fmt: &'a mut fmt::Formatter<'b>,
+        }
+
+        impl<'a, 'b> std::io::Write for FormatterWrite<'a, 'b> {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.fmt
+                    .write_str(
+                        std::str::from_utf8(buf)
+                            .expect("Path generated non utf8 svg representation"),
+                    )
+                    .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
+                Ok(buf.len())
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        self.write_svg_path(FormatterWrite { fmt })
+            .map_err(|_| std::fmt::Error)
     }
 }
 
@@ -284,22 +298,19 @@ impl Path {
             } else {
                 None
             };
-            for segment in subpath.segments().into_iter().chain(&last) {
+            for segment in subpath.segments().iter().chain(&last) {
                 let points: &[Point] = match segment {
                     Segment::Line(Line(points)) => points,
                     Segment::Quad(Quad(points)) => points,
                     Segment::Cubic(Cubic(points)) => points,
                 };
-                let (above, below) =
-                    points
-                        .into_iter()
-                        .fold((false, false), |(above, below), ctrl| {
-                            if ctrl.y() > point.y() {
-                                (true, below)
-                            } else {
-                                (above, true)
-                            }
-                        });
+                let (above, below) = points.iter().fold((false, false), |(above, below), ctrl| {
+                    if ctrl.y() > point.y() {
+                        (true, below)
+                    } else {
+                        (above, true)
+                    }
+                });
                 if !above || !below {
                     // will not intersect horizontal line
                     continue;
@@ -469,14 +480,6 @@ impl Path {
         img
     }
 
-    /// Convert path to SVG path representation
-    pub fn to_svg_path(&self) -> String {
-        let mut output = Vec::new();
-        self.write_svg_path(&mut output)
-            .expect("failed in memory write");
-        String::from_utf8(output).expect("path save internal error")
-    }
-
     /// Save path in SVG path format.
     pub fn write_svg_path(&self, mut out: impl Write) -> std::io::Result<()> {
         for subpath in self.subpaths.iter() {
@@ -520,6 +523,28 @@ impl Path {
             cmd?.apply(&mut builder)
         }
         Ok(builder.build())
+    }
+
+    /// Returns struct that prints command per line on debug formatting.
+    pub fn verbose_debug(&self) -> PathVerboseDebug<'_> {
+        PathVerboseDebug { path: self }
+    }
+}
+
+pub struct PathVerboseDebug<'a> {
+    path: &'a Path,
+}
+
+impl<'a> fmt::Debug for PathVerboseDebug<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.path.subpaths.is_empty() {
+            write!(f, "Empty")?;
+        } else {
+            for subpath in self.path.subpaths.iter() {
+                subpath.fmt(f)?
+            }
+        }
+        Ok(())
     }
 }
 
@@ -903,7 +928,7 @@ impl Serialize for Path {
     where
         S: serde::Serializer,
     {
-        self.to_svg_path().serialize(serializer)
+        serializer.collect_str(self)
     }
 }
 

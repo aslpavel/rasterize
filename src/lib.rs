@@ -21,6 +21,7 @@
 //! Image can also be written into a file with [`Image::write_bmp`] or to PNG with
 //! `Image::write_png` if `png` feature is enabled.
 #![deny(warnings)]
+#![allow(clippy::excessive_precision)]
 
 mod color;
 mod curve;

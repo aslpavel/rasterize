@@ -373,9 +373,7 @@ fn generate_font(
         writeln!(
             out,
             "<glyph glyph-name=\"{}\" unicode=\"{}\"  d=\"{}\" />",
-            glyph.name,
-            glyph.unicode,
-            glyph.path.to_svg_path(),
+            glyph.name, glyph.unicode, glyph.path,
         )?;
     }
     writeln!(out, "  </font>")?;
