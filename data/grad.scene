@@ -16,7 +16,8 @@
                     "tr": "skewX(30) translate(-30, -20) rotate(20)",
                     "center": [50, 50],
                     "radius": 40,
-                    "stops": [ [0, "#ffbd4f"], [0.5, "#ff0000"], [0.7, "#ff00ff"], [1, "#000000"] ]
+                    "stops": [ [0, "#ffbd4f"], [0.5, "#ff0000"], [0.7, "#ff00ff"], [1, "#000000"] ],
+                    "linear_colors": true
                 },
                 "path": "M10,10 70,10 70,70 10,70z"
             }
