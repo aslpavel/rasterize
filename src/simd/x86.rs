@@ -28,22 +28,22 @@ impl f32x4 {
 
     #[inline(always)]
     pub fn x0(self) -> f32 {
-        unsafe { transmute(_mm_extract_ps::<0>(self.0)) }
+        f32::from_bits(unsafe { _mm_extract_ps::<0>(self.0) } as u32)
     }
 
     #[inline(always)]
     pub fn x1(self) -> f32 {
-        unsafe { transmute(_mm_extract_ps::<1>(self.0)) }
+        f32::from_bits(unsafe { _mm_extract_ps::<1>(self.0) } as u32)
     }
 
     #[inline(always)]
     pub fn x2(self) -> f32 {
-        unsafe { transmute(_mm_extract_ps::<2>(self.0)) }
+        f32::from_bits(unsafe { _mm_extract_ps::<2>(self.0) } as u32)
     }
 
     #[inline(always)]
     pub fn x3(self) -> f32 {
-        unsafe { transmute(_mm_extract_ps::<3>(self.0)) }
+        f32::from_bits(unsafe { _mm_extract_ps::<3>(self.0) } as u32)
     }
 
     #[inline(always)]
@@ -78,11 +78,8 @@ impl f32x4 {
 
     #[inline(always)]
     pub fn dot(self, other: Self) -> f32 {
-        unsafe {
-            transmute(_mm_extract_ps::<0>(_mm_dp_ps::<0b1111_1111>(
-                self.0, other.0,
-            )))
-        }
+        let result = unsafe { _mm_extract_ps::<0>(_mm_dp_ps::<0b1111_1111>(self.0, other.0)) };
+        f32::from_bits(result as u32)
     }
 }
 

@@ -1,0 +1,38 @@
+{
+    "type": "group",
+    "children": [
+        {
+            "type": "fill",
+            "paint": "#404040",
+            "path": "m0,0, h520 v90 h-520 z"
+        },
+        {
+            "type": "fill",
+            "paint": {
+                "type": "linear-gradient",
+                "units": "objectBoundingBox",
+                "start": [0.0, 0.0],
+                "end": [1.0, 0.0],
+                "stops": [ [0, "#ff0000"], [1, "#00ff00"] ]
+            },
+            "path": "M10,10 h500 v30 h-500 z"
+        },
+        {
+            "type": "transform",
+            "tr": "translate(0, 40)",
+            "child":         {
+                "type": "fill",
+                "paint": {
+                    "type": "linear-gradient",
+                    "units": "objectBoundingBox",
+                    "linear_colors": true,
+                    "start": [0.0, 0.0],
+                    "end": [1.0, 0.0],
+                    "stops": [ [0, "#ff0000"], [1, "#00ff00"] ]
+                },
+                "path": "M10,10 h500 v30 h-500 z"
+            }
+        }
+    ]
+}
+
