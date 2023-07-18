@@ -17,10 +17,11 @@ use std::{
 pub const DEFAULT_FLATNESS: Scalar = 0.05;
 
 /// The algorithm to use to determine the inside part of a shape, when filling it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum FillRule {
     /// Fill area with non-zero winding number
+    #[default]
     #[cfg_attr(feature = "serde", serde(rename = "nonzero"))]
     NonZero,
     /// Fill area with odd winding number
@@ -43,12 +44,6 @@ impl FillRule {
                 }
             }
         }
-    }
-}
-
-impl Default for FillRule {
-    fn default() -> Self {
-        FillRule::NonZero
     }
 }
 

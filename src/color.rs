@@ -1,4 +1,5 @@
 use crate::{simd::f32x4, Paint, Point, Scalar, Transform, Units};
+use bytemuck::{Pod, Zeroable};
 use std::{
     fmt,
     ops::{Add, Mul},
@@ -43,7 +44,8 @@ pub trait Color: Copy {
 }
 
 /// sRGBA color packed as [u8; 4]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Pod, Zeroable)]
 pub struct RGBA([u8; 4]);
 
 impl RGBA {
@@ -171,7 +173,8 @@ impl FromStr for RGBA {
 }
 
 /// Alpha premultiplied RGBA color in the linear color space (no gamma correction)
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Pod, Zeroable)]
 pub struct LinColor(crate::simd::f32x4);
 
 impl LinColor {

@@ -1,4 +1,5 @@
 #![allow(non_camel_case_types)]
+use bytemuck::{Pod, Zeroable};
 use std::{
     fmt,
     ops::{Add, Div, Mul, Sub},
@@ -6,8 +7,8 @@ use std::{
 
 use crate::{linear_to_srgb, srgb_to_linear};
 
-#[derive(Copy, Clone, PartialEq, Default)]
 #[repr(transparent)]
+#[derive(Copy, Clone, PartialEq, Default, Pod, Zeroable)]
 pub struct f32x4([f32; 4]);
 
 impl f32x4 {

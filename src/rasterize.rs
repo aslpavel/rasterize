@@ -771,6 +771,8 @@ impl Edge {
         let dx = p1.x() - p0.x();
         let dy = p1.y() - p0.y();
         let dxdy = dx / dy;
+        // BUG: https://github.com/rust-lang/rust-clippy/issues/9422
+        #[allow(clippy::unnecessary_lazy_evaluations)]
         let dydx = (dxdy.abs() > EPSILON_SQRT).then(|| dy / dx);
         // throw away part with negative `y`
         let p0 = if p0.y() < 0.0 {

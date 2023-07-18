@@ -171,13 +171,13 @@ impl<I: Read> Parser<I> {
             },
         )?;
         let whole = self.parse_while(
-            |byte| matches!(byte, b'0'..=b'9'),
+            |byte| byte.is_ascii_digit(),
             |byte| push_digit(&mut mantissa, byte),
         )?;
         let matches_dot = self.parse_once(|byte| matches!(byte, b'.'), |_| {})?;
         let frac = if matches_dot {
             self.parse_while(
-                |byte| matches!(byte, b'0'..=b'9'),
+                |byte| byte.is_ascii_digit(),
                 |byte| {
                     push_digit(&mut mantissa, byte);
                     exponent -= 1;
@@ -205,7 +205,7 @@ impl<I: Read> Parser<I> {
                 },
             )?;
             if self.parse_while(
-                |byte| matches!(byte, b'0'..=b'9'),
+                |byte| byte.is_ascii_digit(),
                 |byte| push_digit(&mut sci, byte),
             )? == 0
             {
@@ -409,7 +409,7 @@ impl<I: Read> SvgTransformParser<I> {
     fn parse_ident(&mut self) -> Result<&[u8], SvgParserError> {
         self.buf_len = 0;
         self.parser.parse_while(
-            |b| matches!(b, b'a'..=b'z' | b'A'..=b'Z'),
+            |b| b.is_ascii_alphabetic(),
             |b| {
                 self.buf[self.buf_len] = b;
                 self.buf_len = (self.buf_len + 1) % TRANSFORM_BUF;

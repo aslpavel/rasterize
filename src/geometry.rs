@@ -45,7 +45,7 @@ pub fn scalar_fmt(f: &mut fmt::Formatter<'_>, value: Scalar) -> fmt::Result {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(transparent))]
 pub struct Point(pub [Scalar; 2]);
 
-#[allow(clippy::derive_hash_xor_eq)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 impl std::hash::Hash for Point {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         let Point([x, y]) = self;

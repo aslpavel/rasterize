@@ -1,5 +1,6 @@
 #![allow(non_camel_case_types)]
 
+use bytemuck::{Pod, Zeroable};
 #[cfg(target_arch = "x86")]
 use std::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
@@ -11,8 +12,8 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-#[derive(Copy, Clone)]
 #[repr(transparent)]
+#[derive(Copy, Clone, Pod, Zeroable)]
 pub struct f32x4(__m128);
 
 impl f32x4 {

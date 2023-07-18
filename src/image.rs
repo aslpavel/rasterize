@@ -17,11 +17,24 @@ pub struct Shape {
 }
 
 impl Shape {
+    /// Crate shape for a simple image with zero offset, and row-major order
+    pub fn simple(height: usize, width: usize) -> Self {
+        Shape {
+            start: 0,
+            width,
+            height,
+            row_stride: width,
+            col_stride: 1,
+        }
+    }
+
+    /// Convert row and column pair to the data offset
     #[inline]
     pub fn offset(&self, row: usize, col: usize) -> usize {
         self.start + row * self.row_stride + col * self.col_stride
     }
 
+    /// Get row and column pair by its index
     #[inline]
     pub fn nth(&self, n: usize) -> Option<(usize, usize)> {
         if self.width == 0 {
@@ -29,9 +42,11 @@ impl Shape {
         }
         let row = n / self.width;
         let col = n - row * self.width;
-        (row < self.height).then(move || (row, col))
+        (row < self.height).then_some((row, col))
     }
 
+    /// Get the size of the image
+    #[inline]
     pub fn size(&self) -> Size {
         Size {
             width: self.width,
@@ -169,7 +184,7 @@ pub trait Image {
 
         let data = self.data();
         let shape = self.shape();
-        for row in (0..shape.height).into_iter().rev() {
+        for row in (0..shape.height).rev() {
             for col in 0..shape.width {
                 let color = &data[shape.offset(row, col)];
                 out.write_all(&color.to_rgba())?;
@@ -368,13 +383,7 @@ impl<P> ImageOwned<P> {
             }
         }
         Self {
-            shape: Shape {
-                start: 0,
-                width: size.width,
-                height: size.height,
-                row_stride: size.width,
-                col_stride: 1,
-            },
+            shape: Shape::simple(size.height, size.width),
             data,
         }
     }
@@ -382,13 +391,7 @@ impl<P> ImageOwned<P> {
     /// Construct empty image of zero size
     pub fn empty() -> Self {
         Self {
-            shape: Shape {
-                start: 0,
-                width: 0,
-                height: 0,
-                row_stride: 0,
-                col_stride: 0,
-            },
+            shape: Shape::simple(0, 0),
             data: Vec::new(),
         }
     }

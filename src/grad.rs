@@ -482,7 +482,7 @@ impl From<GradRadial> for GradRadialSerialize {
             tr: grad.tr,
             center: grad.center,
             radius: grad.radius,
-            fcenter: (grad.center != grad.fcenter).then(|| grad.fcenter),
+            fcenter: (grad.center != grad.fcenter).then_some(grad.fcenter),
             fradius: grad.fradius,
             stops: grad.stops,
         }
