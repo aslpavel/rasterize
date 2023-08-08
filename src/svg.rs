@@ -570,6 +570,8 @@ pub enum SvgParserError {
     UnexpectedSegmentType,
     /// Invalid transform operation
     InvalidTransformOp,
+    /// Invalid bounding box
+    InvalidBBox,
     /// Invalid (Angle|Gradient|Length)
     InvalidUnits,
     /// Invalid Fill Rule

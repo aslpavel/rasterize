@@ -1,10 +1,11 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::{utils::clamp, Line, Size};
+use crate::{utils::clamp, Line, Size, SvgParserError};
 use std::{
     fmt,
     ops::{Add, Div, Mul, Sub},
+    str::FromStr,
 };
 
 /// Scalar type
@@ -31,6 +32,12 @@ impl fmt::Debug for ScalarFmt {
             let round = ten.powi(6 - (value_abs.trunc() + 1.0).log10().ceil() as i32);
             write!(f, "{}", (value * round).round() / round)
         }
+    }
+}
+
+impl fmt::Display for ScalarFmt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
@@ -603,6 +610,34 @@ fn range_intersect(
     }
 }
 
+impl FromStr for BBox {
+    type Err = SvgParserError;
+
+    fn from_str(string: &str) -> Result<Self, Self::Err> {
+        let mut values = string
+            .split(|c| matches!(c, ' ' | ','))
+            .map(|s| s.trim().parse().ok());
+        let minx: Scalar = values.next().flatten().ok_or(SvgParserError::InvalidBBox)?;
+        let miny: Scalar = values.next().flatten().ok_or(SvgParserError::InvalidBBox)?;
+        let width: Scalar = values.next().flatten().ok_or(SvgParserError::InvalidBBox)?;
+        let height: Scalar = values.next().flatten().ok_or(SvgParserError::InvalidBBox)?;
+        Ok(BBox::new((minx, miny), (minx + width, miny + height)))
+    }
+}
+
+impl fmt::Display for BBox {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} {} {} {}",
+            ScalarFmt(self.x()),
+            ScalarFmt(self.y()),
+            ScalarFmt(self.width()),
+            ScalarFmt(self.height())
+        )
+    }
+}
+
 impl fmt::Debug for BBox {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("BBox")
@@ -730,6 +765,8 @@ mod tests {
         assert_eq!(result, expected);
         let result: BBox = serde_json::from_str("[1, 2, 3, 4]")?;
         assert_eq!(result, expected);
+
+        assert_eq!(expected, expected.to_string().parse()?);
         Ok(())
     }
 }

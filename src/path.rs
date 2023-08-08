@@ -47,6 +47,27 @@ impl FillRule {
     }
 }
 
+impl FromStr for FillRule {
+    type Err = SvgParserError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "nonzero" => Ok(FillRule::NonZero),
+            "evenodd" => Ok(FillRule::EvenOdd),
+            _ => Err(SvgParserError::InvalidFillRule),
+        }
+    }
+}
+
+impl fmt::Display for FillRule {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FillRule::NonZero => "nonzero".fmt(f),
+            FillRule::EvenOdd => "evenodd".fmt(f),
+        }
+    }
+}
+
 /// `LineJoin` defines the shape to be used at the corners of paths when they are stroked.
 /// See [SVG specification](https://www.w3.org/TR/SVG2/painting.html#LineJoin) for more details.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]

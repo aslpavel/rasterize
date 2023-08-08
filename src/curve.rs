@@ -773,12 +773,12 @@ impl Curve for Cubic {
         // where C is the matrix of the curve, and P is the column vector of the control points
         // we can change parameter `t in [a, b]` to `s in [0, 1]`, with `t = a + (b - a) * s`
         // ```text
-        //                 ┌                                       ┐
-        // ┌             ┐ │  1  a       a^2         a^3           │
-        // │ 1 s s^2 s^3 │ │  0  (b - a) 2*a*(b - a) 3*a^2*(b - a) │ = [1 s s^2 s^3] T
-        // └             ┘ │  0  0       (b - a)^2   3*a*(b - a)^2 │
-        //                 │  0  0       0           (b - a)^3     │
-        //                 └                                       ┘
+        //                                   ┌                                       ┐
+        // ┌             ┐   ┌             ┐ │  1  a       a^2         a^3           │
+        // │ 1 t t^2 t^3 │ = │ 1 s s^2 s^3 │ │  0  (b - a) 2*a*(b - a) 3*a^2*(b - a) │ = [1 s s^2 s^3] T
+        // └             ┘   └             ┘ │  0  0       (b - a)^2   3*a*(b - a)^2 │
+        //                                   │  0  0       0           (b - a)^3     │
+        //                                   └                                       ┘
         // C(t in [a, b])
         //   = [1 s s^2 s^3] T C P
         //   = [1 s s^2 s^3] C (CI T C) P
