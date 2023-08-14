@@ -1,10 +1,29 @@
 use crate::{simd::f32x4, Paint, Point, Scalar, Transform, Units};
 use bytemuck::{Pod, Zeroable};
+#[cfg(feature = "serde")]
+use serde::{de::DeserializeSeed, Deserializer};
 use std::{
+    collections::HashMap,
     fmt,
     ops::{Add, Mul},
     str::FromStr,
 };
+
+lazy_static::lazy_static! {
+    pub static ref SVG_COLORS: HashMap<String, RGBA> = {
+        let empty = HashMap::new(); // do not use parse to avoid recursive lock
+        include_str!("./svg-colors.txt")
+            .lines()
+            .map(|line| {
+                let mut iter = line.split(' ');
+                let name = iter.next()?;
+                let color = RGBA::from_str_named(iter.next()?, &empty).ok()?;
+                Some((name.to_owned(), color))
+            })
+            .collect::<Option<HashMap<String, RGBA>>>()
+            .expect("failed to parse embedded svg colors")
+    };
+}
 
 /// Common interface to all color representations
 pub trait Color: Copy {
@@ -49,24 +68,77 @@ pub trait Color: Copy {
 pub struct RGBA([u8; 4]);
 
 impl RGBA {
+    /// Create new RGBA color
     pub const fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self([r, g, b, a])
     }
 
+    /// Red channel value
     pub const fn red(self) -> u8 {
         self.0[0]
     }
 
+    /// Green channel value
     pub const fn green(self) -> u8 {
         self.0[1]
     }
 
+    /// Blue channel value
     pub const fn blue(self) -> u8 {
         self.0[2]
     }
 
+    /// Alpha channel value
     pub const fn alpha(self) -> u8 {
         self.0[3]
+    }
+
+    /// Parse color or resolve by name
+    pub fn from_str_named(color: &str, colors: &HashMap<String, RGBA>) -> Result<Self, ColorError> {
+        // parse alpha suffix
+        let (color, alpha) = match color.rfind('/') {
+            None => (color, None),
+            Some(alpha_offset) => {
+                let alpha: f32 = color[alpha_offset + 1..]
+                    .parse()
+                    .map_err(|_| ColorError::InvalidAlpha)?;
+                (&color[..alpha_offset], Some(alpha))
+            }
+        };
+        // #RRGGBB(AA)
+        let rgba = if color.starts_with('#') && (color.len() == 7 || color.len() == 9) {
+            let bytes: &[u8] = color[1..].as_ref();
+            let digit = |byte| match byte {
+                b'A'..=b'F' => Ok(byte - b'A' + 10),
+                b'a'..=b'f' => Ok(byte - b'a' + 10),
+                b'0'..=b'9' => Ok(byte - b'0'),
+                _ => Err(ColorError::HexExpected),
+            };
+            let mut hex = bytes
+                .chunks(2)
+                .map(|pair| Ok(digit(pair[0])? << 4 | digit(pair[1])?));
+            RGBA::new(
+                hex.next().unwrap_or(Ok(0))?,
+                hex.next().unwrap_or(Ok(0))?,
+                hex.next().unwrap_or(Ok(0))?,
+                hex.next().unwrap_or(Ok(255))?,
+            )
+        } else {
+            colors
+                .get(color)
+                .copied()
+                .ok_or_else(|| ColorError::UnkownColor(color.to_owned()))?
+        };
+        // apply alpha
+        match alpha {
+            None => Ok(rgba),
+            Some(alpha) => Ok(RGBA::new(
+                rgba.red(),
+                rgba.green(),
+                rgba.blue(),
+                (rgba.alpha() as f32 * alpha) as u8,
+            )),
+        }
     }
 }
 
@@ -148,27 +220,26 @@ impl FromStr for RGBA {
     type Err = ColorError;
 
     fn from_str(color: &str) -> Result<Self, Self::Err> {
-        if color.starts_with('#') && (color.len() == 7 || color.len() == 9) {
-            // #RRGGBB(AA)
-            let bytes: &[u8] = color[1..].as_ref();
-            let digit = |byte| match byte {
-                b'A'..=b'F' => Ok(byte - b'A' + 10),
-                b'a'..=b'f' => Ok(byte - b'a' + 10),
-                b'0'..=b'9' => Ok(byte - b'0'),
-                _ => Err(ColorError::HexExpected),
-            };
-            let mut hex = bytes
-                .chunks(2)
-                .map(|pair| Ok(digit(pair[0])? << 4 | digit(pair[1])?));
-            Ok(RGBA::new(
-                hex.next().unwrap_or(Ok(0))?,
-                hex.next().unwrap_or(Ok(0))?,
-                hex.next().unwrap_or(Ok(0))?,
-                hex.next().unwrap_or(Ok(255))?,
-            ))
-        } else {
-            Err(ColorError::HexExpected)
-        }
+        RGBA::from_str_named(color, &SVG_COLORS)
+    }
+}
+
+#[cfg(feature = "serde")]
+pub struct RGBADeserializer<'a> {
+    pub colors: &'a HashMap<String, RGBA>,
+}
+
+#[cfg(feature = "serde")]
+impl<'de, 'a> DeserializeSeed<'de> for RGBADeserializer<'a> {
+    type Value = RGBA;
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::Deserialize;
+        let color = std::borrow::Cow::<'de, str>::deserialize(deserializer)?;
+        RGBA::from_str_named(color.as_ref(), self.colors).map_err(serde::de::Error::custom)
     }
 }
 
@@ -395,14 +466,17 @@ pub fn srgb_to_linear(value: f32) -> f32 {
 #[derive(Debug, Clone)]
 pub enum ColorError {
     HexExpected,
+    InvalidAlpha,
+    UnkownColor(String),
 }
 
 impl fmt::Display for ColorError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Color format (#RRGGBB(AA)?|<name>)(/<float alpha>)? :")?;
         match self {
-            ColorError::HexExpected => {
-                write!(f, "Color expected to be #RRGGBB(AA) in hexidemical format")
-            }
+            ColorError::HexExpected => write!(f, "Hex value expected"),
+            ColorError::InvalidAlpha => write!(f, "Alpha must be float"),
+            ColorError::UnkownColor(name) => write!(f, "Unkown named color: {}", name),
         }
     }
 }
@@ -415,7 +489,7 @@ mod tests {
     use crate::assert_approx_eq;
 
     #[test]
-    fn test_color_u8() {
+    fn test_color_rgba() {
         let c = RGBA::new(1, 2, 3, 4);
         assert_eq!([1, 2, 3, 4], c.to_rgba());
         assert_eq!(1, c.red());
@@ -425,10 +499,13 @@ mod tests {
     }
 
     #[test]
-    fn test_color_u8_parse() -> Result<(), ColorError> {
+    fn test_color_parse() -> Result<(), ColorError> {
         assert_eq!(RGBA::new(1, 2, 3, 4), "#01020304".parse::<RGBA>()?);
         assert_eq!(RGBA::new(170, 187, 204, 255), "#aabbcc".parse::<RGBA>()?);
         assert_eq!(RGBA::new(0, 0, 0, 255), "#000000".parse::<RGBA>()?);
+        assert_eq!(RGBA::new(1, 2, 3, 63), "#010203/.25".parse::<RGBA>()?);
+        assert_eq!(RGBA::new(0xff, 0x7f, 0x50, 0xff), "coral".parse::<RGBA>()?);
+        assert_eq!(SVG_COLORS.len(), 147);
         Ok(())
     }
 
@@ -459,6 +536,21 @@ mod tests {
         let c: RGBA = "#010203".parse()?;
         assert_eq!(c, RGBA::new(1, 2, 3, 255));
         assert_eq!(c.to_string(), "#010203");
+
+        Ok(())
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_serde() -> Result<(), Box<dyn std::error::Error>> {
+        use serde_json::de::StrRead;
+
+        let mut colors = HashMap::new();
+        colors.insert("aqua".to_owned(), "#008080".parse()?);
+
+        let mut deserializer = serde_json::Deserializer::new(StrRead::new("\"aqua/.5\""));
+        let color = RGBADeserializer { colors: &colors }.deserialize(&mut deserializer)?;
+        assert_eq!(color, "#0080807f".parse()?);
 
         Ok(())
     }

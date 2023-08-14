@@ -29,7 +29,7 @@ struct Args {
     flatness: Scalar,
     rasterizer: RasterizerType,
     tr: Transform,
-    fg: LinColor,
+    fg: Option<LinColor>,
     bg: Option<LinColor>,
 }
 
@@ -52,7 +52,7 @@ impl Args {
             flatness: DEFAULT_FLATNESS,
             rasterizer: RasterizerType::SignedDifference,
             tr: Transform::identity(),
-            fg: LinColor::new(0.0, 0.0, 0.0, 1.0),
+            fg: None,
             bg: None,
         };
         let mut positional = 0;
@@ -89,10 +89,11 @@ impl Args {
                     result.flatness = flatness;
                 }
                 "-fg" => {
-                    result.fg = args
+                    let fg = args
                         .next()
                         .ok_or("-fg requres color #rrggbb(aa) argument")?
                         .parse()?;
+                    result.fg.replace(fg);
                 }
                 "-bg" => {
                     let bg: LinColor = args
@@ -256,10 +257,15 @@ fn main() -> Result<(), Error> {
 
     // scene
     let mut group = Vec::new();
-    let fg = if args.outline {
-        LinColor::new(0.35, 0.35, 0.35, 1.0)
-    } else {
-        args.fg
+    let fg = match args.fg {
+        Some(fg) => fg,
+        None => {
+            if args.outline {
+                LinColor::new(0.0, 0.0, 0.0, 0.6)
+            } else {
+                LinColor::new(0.0, 0.0, 0.0, 1.0)
+            }
+        }
     };
     group.push(Scene::fill(path.clone(), Arc::new(fg), FillRule::default()).transform(tr));
     if args.outline {
