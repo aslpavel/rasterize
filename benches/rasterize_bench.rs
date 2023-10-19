@@ -21,13 +21,15 @@ fn curve_benchmark(c: &mut Criterion) {
     let cubic = Cubic::new((158.0, 70.0), (210.0, 250.0), (25.0, 190.0), (219.0, 89.0));
     let length = cubic.length(0.0, 1.0) / 2.0;
     let mut group = c.benchmark_group("cubic");
-    group.throughput(Throughput::Elements(1));
-    group.bench_function("extremities", |b| b.iter(|| black_box(cubic).extremities()));
-    group.bench_function("bbox", |b| b.iter(|| black_box(cubic).bbox(None)));
-    group.bench_function("length", |b| b.iter(|| black_box(cubic).length(0.0, 1.0)));
-    group.bench_function("from length", |b| {
-        b.iter(|| cubic.param_at_length(black_box(length), None))
-    });
+    group
+        .throughput(Throughput::Elements(1))
+        .bench_function("extremities", |b| b.iter(|| black_box(cubic).extremities()))
+        .bench_function("bbox", |b| b.iter(|| black_box(cubic).bbox(None)))
+        .bench_function("length", |b| b.iter(|| black_box(cubic).length(0.0, 1.0)))
+        .bench_function("from length", |b| {
+            b.iter(|| cubic.param_at_length(black_box(length), None))
+        });
+    group.finish();
 }
 
 fn stroke_benchmark(c: &mut Criterion) {
@@ -46,20 +48,27 @@ fn stroke_benchmark(c: &mut Criterion) {
     group.throughput(Throughput::Elements(path.segments_count() as u64));
     group.bench_function("stroke", |b| b.iter_with_large_drop(|| path.stroke(style)));
     for rasterizer in rasterizers() {
-        let id = BenchmarkId::new("mask stroked", rasterizer.name());
-        group.bench_with_input(id, &rasterizer, |b, r| {
-            b.iter(|| {
-                img.clear();
-                stroke.mask(r, tr, FillRule::EvenOdd, &mut img);
-            })
-        });
-        let id = BenchmarkId::new("mask", rasterizer.name());
-        group.bench_with_input(id, &rasterizer, |b, r| {
-            b.iter(|| {
-                img.clear();
-                path.mask(r, tr, FillRule::EvenOdd, &mut img);
-            });
-        });
+        group
+            .bench_with_input(
+                BenchmarkId::new("mask stroked", rasterizer.name()),
+                &rasterizer,
+                |b, r| {
+                    b.iter(|| {
+                        img.clear();
+                        stroke.mask(r, tr, FillRule::EvenOdd, &mut img);
+                    })
+                },
+            )
+            .bench_with_input(
+                BenchmarkId::new("mask", rasterizer.name()),
+                &rasterizer,
+                |b, r| {
+                    b.iter(|| {
+                        img.clear();
+                        path.mask(r, tr, FillRule::EvenOdd, &mut img);
+                    });
+                },
+            );
     }
     group.finish()
 }
@@ -74,17 +83,18 @@ fn large_path_benchmark(c: &mut Criterion) {
     let mut img = ImageOwned::new_default(size);
 
     let mut group = c.benchmark_group("material-big");
-    group.throughput(Throughput::Elements(path.segments_count() as u64));
-    group.bench_function("parse-only", |b| {
-        b.iter(|| SvgPathParser::new(Cursor::new(path_str.as_str())).count())
-    });
-    group.bench_function("parse", |b| {
-        b.iter_with_large_drop(|| path_str.parse::<Path>())
-    });
-    group.bench_function("flatten", |b| {
-        b.iter(|| path.flatten(tr, DEFAULT_FLATNESS, true).count())
-    });
-    group.bench_function("bbox", |b| b.iter(|| path.bbox(tr)));
+    group
+        .throughput(Throughput::Elements(path.segments_count() as u64))
+        .bench_function("parse-only", |b| {
+            b.iter(|| SvgPathParser::new(Cursor::new(path_str.as_str())).count())
+        })
+        .bench_function("parse", |b| {
+            b.iter_with_large_drop(|| path_str.parse::<Path>())
+        })
+        .bench_function("flatten", |b| {
+            b.iter(|| path.flatten(tr, DEFAULT_FLATNESS, true).count())
+        })
+        .bench_function("bbox", |b| b.iter(|| path.bbox(tr)));
     for rasterizer in rasterizers() {
         let id = BenchmarkId::new("mask", rasterizer.name());
         group.bench_with_input(id, &rasterizer, |b, r| {

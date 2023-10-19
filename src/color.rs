@@ -225,6 +225,7 @@ impl FromStr for RGBA {
 }
 
 #[cfg(feature = "serde")]
+#[derive(Clone)]
 pub struct RGBADeserializer<'a> {
     pub colors: &'a HashMap<String, RGBA>,
 }
@@ -505,7 +506,11 @@ mod tests {
         assert_eq!(RGBA::new(0, 0, 0, 255), "#000000".parse::<RGBA>()?);
         assert_eq!(RGBA::new(1, 2, 3, 63), "#010203/.25".parse::<RGBA>()?);
         assert_eq!(RGBA::new(0xff, 0x7f, 0x50, 0xff), "coral".parse::<RGBA>()?);
-        assert_eq!(SVG_COLORS.len(), 147);
+        assert_eq!(
+            RGBA::new(0xfe, 0x80, 0x19, 0xff),
+            "gruv-orange-2".parse::<RGBA>()?
+        );
+        assert_eq!(SVG_COLORS.len(), 185);
         Ok(())
     }
 
