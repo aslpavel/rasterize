@@ -619,7 +619,6 @@ impl std::error::Error for SvgParserError {}
 mod tests {
     use super::*;
     use crate::assert_approx_eq;
-    use std::io::Cursor;
 
     #[test]
     fn test_parse_scalar() -> Result<(), SvgParserError> {

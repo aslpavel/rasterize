@@ -1,10 +1,6 @@
 //! Utility functions and types used across the library
 use crate::{Scalar, EPSILON, PI};
-use std::{
-    fmt,
-    iter::{FromIterator, FusedIterator},
-    ops::Mul,
-};
+use std::{fmt, iter::FusedIterator, ops::Mul};
 
 /// Restrict value to a certain interval
 #[inline]
