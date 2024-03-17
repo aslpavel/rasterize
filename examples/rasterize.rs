@@ -31,6 +31,7 @@ struct Args {
     tr: Transform,
     fg: Option<LinColor>,
     bg: Option<LinColor>,
+    bbox: Option<BBox>,
 }
 
 impl Args {
@@ -54,6 +55,7 @@ impl Args {
             tr: Transform::identity(),
             fg: None,
             bg: None,
+            bbox: None,
         };
         let mut positional = 0;
         let mut args = env::args();
@@ -67,6 +69,10 @@ impl Args {
                 "-w" => {
                     let width = args.next().ok_or("-w requires argument")?;
                     result.width = Some(width.parse()?);
+                }
+                "-b" => {
+                    let bbox = args.next().ok_or("-b requires argument")?;
+                    result.bbox = Some(bbox.parse()?);
                 }
                 "-t" => {
                     result.tr = args.next().ok_or("-t requires argument")?.parse()?;
@@ -118,11 +124,12 @@ impl Args {
             );
             eprintln!("\nUSAGE:");
             eprintln!(
-                "    {} [-w <width>] [-s <stroke>] [-f <flatness>] [-o] [-a] [-fg <color>] [-bg <color>] <file.path> <out.bmp>",
+                "    {} [-w <width>] [-b <bbox>] [-s <stroke>] [-f <flatness>] [-o] [-a] [-fg <color>] [-bg <color>] <file.path> <out.bmp>",
                 cmd
             );
             eprintln!("\nARGS:");
             eprintln!("    -w <width>         width in pixels of the output image");
+            eprintln!("    -b <bbox>          custom bounding box");
             eprintln!("    -t <transform>     apply transform");
             eprintln!("    -s <stroke_width>  stroke path before rendering");
             eprintln!("    -o                 show outline with control points instead of filling");
@@ -246,7 +253,10 @@ fn main() -> Result<(), Error> {
     // transform if needed
     let tr = match args.width {
         Some(width) if width > 2 => {
-            let src_bbox = path.bbox(args.tr).ok_or("path is empty")?;
+            let src_bbox = match args.bbox {
+                Some(bbox) => bbox.transform(args.tr),
+                None => path.bbox(args.tr).ok_or("path is empty")?,
+            };
             let width = width as Scalar;
             let height = src_bbox.height() * width / src_bbox.width();
             let dst_bbox = BBox::new(Point::new(1.0, 1.0), Point::new(width - 1.0, height - 1.0));
@@ -274,9 +284,12 @@ fn main() -> Result<(), Error> {
     let scene = Scene::group(group);
 
     // add background or checkerboard
-    let bbox = scene
-        .bbox(Transform::identity())
-        .ok_or("nothing to render")?;
+    let bbox = match args.bbox {
+        Some(bbox) => bbox.transform(tr),
+        None => scene
+            .bbox(Transform::identity())
+            .ok_or("nothing to render")?,
+    };
     let bbox = BBox::new((bbox.x().round(), bbox.y().round()), bbox.max());
     let (scene, bg) = match args.bg {
         None => {

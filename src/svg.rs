@@ -293,7 +293,7 @@ impl<I: Read> SvgPathParser<I> {
                 self.parser.unparse_byte(byte);
                 match self.prev_op {
                     Some(op) => Ok(Some(op)),
-                    None => Err(SvgParserError::InvalidCmd(op)),
+                    None => Err(SvgParserError::InvalidCmd(op.into())),
                 }
             }
         }
@@ -561,7 +561,7 @@ impl FromStr for Transform {
 #[derive(Debug)]
 pub enum SvgParserError {
     /// Failed to parse SVG command
-    InvalidCmd(u8),
+    InvalidCmd(char),
     /// Failed to parse scalar value
     InvalidScalar,
     /// Failed to parse flag value

@@ -117,7 +117,7 @@ impl Default for LineCap {
 }
 
 /// Style used to generate stroke
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct StrokeStyle {
     /// Width of the stroke

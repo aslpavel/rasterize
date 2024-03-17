@@ -594,6 +594,15 @@ impl BBox {
     pub fn unit_transform(&self) -> Transform {
         Transform::new_translate(self.x(), self.y()).pre_scale(self.width(), self.height())
     }
+
+    /// Compute new bounding box such that it will include original bounding box after transformation
+    pub fn transform(&self, tr: Transform) -> BBox {
+        let p00 = tr.apply(self.min);
+        let p01 = tr.apply(Point::new(self.min.x(), self.max.y()));
+        let p10 = tr.apply(Point::new(self.max.x(), self.min.y()));
+        let p11 = tr.apply(self.max);
+        BBox::new(p00, p11).extend(p10).extend(p01)
+    }
 }
 
 /// Find intersection of two ranges
