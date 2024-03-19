@@ -6,7 +6,7 @@ use std::{
     io::{BufReader, BufWriter},
 };
 use tracing::debug_span;
-use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
 
 type Error = Box<dyn std::error::Error>;
 
@@ -81,7 +81,7 @@ impl Args {
 fn main() -> Result<(), Error> {
     tracing_subscriber::fmt()
         .with_span_events(FmtSpan::CLOSE)
-        .with_env_filter("debug")
+        .with_env_filter(EnvFilter::from_default_env())
         .with_writer(std::io::stderr)
         .init();
 

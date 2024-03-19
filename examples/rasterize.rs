@@ -8,8 +8,7 @@ use std::{
     io::{BufWriter, Read},
     sync::Arc,
 };
-use tracing::{debug_span, info};
-use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
 
 type Error = Box<dyn std::error::Error>;
 
@@ -159,7 +158,7 @@ fn path_load(path: String) -> Result<Path, Error> {
     } else {
         std::io::stdin().read_to_string(&mut contents)?;
     }
-    Ok(debug_span!("[parse]").in_scope(|| contents.parse())?)
+    Ok(tracing::debug_span!("[parse]").in_scope(|| contents.parse())?)
 }
 
 /// Convert path to the outline with control points.
@@ -228,7 +227,7 @@ fn outline(path: &Path, tr: Transform) -> Scene {
 fn main() -> Result<(), Error> {
     tracing_subscriber::fmt()
         .with_span_events(FmtSpan::CLOSE)
-        .with_env_filter("debug")
+        .with_env_filter(EnvFilter::from_default_env())
         .with_writer(std::io::stderr)
         .init();
 
@@ -244,11 +243,11 @@ fn main() -> Result<(), Error> {
                 line_join: LineJoin::Round,
                 line_cap: LineCap::Round,
             };
-            debug_span!("[stroke]").in_scope(|| path.stroke(stroke_style))
+            tracing::debug_span!("[stroke]").in_scope(|| path.stroke(stroke_style))
         }
     };
     let path = Arc::new(path);
-    info!("[path:segments_count] {}", path.segments_count());
+    tracing::debug!("[path:segments_count] {}", path.segments_count());
 
     // transform if needed
     let tr = match args.width {
@@ -306,11 +305,11 @@ fn main() -> Result<(), Error> {
         Some(bg) => (scene, bg),
     };
 
-    let image = debug_span!("[render]", rasterizer = rasterizer.name())
+    let image = tracing::debug_span!("[render]", rasterizer = rasterizer.name())
         .in_scope(|| scene.render(&rasterizer, Transform::identity(), Some(bbox), Some(bg)));
 
     // save
-    let save = debug_span!("[save]");
+    let save = tracing::debug_span!("[save]");
     {
         let _ = save.enter();
         if args.output_file != "-" {
