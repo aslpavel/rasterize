@@ -2,6 +2,7 @@ use crate::{simd::f32x4, Paint, Point, Scalar, Transform, Units};
 use bytemuck::{Pod, Zeroable};
 #[cfg(feature = "serde")]
 use serde::{de::DeserializeSeed, Deserializer};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fmt,
@@ -225,9 +226,32 @@ impl FromStr for RGBA {
 }
 
 #[cfg(feature = "serde")]
+impl Serialize for RGBA {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.collect_str(self)
+    }
+}
+
+#[cfg(feature = "serde")]
 #[derive(Clone)]
 pub struct RGBADeserializer<'a> {
     pub colors: &'a HashMap<String, RGBA>,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for RGBA {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        RGBADeserializer {
+            colors: &SVG_COLORS,
+        }
+        .deserialize(deserializer)
+    }
 }
 
 #[cfg(feature = "serde")]
@@ -238,7 +262,6 @@ impl<'de, 'a> DeserializeSeed<'de> for RGBADeserializer<'a> {
     where
         D: Deserializer<'de>,
     {
-        use serde::Deserialize;
         let color = std::borrow::Cow::<'de, str>::deserialize(deserializer)?;
         RGBA::from_str_named(color.as_ref(), self.colors).map_err(serde::de::Error::custom)
     }

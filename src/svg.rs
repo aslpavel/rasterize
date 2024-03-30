@@ -307,12 +307,15 @@ impl<I: Read> SvgPathParser<I> {
             Some(op) => op,
         };
         let cmd = match op {
+            // move
             b'M' | b'm' => {
                 let dst = self.parse_point()?;
                 self.subpath_start = dst;
                 SvgPathCmd::MoveTo(dst)
             }
+            // line
             b'L' | b'l' => SvgPathCmd::LineTo(self.parse_point()?),
+            // vertical line
             b'V' | b'v' => {
                 let y = self.parser.parse_scalar()?;
                 let p0 = self.position;
@@ -323,6 +326,7 @@ impl<I: Read> SvgPathParser<I> {
                 };
                 SvgPathCmd::LineTo(p1)
             }
+            // horizontal line
             b'H' | b'h' => {
                 let x = self.parser.parse_scalar()?;
                 let p0 = self.position;
@@ -333,7 +337,9 @@ impl<I: Read> SvgPathParser<I> {
                 };
                 SvgPathCmd::LineTo(p1)
             }
+            // quadratic bezier curve
             b'Q' | b'q' => SvgPathCmd::QuadTo(self.parse_point()?, self.parse_point()?),
+            // smooth quadratic bezier curve
             b'T' | b't' => {
                 let p1 = match self.prev_cmd {
                     Some(SvgPathCmd::QuadTo(p1, p2)) => 2.0 * p2 - p1,
@@ -342,11 +348,13 @@ impl<I: Read> SvgPathParser<I> {
                 let p2 = self.parse_point()?;
                 SvgPathCmd::QuadTo(p1, p2)
             }
+            // cubic bezier curve
             b'C' | b'c' => SvgPathCmd::CubicTo(
                 self.parse_point()?,
                 self.parse_point()?,
                 self.parse_point()?,
             ),
+            // smooth cubic bezier curve
             b'S' | b's' => {
                 let p1 = match self.prev_cmd {
                     Some(SvgPathCmd::CubicTo(_, p2, p3)) => 2.0 * p3 - p2,
@@ -356,6 +364,7 @@ impl<I: Read> SvgPathParser<I> {
                 let p3 = self.parse_point()?;
                 SvgPathCmd::CubicTo(p1, p2, p3)
             }
+            // elliptical arc
             b'A' | b'a' => {
                 let rx = self.parser.parse_scalar()?;
                 let ry = self.parser.parse_scalar()?;
@@ -371,6 +380,7 @@ impl<I: Read> SvgPathParser<I> {
                     dst,
                 }
             }
+            // close path
             b'Z' | b'z' => SvgPathCmd::Close(self.subpath_start),
             _ => unreachable!(),
         };
