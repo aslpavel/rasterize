@@ -1,8 +1,7 @@
 use crate::{simd::f32x4, Paint, Point, Scalar, Transform, Units};
 use bytemuck::{Pod, Zeroable};
 #[cfg(feature = "serde")]
-use serde::{de::DeserializeSeed, Deserializer};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeSeed, Deserialize, Deserializer, Serialize};
 use std::{
     collections::HashMap,
     fmt,
