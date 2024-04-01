@@ -62,6 +62,7 @@ impl SvgPathCmd {
 struct Parser<I> {
     input: I,
     input_buffer: Option<u8>,
+    offset: usize,
 }
 
 impl<I: Read> Parser<I> {
@@ -69,7 +70,13 @@ impl<I: Read> Parser<I> {
         Self {
             input,
             input_buffer: None,
+            offset: 0,
         }
+    }
+
+    // return current offset
+    pub fn offset(&self) -> usize {
+        self.offset
     }
 
     // consume single byte from the input
@@ -78,22 +85,27 @@ impl<I: Read> Parser<I> {
             None => {
                 let mut byte = [0; 1];
                 if self.input.read(&mut byte)? != 0 {
+                    self.offset += 1;
                     Ok(Some(byte[0]))
                 } else {
                     Ok(None)
                 }
             }
-            byte => Ok(byte),
+            byte => {
+                self.offset += 1;
+                Ok(byte)
+            }
         }
     }
 
     // put byte into input buffer, at most one byte is cached
     pub fn unparse_byte(&mut self, byte: u8) {
         debug_assert!(self.input_buffer.is_none());
+        self.offset = self.offset.saturating_sub(1);
         self.input_buffer = Some(byte);
     }
 
-    // consume input while `pred` predicate is true, consumed input is stored in `Self::buffer`
+    // consume input while `pred` predicate is true, call `proc` on consumed bytes
     pub fn parse_while(
         &mut self,
         mut pred: impl FnMut(u8) -> bool,
@@ -189,7 +201,9 @@ impl<I: Read> Parser<I> {
         mantissa *= sign;
 
         if whole + frac == 0 {
-            return Err(SvgParserError::InvalidScalar);
+            return Err(SvgParserError::InvalidScalar {
+                offset: self.offset(),
+            });
         }
 
         let matches_exp = self.parse_once(|byte| matches!(byte, b'e' | b'E'), |_| {})?;
@@ -209,7 +223,9 @@ impl<I: Read> Parser<I> {
                 |byte| push_digit(&mut sci, byte),
             )? == 0
             {
-                return Err(SvgParserError::InvalidScalar);
+                return Err(SvgParserError::InvalidScalar {
+                    offset: self.offset(),
+                });
             }
             exponent = exponent.wrapping_add(sci_sign * sci)
         }
@@ -264,7 +280,10 @@ impl<I: Read> SvgPathParser<I> {
                 if let Some(byte) = byte {
                     self.parser.unparse_byte(byte);
                 }
-                Err(SvgParserError::InvalidFlag)
+                Err(SvgParserError::InvalidFlag {
+                    offset: self.parser.offset(),
+                    flag: byte.map(char::from),
+                })
             }
         }
     }
@@ -293,7 +312,10 @@ impl<I: Read> SvgPathParser<I> {
                 self.parser.unparse_byte(byte);
                 match self.prev_op {
                     Some(op) => Ok(Some(op)),
-                    None => Err(SvgParserError::InvalidCmd(op.into())),
+                    None => Err(SvgParserError::InvalidCmd {
+                        offset: self.parser.offset(),
+                        cmd: op.into(),
+                    }),
                 }
             }
         }
@@ -432,11 +454,15 @@ impl<I: Read> SvgTransformParser<I> {
     // parse angle in radians
     fn parse_angle(&mut self) -> Result<Scalar, SvgParserError> {
         let value = self.parser.parse_scalar()?;
+        let offset = self.parser.offset();
         let units = self.parse_ident()?;
         match units {
             b"" | b"deg" => Ok(value * crate::PI / 180.0),
             b"rad" => Ok(value),
-            _ => Err(SvgParserError::InvalidUnits),
+            _ => Err(SvgParserError::InvalidUnits {
+                offset,
+                units: String::from_utf8_lossy(units).to_string(),
+            }),
         }
     }
 
@@ -467,6 +493,7 @@ impl<I: Read> SvgTransformParser<I> {
             Some(b) => self.parser.unparse_byte(b),
         }
 
+        let offset = self.parser.offset();
         let op = match self.parse_ident()? {
             b"matrix" => Op::Matrix,
             b"rotate" => Op::Rotate,
@@ -478,14 +505,19 @@ impl<I: Read> SvgTransformParser<I> {
             b"scaleY" => Op::ScaleY,
             b"skewX" => Op::SkewX,
             b"skewY" => Op::SkewY,
-            _ => {
-                return Err(SvgParserError::InvalidTransformOp);
+            op => {
+                return Err(SvgParserError::InvalidTransformOp {
+                    offset,
+                    op: String::from_utf8_lossy(op).to_string(),
+                });
             }
         };
 
         self.parser.parse_separators()?;
         if !matches!(self.parser.parse_byte()?, Some(b'(')) {
-            return Err(SvgParserError::BracketExpected);
+            return Err(SvgParserError::BracketExpected {
+                offset: self.parser.offset(),
+            });
         }
 
         let tr = match op {
@@ -547,7 +579,9 @@ impl<I: Read> SvgTransformParser<I> {
 
         self.parser.parse_separators()?;
         if !matches!(self.parser.parse_byte()?, Some(b')')) {
-            return Err(SvgParserError::BracketExpected);
+            return Err(SvgParserError::BracketExpected {
+                offset: self.parser.offset(),
+            });
         }
 
         Ok(Some(tr))
@@ -571,23 +605,23 @@ impl FromStr for Transform {
 #[derive(Debug)]
 pub enum SvgParserError {
     /// Failed to parse SVG command
-    InvalidCmd(char),
+    InvalidCmd { offset: usize, cmd: char },
     /// Failed to parse scalar value
-    InvalidScalar,
+    InvalidScalar { offset: usize },
     /// Failed to parse flag value
-    InvalidFlag,
+    InvalidFlag { offset: usize, flag: Option<char> },
     /// Unexpected segment type found while parsing curve segment
     UnexpectedSegmentType,
     /// Invalid transform operation
-    InvalidTransformOp,
+    InvalidTransformOp { offset: usize, op: String },
     /// Invalid bounding box
     InvalidBBox,
     /// Invalid (Angle|Gradient|Length)
-    InvalidUnits,
+    InvalidUnits { offset: usize, units: String },
     /// Invalid Fill Rule
     InvalidFillRule,
     /// Bracket expected,
-    BracketExpected,
+    BracketExpected { offset: usize },
     /// JSON error
     #[cfg(feature = "serde")]
     Json(serde_json::Error),

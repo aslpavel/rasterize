@@ -1697,7 +1697,7 @@ mod tests {
     fn test_intersect() -> Result<(), SvgParserError> {
         let c0: Segment = "M97,177 C120,20 220,95 47,148".parse()?;
         let c1: Segment = "M136,82 C59,184 108,228 153,34".parse()?;
-        // TODO: Fix duplicate results
+        // TODO: fix duplicate results
         for (i, p) in c0.intersect(c1, 1e-3).into_iter().enumerate() {
             println!("{i}: ({}, {})", p.x(), p.y());
         }
