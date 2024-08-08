@@ -663,6 +663,9 @@ impl<'a> Iterator for PathFlattenIter<'a> {
         loop {
             match self.stack.pop() {
                 Some(segment) => {
+                    if segment.is_nan() {
+                        panic!("cannot flatten segment with NaN");
+                    }
                     if segment.flatness() < self.flatness {
                         return Some(Line::new(segment.start(), segment.end()));
                     }
