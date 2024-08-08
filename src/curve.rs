@@ -1097,6 +1097,16 @@ impl Segment {
         }
         result
     }
+
+    pub fn is_nan(&self) -> bool {
+        match self {
+            Segment::Line(line) => line.0.as_slice(),
+            Segment::Quad(quad) => quad.0.as_slice(),
+            Segment::Cubic(cubic) => cubic.0.as_slice(),
+        }
+        .iter()
+        .any(|point| point.0.iter().any(|f| f.is_nan()))
+    }
 }
 
 impl fmt::Debug for Segment {
