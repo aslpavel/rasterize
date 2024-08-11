@@ -439,6 +439,22 @@ pub mod tests {
         }};
     }
 
+    #[macro_export]
+    macro_rules! assert_approx_eq_iter {
+        ( $v0:expr, $v1: expr ) => {{
+            assert_approx_eq_iter!($v0, $v1, $crate::EPSILON);
+        }};
+        ( $v0:expr, $v1: expr, $e: expr ) => {{
+            let mut i0 = $v0.into_iter();
+            let mut i1 = $v1.into_iter();
+            for (v0, v1) in i0.by_ref().zip(i1.by_ref()) {
+                assert_approx_eq!(v0, v1, $e);
+            }
+            assert!(i0.next().is_none(), "left iterator is longer");
+            assert!(i1.next().is_none(), "right iterator is longer");
+        }};
+    }
+
     #[test]
     fn test_solve() {
         fn solve_check(a: Scalar, b: Scalar, c: Scalar, d: Scalar, roots: &[Scalar]) {

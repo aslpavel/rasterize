@@ -289,6 +289,7 @@ fn main() -> Result<(), Error> {
             .bbox(Transform::identity())
             .ok_or("nothing to render")?,
     };
+    tracing::debug!(?bbox, "[bbox]");
     let bbox = BBox::new((bbox.x().round(), bbox.y().round()), bbox.max());
     let (scene, bg) = match args.bg {
         None => {

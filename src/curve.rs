@@ -1445,7 +1445,7 @@ fn cubic_offset_should_split(cubic: Cubic) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::assert_approx_eq;
+    use crate::{assert_approx_eq, assert_approx_eq_iter};
 
     #[test]
     fn test_polyline_offset() {
@@ -1501,21 +1501,18 @@ mod tests {
         assert_eq!(l.roots().collect::<Vec<_>>(), vec![0.5]);
 
         let q: Quad = "M0-2Q7,6 6-4".parse().unwrap();
-        assert_eq!(
-            q.roots().collect::<Vec<_>>(),
-            vec![0.73841681234051, 0.15047207654837882]
-        );
+        assert_approx_eq_iter!(q.roots(), [0.73841681234051, 0.15047207654837882]);
 
         let c = Cubic::new((0.0, -2.0), (2.0, 4.0), (4.0, -3.0), (9.0, 1.0));
-        assert_eq!(
-            c.roots().collect::<Vec<_>>(),
-            vec![0.8812186869024836, 0.1627575589800928, 0.5810237541174236]
+        assert_approx_eq_iter!(
+            c.roots(),
+            [0.8812186869024836, 0.1627575589800928, 0.5810237541174236]
         );
 
         let c: Cubic = "M8,-1 C1,3 6,-3 9,1".parse().unwrap();
-        assert_eq!(
+        assert_approx_eq_iter!(
             c.roots().collect::<Vec<_>>(),
-            vec![0.8872983346207419, 0.11270166537925835, 0.4999999999999995]
+            [0.8872983346207419, 0.11270166537925835, 0.4999999999999995]
         );
     }
 
@@ -1528,10 +1525,7 @@ mod tests {
             0.0, 0.0, 1.0
         ];
         let M3x3(q) = Q * QI;
-        assert_eq!(i3.len(), q.len());
-        for (v0, v1) in i3.iter().zip(q.iter()) {
-            assert_approx_eq!(v0, v1);
-        }
+        assert_approx_eq_iter!(i3, q);
 
         #[rustfmt::skip]
         let i4 = [
@@ -1541,10 +1535,7 @@ mod tests {
             0.0, 0.0, 0.0, 1.0,
         ];
         let M4x4(c) = C * CI;
-        assert_eq!(i4.len(), c.len());
-        for (v0, v1) in i4.iter().zip(c.iter()) {
-            assert_approx_eq!(v0, v1);
-        }
+        assert_approx_eq_iter!(i4, c);
     }
 
     #[test]
