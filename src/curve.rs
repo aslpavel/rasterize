@@ -1098,7 +1098,8 @@ impl Segment {
         result
     }
 
-    pub fn is_nan(&self) -> bool {
+    /// Whether curve has any NaN values
+    pub fn has_nans(&self) -> bool {
         match self {
             Segment::Line(line) => line.0.as_slice(),
             Segment::Quad(quad) => quad.0.as_slice(),
