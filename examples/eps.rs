@@ -1,4 +1,5 @@
 //! Basic PostScript rasterizer
+#![allow(dead_code)]
 use rasterize::*;
 use std::{
     cell::{self, RefCell},
@@ -684,9 +685,9 @@ fn create_global_dict() -> PSDict {
                 Ok(())
             }
             val => {
-                let val = val?;
+                val?;
                 state.push(false);
-                Ok(val)
+                Ok(())
             }
         }
     });

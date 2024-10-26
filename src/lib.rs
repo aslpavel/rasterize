@@ -10,16 +10,16 @@
 //! ## Overview
 //! **Main types are:**
 //! - [`Path`] - Represents the same concept as an [SVG path](https://www.w3.org/TR/SVG11/paths.html),
-//! the easiest way to construct it is with [`Path::builder`] or it can be parsed from SVG path with [`str::parse`].
-//! Path can be stroked with [`Path::stroke`] to generated new path that represents an outline.
+//!   the easiest way to construct it is with [`Path::builder`] or it can be parsed from SVG path with [`str::parse`].
+//!   Path can be stroked with [`Path::stroke`] to generated new path that represents an outline.
 //! - [`Scene`] - Represents an image that has not been rendered yet, multiple scenes
-//! can be composed to construct more complex scene. This is probably the simplest
-//! way to render something useful. See `examples/simple.rs` for a simple example.
-//! It can also be (de)serialized see `data/firefox.scene` for an example.
+//!   can be composed to construct more complex scene. This is probably the simplest
+//!   way to render something useful. See `examples/simple.rs` for a simple example.
+//!   It can also be (de)serialized see `data/firefox.scene` for an example.
 //! - [`Paint`] - Color/Gradient that can be used to fill a path.
 //! - [`Image`] - 2D matrix that can hold and image and used as a target for rendering.
-//! Image can also be written into a file with [`Image::write_bmp`] or to PNG with
-//! `Image::write_png` if `png` feature is enabled.
+//!   Image can also be written into a file with [`Image::write_bmp`] or to PNG with
+//!   `Image::write_png` if `png` feature is enabled.
 #![deny(warnings)]
 #![allow(clippy::excessive_precision)]
 

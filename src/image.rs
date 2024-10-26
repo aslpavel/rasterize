@@ -222,7 +222,7 @@ pub struct ImageIter<'a, P> {
     data: &'a [P],
 }
 
-impl<'a, P> ImageIter<'a, P> {
+impl<P> ImageIter<'_, P> {
     /// Get current (row, column) of the pixel
     pub fn position(&self) -> (usize, usize) {
         self.shape.nth(self.index).unwrap_or((self.shape.height, 0))
@@ -308,7 +308,7 @@ pub struct ImageMutIter<'a, P> {
     data: &'a mut [P],
 }
 
-impl<'a, P> ImageMutIter<'a, P> {
+impl<P> ImageMutIter<'_, P> {
     /// Current (row, col) position of the iterator
     pub fn position(&self) -> (usize, usize) {
         self.shape.nth(self.index).unwrap_or((self.shape.height, 0))
@@ -427,7 +427,7 @@ pub struct ImageRef<'a, P> {
     data: &'a [P],
 }
 
-impl<'a, P> fmt::Debug for ImageRef<'a, P> {
+impl<P> fmt::Debug for ImageRef<'_, P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ImageRef")
             .field("shape", &self.shape)
@@ -442,7 +442,7 @@ impl<'a, P> ImageRef<'a, P> {
     }
 }
 
-impl<'a, P> Image for ImageRef<'a, P> {
+impl<P> Image for ImageRef<'_, P> {
     type Pixel = P;
 
     fn shape(&self) -> Shape {
@@ -460,7 +460,7 @@ pub struct ImageMutRef<'a, C> {
     data: &'a mut [C],
 }
 
-impl<'a, C> fmt::Debug for ImageMutRef<'a, C> {
+impl<C> fmt::Debug for ImageMutRef<'_, C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ImageMutRef")
             .field("shape", &self.shape)
@@ -475,7 +475,7 @@ impl<'a, P> ImageMutRef<'a, P> {
     }
 }
 
-impl<'a, P> Image for ImageMutRef<'a, P> {
+impl<P> Image for ImageMutRef<'_, P> {
     type Pixel = P;
 
     fn shape(&self) -> Shape {
@@ -487,13 +487,13 @@ impl<'a, P> Image for ImageMutRef<'a, P> {
     }
 }
 
-impl<'a, P> ImageMut for ImageMutRef<'a, P> {
+impl<P> ImageMut for ImageMutRef<'_, P> {
     fn data_mut(&mut self) -> &mut [Self::Pixel] {
         self.data
     }
 }
 
-impl<'a, I> Image for &'a I
+impl<I> Image for &I
 where
     I: Image + ?Sized,
 {
@@ -508,7 +508,7 @@ where
     }
 }
 
-impl<'a, I> Image for &'a mut I
+impl<I> Image for &mut I
 where
     I: Image + ?Sized,
 {
@@ -523,7 +523,7 @@ where
     }
 }
 
-impl<'a, I> ImageMut for &'a mut I
+impl<I> ImageMut for &mut I
 where
     I: ImageMut + ?Sized,
 {

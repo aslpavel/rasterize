@@ -114,7 +114,7 @@ fn fill_impl(
     }
 }
 
-impl<'a, R: Rasterizer + ?Sized> Rasterizer for &'a R {
+impl<R: Rasterizer + ?Sized> Rasterizer for &R {
     fn mask(
         &self,
         path: &Path,
@@ -197,7 +197,7 @@ pub trait Paint: fmt::Debug {
     fn to_json(&self) -> Result<serde_json::Value, crate::SvgParserError>;
 }
 
-impl<'a, P: Paint> Paint for &'a P {
+impl<P: Paint> Paint for &P {
     fn at(&self, point: Point) -> LinColor {
         (**self).at(point)
     }
@@ -1143,7 +1143,7 @@ mod tests {
         let r1: Box<dyn Rasterizer> = Box::new(ActiveEdgeRasterizer::default());
         for rasterizer in &[r0, r1] {
             img.clear();
-            path.mask(&rasterizer, tr, FillRule::EvenOdd, &mut img);
+            path.mask(rasterizer, tr, FillRule::EvenOdd, &mut img);
             assert_approx_eq!(img.get(y, x0).unwrap(), 0.0, 1e-6);
             assert_approx_eq!(img.get(y, x1).unwrap(), 0.0, 1e-6);
             assert_approx_eq!(img.get(y, x2).unwrap(), 0.0, 1e-6);
@@ -1151,7 +1151,7 @@ mod tests {
             assert_approx_eq!(area, 13130.0, 1.0);
 
             img.clear();
-            path.mask(&rasterizer, tr, FillRule::NonZero, &mut img);
+            path.mask(rasterizer, tr, FillRule::NonZero, &mut img);
             assert_approx_eq!(img.get(y, x0).unwrap(), 1.0, 1e-6);
             assert_approx_eq!(img.get(y, x1).unwrap(), 1.0, 1e-6);
             assert_approx_eq!(img.get(y, x2).unwrap(), 0.0, 1e-6);

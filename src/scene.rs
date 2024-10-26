@@ -645,7 +645,7 @@ mod tests {
     use super::*;
     use crate::ActiveEdgeRasterizer;
     type Error = Box<dyn std::error::Error>;
-    const SCENE: &'static str = r##"
+    const SCENE: &str = r##"
     {
         "type": "transform",
         "tr": "translate(7, 7) rotate(45, 7, 7) scale(10)",

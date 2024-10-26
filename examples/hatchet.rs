@@ -62,7 +62,7 @@ impl PartialEq for Intersection {
 impl Eq for Intersection {}
 
 // Intersect path specified by segments with `y = 0` when `tr` transformation is applied.
-fn intersect(segments: &Vec<Vec<Segment>>, tr: Transform, y_low: bool) -> Vec<Intersection> {
+fn intersect(segments: &[Vec<Segment>], tr: Transform, y_low: bool) -> Vec<Intersection> {
     let mut ints = Vec::new();
     for (subpath_index, subpath) in segments.iter().enumerate() {
         for (segment_index, segment) in subpath.iter().enumerate() {
@@ -100,7 +100,7 @@ fn intersect(segments: &Vec<Vec<Segment>>, tr: Transform, y_low: bool) -> Vec<In
     let mut output: Vec<Intersection> = Vec::with_capacity(ints.len());
     for mut int in ints {
         // remove duplicate intersections
-        if output.len() > 0 {
+        if !output.is_empty() {
             let int_prev = output[output.len() - 1];
             if (int.x_coord - int_prev.x_coord).abs() < EPSILON {
                 if int.winding_delta + int_prev.winding_delta == 0 {

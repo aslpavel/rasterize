@@ -9,7 +9,6 @@ use std::{
     fmt,
     io::{Cursor, Read, Write},
     str::FromStr,
-    usize,
 };
 
 /// Default flatness used during rasterization.
@@ -257,7 +256,7 @@ impl fmt::Display for Path {
             fmt: &'a mut fmt::Formatter<'b>,
         }
 
-        impl<'a, 'b> std::io::Write for FormatterWrite<'a, 'b> {
+        impl std::io::Write for FormatterWrite<'_, '_> {
             fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
                 self.fmt
                     .write_str(
@@ -551,7 +550,7 @@ pub struct PathVerboseDebug<'a> {
     path: &'a Path,
 }
 
-impl<'a> fmt::Debug for PathVerboseDebug<'a> {
+impl fmt::Debug for PathVerboseDebug<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.path.subpaths.is_empty() {
             write!(f, "Empty")?;
@@ -656,7 +655,7 @@ impl<'a> PathFlattenIter<'a> {
     }
 }
 
-impl<'a> Iterator for PathFlattenIter<'a> {
+impl Iterator for PathFlattenIter<'_> {
     type Item = Line;
 
     fn next(&mut self) -> Option<Self::Item> {

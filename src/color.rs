@@ -254,7 +254,7 @@ impl<'de> Deserialize<'de> for RGBA {
 }
 
 #[cfg(feature = "serde")]
-impl<'de, 'a> DeserializeSeed<'de> for RGBADeserializer<'a> {
+impl<'de> DeserializeSeed<'de> for RGBADeserializer<'_> {
     type Value = RGBA;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>

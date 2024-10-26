@@ -11,7 +11,7 @@ use std::{
 /// Scalar type
 pub type Scalar = f64;
 /// Epsilon value
-pub const EPSILON: f64 = std::f64::EPSILON;
+pub const EPSILON: f64 = f64::EPSILON;
 /// Square root of the epsilon value
 pub const EPSILON_SQRT: f64 = 1.490_116_119_384_765_6e-8;
 /// Mathematical pi constant
@@ -623,9 +623,7 @@ impl FromStr for BBox {
     type Err = SvgParserError;
 
     fn from_str(string: &str) -> Result<Self, Self::Err> {
-        let mut values = string
-            .split(|c| matches!(c, ' ' | ','))
-            .map(|s| s.trim().parse().ok());
+        let mut values = string.split([' ', ',']).map(|s| s.trim().parse().ok());
         let minx: Scalar = values.next().flatten().ok_or(SvgParserError::InvalidBBox)?;
         let miny: Scalar = values.next().flatten().ok_or(SvgParserError::InvalidBBox)?;
         let width: Scalar = values.next().flatten().ok_or(SvgParserError::InvalidBBox)?;
