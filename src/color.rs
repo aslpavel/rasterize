@@ -7,23 +7,22 @@ use std::{
     fmt,
     ops::{Add, Mul},
     str::FromStr,
+    sync::LazyLock,
 };
 
-lazy_static::lazy_static! {
-    pub static ref SVG_COLORS: HashMap<String, RGBA> = {
-        let empty = HashMap::new(); // do not use parse to avoid recursive lock
-        include_str!("./svg-colors.txt")
-            .lines()
-            .map(|line| {
-                let mut iter = line.split(' ');
-                let name = iter.next()?;
-                let color = RGBA::from_str_named(iter.next()?, &empty).ok()?;
-                Some((name.to_owned(), color))
-            })
-            .collect::<Option<HashMap<String, RGBA>>>()
-            .expect("failed to parse embedded svg colors")
-    };
-}
+pub static SVG_COLORS: LazyLock<HashMap<String, RGBA>> = LazyLock::new(|| {
+    let empty = HashMap::new(); // do not use parse to avoid recursive lock
+    include_str!("./svg-colors.txt")
+        .lines()
+        .map(|line| {
+            let mut iter = line.split(' ');
+            let name = iter.next()?;
+            let color = RGBA::from_str_named(iter.next()?, &empty).ok()?;
+            Some((name.to_owned(), color))
+        })
+        .collect::<Option<HashMap<String, RGBA>>>()
+        .expect("failed to parse embedded svg colors")
+});
 
 /// Common interface to all color representations
 pub trait Color: Copy {
