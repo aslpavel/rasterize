@@ -31,7 +31,7 @@ use crate::{
 };
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use std::{cmp::min, collections::VecDeque, fmt, rc::Rc, sync::Arc};
+use std::{cmp::min, fmt, rc::Rc, sync::Arc};
 
 /// Size of the rectangular area with integer width and height
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -577,9 +577,9 @@ impl Rasterizer for ActiveEdgeRasterizer {
 /// Iterator over rasterized pixels, by active-edge rasterizer
 pub struct ActiveEdgeIter {
     // all edges sorted by `Edge::row` in descending order
-    edge_inactive: Vec<Vec<Edge>>,
+    edge_inactive: Vec<Edge>,
     // edge is activated when `Edge::row` is reached
-    edge_active: VecDeque<Edge>,
+    edge_active: Vec<Edge>,
     // row iterators are created for all active edges on
     iters_inactive: Vec<EdgeRowIter>,
     // accumulated iterator over all active (x >= EdgeRowIter::column) row iterators
@@ -598,21 +598,19 @@ pub struct ActiveEdgeIter {
 
 impl ActiveEdgeIter {
     pub fn new(size: Size, fill_rule: FillRule, lines: impl Iterator<Item = Line>) -> Self {
-        let mut edge_table: Vec<Vec<Edge>> = Vec::new();
-        edge_table.resize_with(size.height, Default::default);
-        for line in lines.flat_map(|line| {
-            let (line, rest) = split_at_zero_x(line);
-            std::iter::once(line).chain(rest)
-        }) {
-            if let Some(edge) = Edge::new(line) {
-                if edge.row >= size.height {
-                    continue;
-                }
-                edge_table[size.height - edge.row - 1].push(edge);
-            }
-        }
+        let mut edge_inactive: Vec<Edge> = lines
+            .flat_map(|line| {
+                let (line, rest) = split_at_zero_x(line);
+                std::iter::once(line).chain(rest)
+            })
+            .filter_map(|line| {
+                let edge = Edge::new(line)?;
+                (edge.row < size.height).then_some(edge)
+            })
+            .collect();
+        edge_inactive.sort_unstable_by(|l, r| l.row.cmp(&r.row).reverse());
         let mut this = Self {
-            edge_inactive: edge_table,
+            edge_inactive,
             edge_active: Default::default(),
             iters_inactive: Default::default(),
             iters_active: EdgeAccIter::new(),
@@ -633,25 +631,28 @@ impl ActiveEdgeIter {
         self.iters_active.clear();
 
         // create new row iterators for all active edges
-        for _ in 0..self.edge_active.len() {
-            if let Some(edge) = self.edge_active.pop_front() {
-                // split edge into row iterator and the rest part
-                if let Some((edge_rest, iter)) = edge.next_row() {
-                    self.iters_inactive.push(iter);
-                    self.edge_active.push_back(edge_rest);
-                }
+        self.edge_active.retain_mut(|edge| {
+            // split edge into row iterator and the rest part
+            if let Some((edge_rest, iter)) = edge.next_row() {
+                self.iters_inactive.push(iter);
+                *edge = edge_rest;
+                true
+            } else {
+                false
             }
-        }
+        });
 
         // activate new edges
-        if let Some(edges) = self.edge_inactive.pop() {
-            for edge in edges {
-                if let Some((edge, iter)) = edge.next_row() {
-                    self.iters_inactive.push(iter);
-                    self.edge_active.push_back(edge);
-                }
-            }
-        }
+        let activate_index = self
+            .edge_inactive
+            .partition_point(|edge| edge.row > self.row);
+        self.edge_inactive
+            .drain(activate_index..)
+            .filter_map(|edge| edge.next_row())
+            .for_each(|(edge, iter)| {
+                self.iters_inactive.push(iter);
+                self.edge_active.push(edge);
+            });
 
         // sort iterator by column
         self.iters_inactive
@@ -738,7 +739,7 @@ fn next_ceil(value: Scalar) -> Scalar {
 /// Edge represents unconsumed part of the line segments
 ///
 /// `Edge::line` is always directed from point with lower to higher `y` coordinate.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 struct Edge {
     // unconsumed part of the line segment
     line: Line,
@@ -791,8 +792,8 @@ impl Edge {
 
     /// Split edge into row iterator and reminder of the edge not covered by
     /// the row iterator.
-    fn next_row(self) -> Option<(Edge, EdgeRowIter)> {
-        EdgeRowIter::new(self)
+    fn next_row(&self) -> Option<(Edge, EdgeRowIter)> {
+        EdgeRowIter::new(*self)
     }
 }
 
@@ -878,7 +879,7 @@ impl Iterator for EdgeRowIter {
 ///
 /// Sums all values returned by sub-iterators and returns it as an item.
 struct EdgeAccIter {
-    iters: VecDeque<EdgeRowIter>,
+    iters: Vec<EdgeRowIter>,
 }
 
 impl EdgeAccIter {
@@ -890,7 +891,7 @@ impl EdgeAccIter {
 
     // push new row iterator
     fn push(&mut self, iter: EdgeRowIter) {
-        self.iters.push_back(iter)
+        self.iters.push(iter)
     }
 
     // remove all row iterator
@@ -907,14 +908,13 @@ impl Iterator for EdgeAccIter {
             return None;
         }
         let mut acc = 0.0;
-        for _ in 0..self.iters.len() {
-            if let Some(mut iter) = self.iters.pop_front() {
-                if let Some(value) = iter.next() {
-                    acc += value;
-                    self.iters.push_back(iter);
-                }
+        self.iters.retain_mut(|iter| match iter.next() {
+            Some(value) => {
+                acc += value;
+                true
             }
-        }
+            None => false,
+        });
         Some(acc)
     }
 }
