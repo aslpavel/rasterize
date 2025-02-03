@@ -1097,4 +1097,53 @@ mod tests {
         assert_eq!(path.winding_at((14.24, 7.455)), 1);
         Ok(())
     }
+
+    #[test]
+    fn test_stroke() -> Result<(), SvgParserError> {
+        // open path
+        let path: Path = "M2,2L8,2C11,2 11,8 8,8L5,4".parse()?;
+
+        let path_stroke = path.stroke(StrokeStyle {
+            width: 1.0,
+            ..Default::default()
+        });
+        let path_reference: Path = r#"
+        M2,1.5 L8,1.5 C9.80902,1.5 10.75,3.38197 10.75,5 10.75,6.61803 9.80902,8.5 8,8.5 L7.75,8.5 7.6,8.3 4.6,4.3
+        5.4,3.7 8.4,7.7 8,7.5 C9.19098,7.5 9.75,6.38197 9.75,5 9.75,3.61803 9.19098,2.5 8,2.5 L2,2.5 2,1.5 Z
+        "#.parse()?;
+        assert_path_eq(&path_reference, &path_stroke);
+
+        let path_stroke = path.stroke(StrokeStyle {
+            width: 1.0,
+            line_cap: LineCap::Round,
+            line_join: LineJoin::Round,
+            ..Default::default()
+        });
+        let path_reference: Path = r#"
+        M2,1.5 L8,1.5 C9.80902,1.5 10.75,3.38197 10.75,5 10.75,6.61803 9.80902,8.5 8,8.5 7.84274,8.5 7.69436,8.42581
+        7.6,8.3 L4.6,4.3 C4.43542,4.08057 4.48057,3.76458 4.7,3.6 4.91943,3.43542 5.23542,3.48057 5.4,3.7 L8.4,7.7 8,7.5
+        C9.19098,7.5 9.75,6.38197 9.75,5 9.75,3.61803 9.19098,2.5 8,2.5 L2,2.5 C1.72571,2.5 1.5,2.27429 1.5,2
+        1.5,1.72571 1.72571,1.5 2,1.5 Z
+        "#.parse()?;
+        assert_path_eq(&path_reference, &path_stroke);
+
+        // closed path
+        let path: Path = "M2,2L8,2C11,2 11,8 8,8L5,4Z".parse()?;
+
+        let path_stroke = path.stroke(StrokeStyle {
+            width: 1.0,
+            line_cap: LineCap::Round,
+            line_join: LineJoin::Round,
+            ..Default::default()
+        });
+        let path_reference: Path = r#"
+        M2,1.5 L8,1.5 C9.80902,1.5 10.75,3.38197 10.75,5 10.75,6.61803 9.80902,8.5 8,8.5 7.84274,8.5 7.69436,8.42581
+        7.6,8.3 L4.6,4.3 4.72265,4.41603 1.72265,2.41603 C1.53984,2.29415 1.45778,2.06539 1.52145,1.85511 1.58512,1.64482
+        1.78029,1.5 2,1.5 ZM5.4,3.7 L8.4,7.7 8,7.5 C9.19098,7.5 9.75,6.38197 9.75,5 9.75,3.61803 9.19098,2.5 8,2.5
+        L2,2.5 2.27735,1.58397 5.27735,3.58397 C5.32451,3.61542 5.36599,3.65465 5.4,3.7 Z
+        "#.parse()?;
+        assert_path_eq(&path_reference, &path_stroke);
+
+        Ok(())
+    }
 }
