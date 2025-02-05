@@ -144,7 +144,7 @@ pub struct SubPath<'a> {
     closed: bool,
 }
 
-impl<'a> fmt::Debug for SubPath<'a> {
+impl fmt::Debug for SubPath<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for segment in self.segments.iter() {
             writeln!(f, "{:?}", segment)?;
@@ -173,7 +173,7 @@ impl<'a> SubPath<'a> {
     }
 
     pub fn segments(&self) -> &[Segment] {
-        &self.segments
+        self.segments
     }
 
     /// First segment in the sub-path
@@ -647,7 +647,7 @@ impl<'a> IntoIterator for &'a Path {
 impl<'a> Extend<SubPath<'a>> for Path {
     fn extend<T: IntoIterator<Item = SubPath<'a>>>(&mut self, iter: T) {
         for subpath in iter {
-            self.push(&subpath.segments, subpath.closed);
+            self.push(subpath.segments, subpath.closed);
         }
     }
 }
@@ -669,8 +669,8 @@ where
     }
 }
 
-fn stroke_close<'a>(
-    subpath: SubPath<'a>,
+fn stroke_close(
+    subpath: SubPath<'_>,
     segments: &mut Vec<Segment>,
     style: StrokeStyle,
     forward: bool,
