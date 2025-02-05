@@ -176,7 +176,7 @@ fn outline(path: &Path, tr: Transform) -> Scene {
     };
     let control_radius = 3.0;
     let mut output = path.stroke(stroke_style);
-    for subpath in path.subpaths().iter() {
+    for subpath in path.subpaths() {
         for segment in subpath.segments() {
             let mut control = Path::builder();
             match segment {
@@ -201,16 +201,16 @@ fn outline(path: &Path, tr: Transform) -> Scene {
                 }
             };
             output.extend(
-                Path::builder()
+                &Path::builder()
                     .move_to(segment.start())
                     .circle(control_radius)
                     .build(),
             );
-            output.extend(control.build().stroke(control_style));
+            output.extend(&control.build().stroke(control_style));
         }
         if (subpath.start() - subpath.end()).length() > control_radius {
             output.extend(
-                Path::builder()
+                &Path::builder()
                     .move_to(subpath.end())
                     .circle(control_radius)
                     .build(),

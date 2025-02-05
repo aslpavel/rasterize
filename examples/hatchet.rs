@@ -149,7 +149,6 @@ fn hatch(path: &Path, normal: Line, ratio: Scalar) -> Path {
     // all segments grouped by subpath with included closing lines
     let segments: Vec<_> = path
         .subpaths()
-        .iter()
         .map(|subpath| {
             let last = subpath
                 .end()
@@ -164,7 +163,7 @@ fn hatch(path: &Path, normal: Line, ratio: Scalar) -> Path {
         })
         .collect();
 
-    let mut subpaths_out = Vec::new();
+    let mut path = Path::empty();
     let mut offset_y = 0.0;
     while offset_y < bbox_tr.height() + period {
         let ints_low = intersect(
@@ -282,9 +281,7 @@ fn hatch(path: &Path, normal: Line, ratio: Scalar) -> Path {
                     break;
                 }
             }
-            if let Some(subpath) = SubPath::new(subpath_out, true) {
-                subpaths_out.push(subpath);
-            }
+            path.push(&subpath_out, true);
         }
 
         // TODO:
@@ -292,7 +289,7 @@ fn hatch(path: &Path, normal: Line, ratio: Scalar) -> Path {
         offset_y += period;
     }
 
-    Path::new(subpaths_out)
+    path
 }
 
 fn generate_bar(
@@ -313,18 +310,18 @@ fn generate_bar(
         let by = bbox.y() + border;
         let bh = (bbox.height() - 2.0 * border) * (1.0 - frac);
         let bw = bbox.width() - 2.0 * border;
-        let border = Path::builder()
+        let mut border = Path::builder()
             .move_to((bx, by))
             .rbox((bw, bh), radii)
-            .build()
-            .reverse();
-        path.extend(border);
+            .build();
+        border.reverse();
+        path.extend(&border);
         let ib = hatch_normal.length() * hatch_ratio;
         let hatch_path = Path::builder()
             .move_to((bx + ib, by + ib))
             .rbox((bw - 2.0 * ib, bh - 2.0 * ib), radii)
             .build();
-        path.extend(hatch(&hatch_path, hatch_normal, hatch_ratio));
+        path.extend(&hatch(&hatch_path, hatch_normal, hatch_ratio));
     }
     path
 }
@@ -419,7 +416,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Line::new((0.0, 0.0), (70.0, 70.0)),
             0.3,
         );
-        path.extend(charging.clone());
+        path.extend(&charging);
         path.transform(tr);
         glyphs.push(Glyph {
             path,

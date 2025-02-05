@@ -136,15 +136,15 @@ pub struct StrokeStyle {
 }
 
 /// Non-empty collections of segments where end of each segments coincides with the start of the next one.
-#[derive(Clone, PartialEq)]
-pub struct SubPath {
+#[derive(Clone, Copy, PartialEq)]
+pub struct SubPath<'a> {
     /// List of segments representing SubPath
-    segments: Vec<Segment>,
+    segments: &'a [Segment],
     /// Whether SubPath contains an implicit line segment connecting start and the end of it.
     closed: bool,
 }
 
-impl fmt::Debug for SubPath {
+impl<'a> fmt::Debug for SubPath<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for segment in self.segments.iter() {
             writeln!(f, "{:?}", segment)?;
@@ -158,8 +158,8 @@ impl fmt::Debug for SubPath {
     }
 }
 
-impl SubPath {
-    pub fn new(segments: Vec<Segment>, closed: bool) -> Option<Self> {
+impl<'a> SubPath<'a> {
+    pub fn new(segments: &'a [Segment], closed: bool) -> Option<Self> {
         if segments.is_empty() {
             None
         } else {
@@ -184,13 +184,6 @@ impl SubPath {
     /// Last segment in the sub-path
     pub fn last(&self) -> Segment {
         *self.segments.last().expect("SubPath is never empty")
-    }
-
-    /// Apply transformation to the sub-path in place
-    pub fn transform(&mut self, tr: Transform) {
-        for segment in self.segments.iter_mut() {
-            *segment = segment.transform(tr);
-        }
     }
 
     pub fn flatten(
@@ -227,21 +220,16 @@ impl SubPath {
             .fold(init, |bbox, seg| Some(seg.transform(tr).bbox(bbox)))
             .expect("SubPath is never empty")
     }
-
-    /// Create new sub-path with reversed direction
-    pub fn reverse(&self) -> Self {
-        Self {
-            segments: self.segments.iter().rev().map(|s| s.reverse()).collect(),
-            closed: self.closed,
-        }
-    }
 }
 
 /// Collection of the SubPath treated as a single unit. Represents the same concept
 /// as an [SVG path](https://www.w3.org/TR/SVG11/paths.html)
 #[derive(Clone, PartialEq, Default)]
 pub struct Path {
-    subpaths: Vec<SubPath>,
+    segments: Vec<Segment>,
+    /// segments[subpath[i]..subpath[i+1]] represents i-th subpath
+    subpaths: Vec<usize>,
+    closed: Vec<bool>,
 }
 
 impl fmt::Debug for Path {
@@ -278,21 +266,35 @@ impl fmt::Display for Path {
 }
 
 impl Path {
-    /// Create path from the list of sub-paths
-    pub fn new(subpaths: Vec<SubPath>) -> Self {
-        Self { subpaths }
+    pub fn new(segments: Vec<Segment>, subpaths: Vec<usize>, closed: Vec<bool>) -> Self {
+        Self {
+            segments,
+            subpaths,
+            closed,
+        }
     }
 
     /// Create empty path
     pub fn empty() -> Self {
         Self {
-            subpaths: Default::default(),
+            segments: Vec::new(),
+            subpaths: Vec::new(),
+            closed: Vec::new(),
         }
     }
 
     /// Check if the path is empty
     pub fn is_empty(&self) -> bool {
         self.subpaths.is_empty()
+    }
+
+    /// Number of sub-paths in the path
+    pub fn len(&self) -> usize {
+        if self.subpaths.len() < 2 {
+            0
+        } else {
+            self.subpaths.len() - 1
+        }
     }
 
     /// Calculate winding number of a point
@@ -307,7 +309,7 @@ impl Path {
         let y = point.y();
         let tr = Transform::new_translate(0.0, -y);
         let mut winding = 0;
-        for subpath in &self.subpaths {
+        for subpath in self.subpaths() {
             let last = if subpath.closed {
                 Some(Line::new(subpath.end(), subpath.start()).into())
             } else {
@@ -347,9 +349,33 @@ impl Path {
         winding
     }
 
+    /// Get sub-path
+    pub fn get(&self, index: usize) -> Option<SubPath<'_>> {
+        let start = *self.subpaths.get(index)?;
+        let end = *self.subpaths.get(index + 1)?;
+        let segments = self.segments.get(start..end)?;
+        let closed = *self.closed.get(index)?;
+        Some(SubPath { segments, closed })
+    }
+
     /// List of sub-paths
-    pub fn subpaths(&self) -> &[SubPath] {
-        &self.subpaths
+    pub fn subpaths(&self) -> PathIter<'_> {
+        PathIter {
+            path: self,
+            index: 0,
+        }
+    }
+
+    pub fn push(&mut self, segments: &[Segment], closed: bool) {
+        if segments.is_empty() {
+            return;
+        }
+        if self.subpaths.is_empty() {
+            self.subpaths.push(0);
+        }
+        self.segments.extend(segments.iter().copied());
+        self.subpaths.push(self.segments.len());
+        self.closed.push(closed);
     }
 
     /// Convenience method to create [`PathBuilder`]
@@ -364,16 +390,14 @@ impl Path {
 
     /// Apply transformation to the path in place
     pub fn transform(&mut self, tr: Transform) {
-        for subpath in self.subpaths.iter_mut() {
-            subpath.transform(tr);
-        }
+        self.segments.iter_mut().for_each(|segment| {
+            *segment = segment.transform(tr);
+        });
     }
 
     /// Number of segments in the path
     pub fn segments_count(&self) -> usize {
-        self.subpaths
-            .iter()
-            .fold(0usize, |acc, subpath| acc + subpath.segments().len())
+        self.segments.len()
     }
 
     /// Stroke path
@@ -381,18 +405,19 @@ impl Path {
     /// Stroked path is the path constructed from original by offsetting by `distance/2` and
     /// joining it with the path offset by `-distance/2`.
     pub fn stroke(&self, style: StrokeStyle) -> Path {
-        let mut subpaths = Vec::new();
-        for subpath in self.subpaths.iter() {
-            let mut segments = Vec::new();
+        let mut result = Path::empty();
+        let mut segments = Vec::new();
+        for subpath in self.subpaths() {
             // forward
-            for segment in subpath.segments().iter() {
+            for segment in subpath.segments() {
                 stroke_segment(&mut segments, *segment, style, Segment::line_join);
             }
             let mut backward = subpath.segments.iter().rev().map(Segment::reverse);
             // close subpath
             if subpath.is_closed() {
-                let segments = stroke_close(subpath, &mut segments, style, true);
-                subpaths.extend(SubPath::new(segments, true));
+                stroke_close(subpath, &mut segments, style, true);
+                result.push(&segments, true);
+                segments.clear();
             } else {
                 // cap
                 if let Some(segment) = backward.next() {
@@ -405,8 +430,9 @@ impl Path {
             }
             // close subpath
             if subpath.is_closed() {
-                let segments = stroke_close(subpath, &mut segments, style, false);
-                subpaths.extend(SubPath::new(segments, true));
+                stroke_close(subpath, &mut segments, style, false);
+                result.push(&segments, true);
+                segments.clear();
             } else {
                 // cap
                 let last = segments.last().copied();
@@ -414,10 +440,11 @@ impl Path {
                 if let (Some(last), Some(first)) = (last, first) {
                     segments.extend(last.line_cap(first, style));
                 }
-                subpaths.extend(SubPath::new(segments, /* closed = */ true));
+                result.push(&segments, true);
+                segments.clear();
             }
         }
-        Path::new(subpaths)
+        result
     }
 
     /// Convert path to an iterator over line segments
@@ -432,8 +459,7 @@ impl Path {
 
     /// Bounding box of the path after provided transformation is applied.
     pub fn bbox(&self, tr: Transform) -> Option<BBox> {
-        self.subpaths
-            .iter()
+        self.subpaths()
             .fold(None, |bbox, subpath| Some(subpath.bbox(bbox, tr)))
     }
 
@@ -458,10 +484,41 @@ impl Path {
     }
 
     /// Reverse order and direction of all segments
-    pub fn reverse(&self) -> Self {
-        Self {
-            subpaths: self.subpaths.iter().map(|s| s.reverse()).collect(),
+    pub fn reverse(&mut self) {
+        if self.segments.is_empty() {
+            return;
         }
+
+        // reverse segments
+        let mut left = 0;
+        let mut right = self.segments.len() - 1;
+        while left < right {
+            let left_segment = self.segments[left].reverse();
+            let right_segment = self.segments[right].reverse();
+            self.segments[left] = right_segment;
+            self.segments[right] = left_segment;
+            left += 1;
+            right -= 1;
+        }
+        if left == right {
+            let left_segment = self.segments[left].reverse();
+            self.segments[left] = left_segment;
+        }
+
+        // reverse sub-paths offsets
+        for index in 0..(self.subpaths.len() - 1) {
+            self.subpaths[index] = self.subpaths[index + 1] - self.subpaths[index];
+        }
+        self.subpaths.reverse();
+        self.subpaths[0] = 0;
+        let mut offset = 0;
+        for index in 1..self.subpaths.len() {
+            offset += self.subpaths[index];
+            self.subpaths[index] = offset;
+        }
+
+        // reverse closed
+        self.closed.reverse();
     }
 
     /// Fill path with the provided paint
@@ -497,7 +554,7 @@ impl Path {
 
     /// Save path in SVG path format.
     pub fn write_svg_path(&self, mut out: impl Write) -> std::io::Result<()> {
-        for subpath in self.subpaths.iter() {
+        for subpath in self.subpaths() {
             write!(out, "M{:?} ", subpath.start())?;
             let mut segment_type: Option<u8> = None;
             for segment in subpath.segments().iter() {
@@ -563,27 +620,35 @@ impl fmt::Debug for PathVerboseDebug<'_> {
     }
 }
 
-impl IntoIterator for Path {
-    type Item = SubPath;
-    type IntoIter = <Vec<SubPath> as IntoIterator>::IntoIter;
+pub struct PathIter<'a> {
+    path: &'a Path,
+    index: usize,
+}
 
-    fn into_iter(self) -> Self::IntoIter {
-        self.subpaths.into_iter()
+impl<'a> Iterator for PathIter<'a> {
+    type Item = SubPath<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let result = self.path.get(self.index)?;
+        self.index += 1;
+        Some(result)
     }
 }
 
 impl<'a> IntoIterator for &'a Path {
-    type Item = &'a SubPath;
-    type IntoIter = <&'a Vec<SubPath> as IntoIterator>::IntoIter;
+    type Item = SubPath<'a>;
+    type IntoIter = PathIter<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.subpaths.iter()
+        self.subpaths()
     }
 }
 
-impl Extend<SubPath> for Path {
-    fn extend<T: IntoIterator<Item = SubPath>>(&mut self, iter: T) {
-        self.subpaths.extend(iter)
+impl<'a> Extend<SubPath<'a>> for Path {
+    fn extend<T: IntoIterator<Item = SubPath<'a>>>(&mut self, iter: T) {
+        for subpath in iter {
+            self.push(&subpath.segments, subpath.closed);
+        }
     }
 }
 
@@ -604,15 +669,15 @@ where
     }
 }
 
-fn stroke_close(
-    subpath: &SubPath,
+fn stroke_close<'a>(
+    subpath: SubPath<'a>,
     segments: &mut Vec<Segment>,
     style: StrokeStyle,
     forward: bool,
-) -> Vec<Segment> {
+) {
     let (first, last) = match (segments.first(), segments.last()) {
         (Some(first), Some(last)) => (*first, *last),
-        _ => return Vec::new(),
+        _ => return,
     };
     let close = if forward {
         Line::new(subpath.end(), subpath.start())
@@ -628,7 +693,6 @@ fn stroke_close(
         }
         _ => segments.extend(last.line_join(first, style)),
     }
-    std::mem::take(segments)
 }
 
 pub struct PathFlattenIter<'a> {
@@ -673,7 +737,7 @@ impl Iterator for PathFlattenIter<'_> {
                     self.stack.push(s0);
                 }
                 None => {
-                    let subpath = self.path.subpaths.get(self.subpath_index)?;
+                    let subpath = self.path.get(self.subpath_index)?;
                     match subpath.segments().get(self.segment_index) {
                         None => {
                             self.subpath_index += 1;
@@ -699,8 +763,9 @@ impl Iterator for PathFlattenIter<'_> {
 #[derive(Clone)]
 pub struct PathBuilder {
     position: Point,
-    subpath: Vec<Segment>,
-    subpaths: Vec<SubPath>,
+    segments: Vec<Segment>,
+    subpaths: Vec<usize>,
+    closed: Vec<bool>,
 }
 
 impl Default for PathBuilder {
@@ -713,26 +778,57 @@ impl PathBuilder {
     pub fn new() -> Self {
         Self {
             position: Point::new(0.0, 0.0),
-            subpath: Default::default(),
-            subpaths: Default::default(),
+            segments: Vec::new(),
+            subpaths: Vec::new(),
+            closed: Vec::new(),
         }
     }
 
     pub fn from_path(path: Path) -> Self {
         let mut builder = Self::new();
+        builder.segments = path.segments;
         builder.subpaths = path.subpaths;
+        builder.closed = path.closed;
         builder
     }
 
     /// Build path
     pub fn build(&mut self) -> Path {
+        self.subpath_finish(false);
         let PathBuilder {
-            subpath,
-            mut subpaths,
+            segments,
+            subpaths,
+            closed,
             ..
         } = std::mem::take(self);
-        subpaths.extend(SubPath::new(subpath, false));
-        Path::new(subpaths)
+        Path::new(segments, subpaths, closed)
+    }
+
+    pub fn push(&mut self, segments: &[Segment], closed: bool) {
+        self.segments.extend(segments.iter().copied());
+        self.subpath_finish(closed);
+    }
+
+    /// Finish current subpath
+    fn subpath_finish(&mut self, close: bool) {
+        if self.segments.is_empty() || self.subpaths.last().copied() == Some(self.segments.len()) {
+            return;
+        }
+        if self.subpaths.is_empty() {
+            self.subpaths.push(0);
+        }
+        if close {
+            // if we close subpath, current position is set to start of the current subpath
+            if let Some(subpath_start) = self
+                .subpaths
+                .last()
+                .and_then(|first_index| Some(self.segments.get(*first_index)?.start()))
+            {
+                self.position = subpath_start;
+            }
+        }
+        self.subpaths.push(self.segments.len());
+        self.closed.push(close);
     }
 
     /// Extend path from string, which is specified in the same format as SVGs path element.
@@ -748,19 +844,14 @@ impl PathBuilder {
 
     /// Move current position, ending current subpath
     pub fn move_to(&mut self, p: impl Into<Point>) -> &mut Self {
-        let subpath = std::mem::take(&mut self.subpath);
-        self.subpaths.extend(SubPath::new(subpath, false));
+        self.subpath_finish(false);
         self.position = p.into();
         self
     }
 
     /// Close current subpath
     pub fn close(&mut self) -> &mut Self {
-        let subpath = std::mem::take(&mut self.subpath);
-        if let Some(seg) = subpath.first() {
-            self.position = seg.start();
-        }
-        self.subpaths.extend(SubPath::new(subpath, true));
+        self.subpath_finish(true);
         self
     }
 
@@ -770,7 +861,7 @@ impl PathBuilder {
         if !self.position.is_close_to(p) {
             let line = Line::new(self.position, p);
             self.position = line.end();
-            self.subpath.push(line.into());
+            self.segments.push(line.into());
         }
         self
     }
@@ -779,13 +870,13 @@ impl PathBuilder {
     pub fn quad_to(&mut self, p1: impl Into<Point>, p2: impl Into<Point>) -> &mut Self {
         let quad = Quad::new(self.position, p1, p2);
         self.position = quad.end();
-        self.subpath.push(quad.into());
+        self.segments.push(quad.into());
         self
     }
 
     /// Add smooth quadratic bezier curve
     pub fn quad_smooth_to(&mut self, p2: impl Into<Point>) -> &mut Self {
-        let p1 = match self.subpath.last() {
+        let p1 = match self.segments.last() {
             Some(Segment::Quad(quad)) => quad.smooth(),
             _ => self.position,
         };
@@ -801,13 +892,13 @@ impl PathBuilder {
     ) -> &mut Self {
         let cubic = Cubic::new(self.position, p1, p2, p3);
         self.position = cubic.end();
-        self.subpath.push(cubic.into());
+        self.segments.push(cubic.into());
         self
     }
 
     /// Add smooth cubic bezier curve
     pub fn cubic_smooth_to(&mut self, p2: impl Into<Point>, p3: impl Into<Point>) -> &mut Self {
-        let p1 = match self.subpath.last() {
+        let p1 = match self.segments.last() {
             Some(Segment::Cubic(cubic)) => cubic.smooth(),
             _ => self.position,
         };
@@ -837,7 +928,7 @@ impl PathBuilder {
         match arc {
             None => self.line_to(p),
             Some(arc) => {
-                self.subpath.extend(arc.to_cubics().map(Segment::from));
+                self.segments.extend(arc.to_cubics().map(Segment::from));
                 self.position = p;
                 self
             }
@@ -1144,6 +1235,19 @@ mod tests {
         "#.parse()?;
         assert_path_eq(&path_reference, &path_stroke);
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_reverse() -> Result<(), SvgParserError> {
+        let mut path: Path =
+            "M2,2L8,2C11,2 11,8 8,8L5,4ZM7,3L8,6C9,6 10,5 9,4ZM2,4Q2,8 3,8L5,8C6,8 2,3 2,4Z"
+                .parse()?;
+        path.reverse();
+        let path_reference =
+            "M2,4C2,3 6,8 5,8L3,8Q2,8 2,4ZM9,4C10,5 9,6 8,6L7,3ZM5,4L8,8C11,8 11,2 8,2L2,2Z"
+                .parse()?;
+        assert_path_eq(&path_reference, &path);
         Ok(())
     }
 }
