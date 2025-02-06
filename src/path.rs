@@ -238,33 +238,6 @@ impl fmt::Debug for Path {
     }
 }
 
-impl fmt::Display for Path {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        struct FormatterWrite<'a, 'b> {
-            fmt: &'a mut fmt::Formatter<'b>,
-        }
-
-        impl std::io::Write for FormatterWrite<'_, '_> {
-            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-                self.fmt
-                    .write_str(
-                        std::str::from_utf8(buf)
-                            .expect("Path generated non utf8 svg representation"),
-                    )
-                    .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
-                Ok(buf.len())
-            }
-
-            fn flush(&mut self) -> std::io::Result<()> {
-                Ok(())
-            }
-        }
-
-        self.write_svg_path(FormatterWrite { fmt })
-            .map_err(|_| std::fmt::Error)
-    }
-}
-
 impl Path {
     pub fn new(segments: Vec<Segment>, subpaths: Vec<usize>, closed: Vec<bool>) -> Self {
         Self {
@@ -554,38 +527,7 @@ impl Path {
 
     /// Save path in SVG path format.
     pub fn write_svg_path(&self, mut out: impl Write) -> std::io::Result<()> {
-        for subpath in self.subpaths() {
-            write!(out, "M{:?} ", subpath.start())?;
-            let mut segment_type: Option<u8> = None;
-            for segment in subpath.segments().iter() {
-                match segment {
-                    Segment::Line(line) => {
-                        if segment_type.replace(b'L') != Some(b'L') {
-                            out.write_all(b"L")?;
-                        }
-                        write!(out, "{:?} ", line.end())?;
-                    }
-                    Segment::Quad(quad) => {
-                        let [_, p1, p2] = quad.points();
-                        if segment_type.replace(b'Q') != Some(b'Q') {
-                            out.write_all(b"Q")?;
-                        }
-                        write!(out, "{:?} {:?} ", p1, p2)?;
-                    }
-                    Segment::Cubic(cubic) => {
-                        let [_, p1, p2, p3] = cubic.points();
-                        if segment_type.replace(b'C') != Some(b'C') {
-                            out.write_all(b"C")?;
-                        }
-                        write!(out, "{:?} {:?} {:?} ", p1, p2, p3)?;
-                    }
-                }
-            }
-            if subpath.is_closed() {
-                out.write_all(b"Z")?;
-            }
-        }
-        Ok(())
+        write!(out, "{}", self)
     }
 
     /// Load path from SVG path representation
@@ -597,9 +539,23 @@ impl Path {
         Ok(builder.build())
     }
 
+    pub fn display(&self, relative: bool, tr: Transform) -> PathSvgDisplay<'_> {
+        PathSvgDisplay {
+            path: self,
+            relative,
+            tr,
+        }
+    }
+
     /// Returns struct that prints command per line on debug formatting.
     pub fn verbose_debug(&self) -> PathVerboseDebug<'_> {
         PathVerboseDebug { path: self }
+    }
+}
+
+impl fmt::Display for Path {
+    fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(out, "{}", self.display(false, Transform::identity()))
     }
 }
 
@@ -614,6 +570,106 @@ impl fmt::Debug for PathVerboseDebug<'_> {
         } else {
             for subpath in self.path.subpaths.iter() {
                 subpath.fmt(f)?
+            }
+        }
+        Ok(())
+    }
+}
+
+pub struct PathSvgDisplay<'a> {
+    path: &'a Path,
+    relative: bool,
+    tr: Transform,
+}
+
+impl PathSvgDisplay<'_> {
+    // round floating point to only contain specified amount of digits
+    fn round_significant(x: f64, digits: usize) -> f64 {
+        if x == 0. || digits == 0 {
+            0.
+        } else {
+            let shift = digits as i32 - x.abs().log10().ceil() as i32;
+            let shift_factor = 10_f64.powi(shift);
+
+            (x * shift_factor).round() / shift_factor
+        }
+    }
+
+    fn fmt_point(
+        &self,
+        out: &mut fmt::Formatter<'_>,
+        point: Point,
+        previous: Option<Point>,
+        precision: usize,
+        sep: bool,
+    ) -> Result<Point, fmt::Error> {
+        let point_tr = self.tr.apply(point);
+        let point = previous.map_or_else(|| point_tr, |point_prev| point_tr - point_prev);
+
+        let x = Self::round_significant(point.x(), precision);
+        let y = Self::round_significant(point.y(), precision);
+        let eps = 10_f64.powi(-(precision as i32));
+        if sep && x >= 0.0 {
+            write!(out, " ")?;
+        }
+        if x.abs() < eps {
+            write!(out, "0")?;
+        } else {
+            write!(out, "{x}")?;
+        }
+        if y >= 0.0 {
+            write!(out, ",")?;
+        }
+        if y.abs() < eps {
+            write!(out, "0")?;
+        } else {
+            write!(out, "{y}")?;
+        }
+        Ok(point_tr)
+    }
+}
+
+impl fmt::Display for PathSvgDisplay<'_> {
+    fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let precision = out.precision().unwrap_or(4);
+        let mut previous: Option<Point> = None;
+        for subpath in self.path.subpaths() {
+            out.write_str(if self.relative && previous.is_some() {
+                "m"
+            } else {
+                "M"
+            })?;
+            let point_last = self.fmt_point(out, subpath.start(), previous, precision, false)?;
+            if self.relative {
+                previous = Some(point_last);
+            }
+
+            for segment in subpath.segments().iter() {
+                let point_last = match segment {
+                    Segment::Line(line) => {
+                        out.write_str(if self.relative { "l" } else { "L" })?;
+                        self.fmt_point(out, line.end(), previous, precision, false)?
+                    }
+                    Segment::Quad(quad) => {
+                        out.write_str(if self.relative { "q" } else { "Q" })?;
+                        let [_, p1, p2] = quad.points();
+                        self.fmt_point(out, p1, previous, precision, false)?;
+                        self.fmt_point(out, p2, previous, precision, true)?
+                    }
+                    Segment::Cubic(cubic) => {
+                        out.write_str(if self.relative { "c" } else { "C" })?;
+                        let [_, p1, p2, p3] = cubic.points();
+                        self.fmt_point(out, p1, previous, precision, false)?;
+                        self.fmt_point(out, p2, previous, precision, true)?;
+                        self.fmt_point(out, p3, previous, precision, true)?
+                    }
+                };
+                if self.relative {
+                    previous = Some(point_last);
+                }
+            }
+            if subpath.is_closed() {
+                write!(out, "Z")?;
             }
         }
         Ok(())
@@ -1248,6 +1304,23 @@ mod tests {
             "M2,4C2,3 6,8 5,8L3,8Q2,8 2,4ZM9,4C10,5 9,6 8,6L7,3ZM5,4L8,8C11,8 11,2 8,2L2,2Z"
                 .parse()?;
         assert_path_eq(&path_reference, &path);
+        Ok(())
+    }
+
+    #[test]
+    fn test_display() -> Result<(), SvgParserError> {
+        let path: Path = SQUIRREL.parse()?;
+
+        let path_display = format!("{}", path);
+        assert_path_eq(&path, &path_display.parse()?);
+        let path_reference = "M12,1C9.79,1 8,2.31 8,3.92C8,5.86 8.5,6.95 8,10C8,5.5 5.23,3.66 4,3.66C4.05,3.16 3.52,3 3.52,3C3.52,3 3.3,3.11 3.22,3.34C2.95,3.03 2.66,3.07 2.66,3.07L2.53,3.65C2.53,3.65 0.7,4.29 0.68,6.87C0.88,7.2 2.21,7.47 3.15,7.3C4.04,7.35 3.82,8.09 3.62,8.29C2.78,9.13 2,8 1,8C0,8 0,9 1,9C2,9 2,10 4,10C0.91,11.2 4,14 4,14L3,14C2,14 2,15 2,15L8,15C11,15 13,14 13,11.53C13,10.68 12.57,9.74 12,9C10.89,7.54 12.23,6.32 13,7C13.77,7.68 16,8 16,5C16,2.79 14.21,1 12,1ZM2.5,6C2.22,6 2,5.78 2,5.5C2,5.22 2.22,5 2.5,5C2.78,5 3,5.22 3,5.5C3,5.78 2.78,6 2.5,6Z";
+        assert_eq!(path_reference, path_display.as_str());
+
+        let path_relative = format!("{}", path.display(true, Transform::identity()));
+        assert_path_eq(&path, &path_relative.parse()?);
+        let path_reference = "M12,1c-2.21,0-4,1.31-4,2.92c0,1.94 0.5,3.03 0,6.08c0-4.5-2.77-6.34-4-6.34c0.05-0.5-0.48-0.66-0.48-0.66c0,0-0.22,0.11-0.3,0.34c-0.27-0.31-0.56-0.27-0.56-0.27l-0.13,0.58c0,0-1.83,0.64-1.85,3.22c0.2,0.33 1.53,0.6 2.47,0.43c0.89,0.05 0.67,0.79 0.47,0.99c-0.84,0.84-1.62-0.29-2.62-0.29c-1,0-1,1 0,1c1,0 1,1 3,1c-3.09,1.2 0,4 0,4l-1,0c-1,0-1,1-1,1l6,0c3,0 5-1 5-3.47c0-0.85-0.43-1.79-1-2.53c-1.11-1.46 0.23-2.68 1-2c0.77,0.68 3,1 3-2c0-2.21-1.79-4-4-4Zm-9.5,5c-0.28,0-0.5-0.22-0.5-0.5c0-0.28 0.22-0.5 0.5-0.5c0.28,0 0.5,0.22 0.5,0.5c0,0.28-0.22,0.5-0.5,0.5Z";
+        assert_eq!(path_reference, path_relative.as_str());
+
         Ok(())
     }
 }
