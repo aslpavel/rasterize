@@ -594,27 +594,16 @@ impl PathSvgDisplay<'_> {
     ) -> Result<Point, fmt::Error> {
         let point_tr = self.tr.apply(point);
         let point = previous.map_or_else(|| point_tr, |point_prev| point_tr - point_prev);
-
         let x = point.x();
         let y = point.y();
-        let eps = 10_f64.powi(-(out.precision().unwrap_or(4) as i32));
-
         if sep && x >= 0.0 {
             out.write_str(" ")?;
         }
-        if x.abs() < eps {
-            out.write_str("0")?;
-        } else {
-            out.write_str(formatter.format_str(x))?;
-        }
+        out.write_str(formatter.format_str(x))?;
         if y >= 0.0 {
             out.write_str(",")?;
         }
-        if y.abs() < eps {
-            out.write_str("0")?;
-        } else {
-            out.write_str(formatter.format_str(y))?;
-        }
+        out.write_str(formatter.format_str(y))?;
         Ok(point_tr)
     }
 }

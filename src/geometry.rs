@@ -71,9 +71,13 @@ impl ScalarFormatter {
     }
 
     pub fn round_significant(value: f64, precision: usize) -> f64 {
-        let shift = precision as i32 - value.abs().log10().ceil() as i32;
-        let shift_factor = 10_f64.powi(shift);
-        (value * shift_factor).round() / shift_factor
+        if value.abs() < EPSILON {
+            return 0.0;
+        } else {
+            let shift = precision as i32 - value.abs().log10().ceil() as i32;
+            let shift_factor = 10_f64.powi(shift);
+            (value * shift_factor).round() / shift_factor
+        }
     }
 }
 
@@ -823,6 +827,31 @@ mod tests {
         assert_eq!(result, expected);
 
         assert_eq!(expected, expected.to_string().parse()?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_scalar_format() -> Result<(), Error> {
+        let value: Scalar = 0.1234567;
+        assert_eq!(format!("{}", ScalarFormat(value)), "0.1235".to_owned());
+        assert_eq!(format!("{:#}", ScalarFormat(value)), "0.1235".to_owned());
+        assert_eq!(format!("{:.3}", ScalarFormat(value)), "0.123".to_owned());
+
+        let value: Scalar = 12.3001;
+        assert_eq!(format!("{}", ScalarFormat(value)), "12.30".to_owned());
+        assert_eq!(format!("{:#}", ScalarFormat(value)), "12.3".to_owned());
+        assert_eq!(format!("{:.3}", ScalarFormat(value)), "12.3".to_owned());
+
+        let value: Scalar = 12300.0;
+        assert_eq!(format!("{}", ScalarFormat(value)), "12300".to_owned());
+        assert_eq!(format!("{:#}", ScalarFormat(value)), "12300".to_owned());
+        assert_eq!(format!("{:.3}", ScalarFormat(value)), "12300".to_owned());
+
+        let value: Scalar = 0.0;
+        assert_eq!(format!("{}", ScalarFormat(value)), "0".to_owned());
+        assert_eq!(format!("{:#}", ScalarFormat(value)), "0".to_owned());
+        assert_eq!(format!("{:.3}", ScalarFormat(value)), "0".to_owned());
+
         Ok(())
     }
 }
