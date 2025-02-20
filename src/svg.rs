@@ -688,9 +688,9 @@ mod tests {
         "#;
         let tr_fmt = "matrix(6.56129 5.23393 -1.92617 -2.14614 -5.23999 -4.1231)";
         let tr = Transform::from_str(tr_str)?;
-        assert_eq!(format!("{tr:?}"), tr_fmt);
+        assert_eq!(format!("{tr:#?}"), tr_fmt);
         let tr = Transform::from_str(tr_fmt)?;
-        assert_eq!(format!("{tr:?}"), tr_fmt);
+        assert_eq!(format!("{tr:#?}"), tr_fmt);
         Ok(())
     }
 }

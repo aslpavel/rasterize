@@ -47,7 +47,9 @@ pub use curve::{
     Cubic, Curve, CurveExtremities, CurveFlattenIter, CurveRoots, Line, Quad, Segment,
 };
 pub use ellipse::EllipArc;
-pub use geometry::{scalar_fmt, Align, BBox, Point, Scalar, Transform, EPSILON, EPSILON_SQRT, PI};
+pub use geometry::{
+    Align, BBox, Point, Scalar, ScalarFormat, ScalarFormatter, Transform, EPSILON, EPSILON_SQRT, PI,
+};
 pub use grad::{GradLinear, GradRadial, GradSpread, GradStop, GradStops};
 pub use image::{
     Image, ImageIter, ImageMut, ImageMutIter, ImageMutRef, ImageOwned, ImageRef, Shape,

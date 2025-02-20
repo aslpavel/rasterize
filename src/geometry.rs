@@ -17,34 +17,80 @@ pub const EPSILON_SQRT: f64 = 1.490_116_119_384_765_6e-8;
 /// Mathematical pi constant
 pub const PI: f64 = std::f64::consts::PI;
 
-pub struct ScalarFmt(pub Scalar);
+const SCALAR_PRECISION: usize = 4;
+const SCALAR_FORMAT: u128 = lexical_core::NumberFormatBuilder::new()
+    .required_integer_digits(false)
+    .build();
+const SCALAR_FORMAT_OPTIONS: lexical_core::WriteFloatOptions =
+    lexical_core::WriteFloatOptions::builder()
+        .max_significant_digits(std::num::NonZero::new(SCALAR_PRECISION))
+        .trim_floats(true)
+        .build_unchecked();
 
-impl fmt::Debug for ScalarFmt {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let value = self.0;
-        let value_abs = value.abs();
-        if value_abs.fract() < EPSILON {
-            write!(f, "{}", value.trunc() as i64)
-        } else if value_abs > 9999.0 || value_abs <= 0.0001 {
-            write!(f, "{:.3e}", value)
-        } else {
-            let ten: Scalar = 10.0;
-            let round = ten.powi(6 - (value_abs.trunc() + 1.0).log10().ceil() as i32);
-            write!(f, "{}", (value * round).round() / round)
+pub struct ScalarFormatter {
+    precision: usize,
+    round: bool, // whether to preround (correctly removes)
+    options: lexical_core::WriteFloatOptions,
+    buffer: [u8; lexical_core::BUFFER_SIZE],
+}
+impl ScalarFormatter {
+    pub fn new(precision: Option<usize>, round: bool) -> Self {
+        let options = precision
+            .and_then(|precision| {
+                lexical_core::WriteFloatOptionsBuilder::new()
+                    .max_significant_digits(std::num::NonZero::new(precision))
+                    .trim_floats(true)
+                    .build()
+                    .ok()
+            })
+            .unwrap_or(SCALAR_FORMAT_OPTIONS);
+        Self {
+            precision: precision.unwrap_or(SCALAR_PRECISION),
+            options,
+            round,
+            buffer: [0u8; lexical_core::BUFFER_SIZE],
         }
     }
-}
 
-impl fmt::Display for ScalarFmt {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+    pub fn new_fmt(fmt: &fmt::Formatter<'_>) -> Self {
+        Self::new(fmt.precision(), fmt.alternate())
+    }
+
+    pub fn format(&mut self, mut value: Scalar) -> &[u8] {
+        if self.round {
+            value = Self::round_significant(value, self.precision);
+        }
+        lexical_core::write_with_options::<_, SCALAR_FORMAT>(value, &mut self.buffer, &self.options)
+    }
+
+    pub fn format_str(&mut self, value: Scalar) -> &str {
+        unsafe {
+            // SAFETY: trust lexical to produce valid utf-8 string
+            std::str::from_utf8_unchecked(self.format(value))
+        }
+    }
+
+    pub fn round_significant(value: f64, precision: usize) -> f64 {
+        let shift = precision as i32 - value.abs().log10().ceil() as i32;
+        let shift_factor = 10_f64.powi(shift);
+        (value * shift_factor).round() / shift_factor
     }
 }
 
-/// Format floats in a compact way suitable for SVG path
-pub fn scalar_fmt(f: &mut fmt::Formatter<'_>, value: Scalar) -> fmt::Result {
-    use std::fmt::Debug;
-    ScalarFmt(value).fmt(f)
+pub struct ScalarFormat(pub Scalar);
+
+impl fmt::Debug for ScalarFormat {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut formatter = ScalarFormatter::new_fmt(fmt);
+        fmt.write_str(formatter.format_str(self.0))
+    }
+}
+
+impl fmt::Display for ScalarFormat {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut formatter = ScalarFormatter::new_fmt(fmt);
+        fmt.write_str(formatter.format_str(self.0))
+    }
 }
 
 /// Value representing a 2D point or vector.
@@ -62,11 +108,12 @@ impl std::hash::Hash for Point {
 }
 
 impl fmt::Debug for Point {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Point([x, y]) = self;
-        scalar_fmt(f, *x)?;
-        write!(f, ",")?;
-        scalar_fmt(f, *y)?;
+        let mut formatter = ScalarFormatter::new_fmt(fmt);
+        fmt.write_str(formatter.format_str(*x))?;
+        fmt.write_str(",")?;
+        fmt.write_str(formatter.format_str(*y))?;
         Ok(())
     }
 }
@@ -278,15 +325,16 @@ impl fmt::Debug for Transform {
 }
 
 impl fmt::Display for Transform {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut formatter = ScalarFormatter::new(fmt.precision().or(Some(6)), fmt.alternate());
         let Self([m00, m01, m02, m10, m11, m12]) = self;
-        write!(f, "matrix(")?;
+        fmt.write_str("matrix(")?;
         for val in [m00, m10, m01, m11, m02] {
-            scalar_fmt(f, *val)?;
-            write!(f, " ")?;
+            fmt.write_str(formatter.format_str(*val))?;
+            fmt.write_str(" ")?;
         }
-        scalar_fmt(f, *m12)?;
-        write!(f, ")")?;
+        fmt.write_str(formatter.format_str(*m12))?;
+        fmt.write_str(")")?;
         Ok(())
     }
 }
@@ -633,25 +681,26 @@ impl FromStr for BBox {
 }
 
 impl fmt::Display for BBox {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} {} {} {}",
-            ScalarFmt(self.x()),
-            ScalarFmt(self.y()),
-            ScalarFmt(self.width()),
-            ScalarFmt(self.height())
-        )
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut formatter = ScalarFormatter::new_fmt(fmt);
+        fmt.write_str(formatter.format_str(self.x()))?;
+        fmt.write_str(" ")?;
+        fmt.write_str(formatter.format_str(self.y()))?;
+        fmt.write_str(" ")?;
+        fmt.write_str(formatter.format_str(self.width()))?;
+        fmt.write_str(" ")?;
+        fmt.write_str(formatter.format_str(self.height()))
     }
 }
 
 impl fmt::Debug for BBox {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("BBox")
-            .field("x", &ScalarFmt(self.x()))
-            .field("y", &ScalarFmt(self.y()))
-            .field("w", &ScalarFmt(self.width()))
-            .field("h", &ScalarFmt(self.height()))
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut formatter = ScalarFormatter::new_fmt(fmt);
+        fmt.debug_struct("BBox")
+            .field("x", &formatter.format_str(self.x()))
+            .field("y", &formatter.format_str(self.y()))
+            .field("w", &formatter.format_str(self.width()))
+            .field("h", &formatter.format_str(self.height()))
             .finish()
     }
 }

@@ -1,7 +1,7 @@
 use crate::{
     curve::line_offset, rasterize::Rasterizer, utils::clamp, BBox, Cubic, Curve, EllipArc,
-    ImageMut, LinColor, Line, Paint, Point, Quad, Scalar, Segment, Size, SvgParserError,
-    SvgPathParser, Transform, EPSILON,
+    ImageMut, LinColor, Line, Paint, Point, Quad, Scalar, ScalarFormatter, Segment, Size,
+    SvgParserError, SvgPathParser, Transform, EPSILON,
 };
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -230,12 +230,6 @@ pub struct Path {
     /// segments[subpath[i]..subpath[i+1]] represents i-th subpath
     subpaths: Vec<usize>,
     closed: Vec<bool>,
-}
-
-impl fmt::Debug for Path {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
-    }
 }
 
 impl Path {
@@ -553,9 +547,16 @@ impl Path {
     }
 }
 
+impl fmt::Debug for Path {
+    fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use std::fmt::Display;
+        self.display(false, Transform::identity()).fmt(out)
+    }
+}
+
 impl fmt::Display for Path {
     fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(out, "{}", self.display(false, Transform::identity()))
+        self.display(false, Transform::identity()).fmt(out)
     }
 }
 
@@ -583,47 +584,36 @@ pub struct PathSvgDisplay<'a> {
 }
 
 impl PathSvgDisplay<'_> {
-    // round floating point to only contain specified amount of digits
-    fn round_significant(x: f64, digits: usize) -> f64 {
-        if x == 0. || digits == 0 {
-            0.
-        } else {
-            let shift = digits as i32 - x.abs().log10().ceil() as i32;
-            let shift_factor = 10_f64.powi(shift);
-
-            (x * shift_factor).round() / shift_factor
-        }
-    }
-
     fn fmt_point(
         &self,
         out: &mut fmt::Formatter<'_>,
+        formatter: &mut ScalarFormatter,
         point: Point,
         previous: Option<Point>,
-        precision: usize,
         sep: bool,
     ) -> Result<Point, fmt::Error> {
         let point_tr = self.tr.apply(point);
         let point = previous.map_or_else(|| point_tr, |point_prev| point_tr - point_prev);
 
-        let x = Self::round_significant(point.x(), precision);
-        let y = Self::round_significant(point.y(), precision);
-        let eps = 10_f64.powi(-(precision as i32));
+        let x = point.x();
+        let y = point.y();
+        let eps = 10_f64.powi(-(out.precision().unwrap_or(4) as i32));
+
         if sep && x >= 0.0 {
-            write!(out, " ")?;
+            out.write_str(" ")?;
         }
         if x.abs() < eps {
-            write!(out, "0")?;
+            out.write_str("0")?;
         } else {
-            write!(out, "{x}")?;
+            out.write_str(formatter.format_str(x))?;
         }
         if y >= 0.0 {
-            write!(out, ",")?;
+            out.write_str(",")?;
         }
         if y.abs() < eps {
-            write!(out, "0")?;
+            out.write_str("0")?;
         } else {
-            write!(out, "{y}")?;
+            out.write_str(formatter.format_str(y))?;
         }
         Ok(point_tr)
     }
@@ -631,7 +621,7 @@ impl PathSvgDisplay<'_> {
 
 impl fmt::Display for PathSvgDisplay<'_> {
     fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let precision = out.precision().unwrap_or(4);
+        let mut formatter = ScalarFormatter::new_fmt(out);
         let mut previous: Option<Point> = None;
         for subpath in self.path.subpaths() {
             out.write_str(if self.relative && previous.is_some() {
@@ -639,7 +629,8 @@ impl fmt::Display for PathSvgDisplay<'_> {
             } else {
                 "M"
             })?;
-            let point_last = self.fmt_point(out, subpath.start(), previous, precision, false)?;
+            let point_last =
+                self.fmt_point(out, &mut formatter, subpath.start(), previous, false)?;
             if self.relative {
                 previous = Some(point_last);
             }
@@ -648,20 +639,20 @@ impl fmt::Display for PathSvgDisplay<'_> {
                 let point_last = match segment {
                     Segment::Line(line) => {
                         out.write_str(if self.relative { "l" } else { "L" })?;
-                        self.fmt_point(out, line.end(), previous, precision, false)?
+                        self.fmt_point(out, &mut formatter, line.end(), previous, false)?
                     }
                     Segment::Quad(quad) => {
                         out.write_str(if self.relative { "q" } else { "Q" })?;
                         let [_, p1, p2] = quad.points();
-                        self.fmt_point(out, p1, previous, precision, false)?;
-                        self.fmt_point(out, p2, previous, precision, true)?
+                        self.fmt_point(out, &mut formatter, p1, previous, false)?;
+                        self.fmt_point(out, &mut formatter, p2, previous, true)?
                     }
                     Segment::Cubic(cubic) => {
                         out.write_str(if self.relative { "c" } else { "C" })?;
                         let [_, p1, p2, p3] = cubic.points();
-                        self.fmt_point(out, p1, previous, precision, false)?;
-                        self.fmt_point(out, p2, previous, precision, true)?;
-                        self.fmt_point(out, p3, previous, precision, true)?
+                        self.fmt_point(out, &mut formatter, p1, previous, false)?;
+                        self.fmt_point(out, &mut formatter, p2, previous, true)?;
+                        self.fmt_point(out, &mut formatter, p3, previous, true)?
                     }
                 };
                 if self.relative {
@@ -1115,7 +1106,7 @@ mod tests {
     use crate::{assert_approx_eq, PI};
 
     fn assert_path_eq(p0: &Path, p1: &Path) {
-        assert_eq!(format!("{:?}", p0), format!("{:?}", p1));
+        assert_eq!(format!("{:#}", p0), format!("{:#}", p1));
     }
 
     #[test]
@@ -1264,7 +1255,6 @@ mod tests {
             width: 1.0,
             line_cap: LineCap::Round,
             line_join: LineJoin::Round,
-            ..Default::default()
         });
         let path_reference: Path = r#"
         M2,1.5 L8,1.5 C9.80902,1.5 10.75,3.38197 10.75,5 10.75,6.61803 9.80902,8.5 8,8.5 7.84274,8.5 7.69436,8.42581
@@ -1281,7 +1271,6 @@ mod tests {
             width: 1.0,
             line_cap: LineCap::Round,
             line_join: LineJoin::Round,
-            ..Default::default()
         });
         let path_reference: Path = r#"
         M2,1.5 L8,1.5 C9.80902,1.5 10.75,3.38197 10.75,5 10.75,6.61803 9.80902,8.5 8,8.5 7.84274,8.5 7.69436,8.42581
@@ -1311,12 +1300,12 @@ mod tests {
     fn test_display() -> Result<(), SvgParserError> {
         let path: Path = SQUIRREL.parse()?;
 
-        let path_display = format!("{}", path);
+        let path_display = format!("{:#}", path);
         assert_path_eq(&path, &path_display.parse()?);
         let path_reference = "M12,1C9.79,1 8,2.31 8,3.92C8,5.86 8.5,6.95 8,10C8,5.5 5.23,3.66 4,3.66C4.05,3.16 3.52,3 3.52,3C3.52,3 3.3,3.11 3.22,3.34C2.95,3.03 2.66,3.07 2.66,3.07L2.53,3.65C2.53,3.65 0.7,4.29 0.68,6.87C0.88,7.2 2.21,7.47 3.15,7.3C4.04,7.35 3.82,8.09 3.62,8.29C2.78,9.13 2,8 1,8C0,8 0,9 1,9C2,9 2,10 4,10C0.91,11.2 4,14 4,14L3,14C2,14 2,15 2,15L8,15C11,15 13,14 13,11.53C13,10.68 12.57,9.74 12,9C10.89,7.54 12.23,6.32 13,7C13.77,7.68 16,8 16,5C16,2.79 14.21,1 12,1ZM2.5,6C2.22,6 2,5.78 2,5.5C2,5.22 2.22,5 2.5,5C2.78,5 3,5.22 3,5.5C3,5.78 2.78,6 2.5,6Z";
         assert_eq!(path_reference, path_display.as_str());
 
-        let path_relative = format!("{}", path.display(true, Transform::identity()));
+        let path_relative = format!("{:#}", path.display(true, Transform::identity()));
         assert_path_eq(&path, &path_relative.parse()?);
         let path_reference = "M12,1c-2.21,0-4,1.31-4,2.92c0,1.94 0.5,3.03 0,6.08c0-4.5-2.77-6.34-4-6.34c0.05-0.5-0.48-0.66-0.48-0.66c0,0-0.22,0.11-0.3,0.34c-0.27-0.31-0.56-0.27-0.56-0.27l-0.13,0.58c0,0-1.83,0.64-1.85,3.22c0.2,0.33 1.53,0.6 2.47,0.43c0.89,0.05 0.67,0.79 0.47,0.99c-0.84,0.84-1.62-0.29-2.62-0.29c-1,0-1,1 0,1c1,0 1,1 3,1c-3.09,1.2 0,4 0,4l-1,0c-1,0-1,1-1,1l6,0c3,0 5-1 5-3.47c0-0.85-0.43-1.79-1-2.53c-1.11-1.46 0.23-2.68 1-2c0.77,0.68 3,1 3-2c0-2.21-1.79-4-4-4Zm-9.5,5c-0.28,0-0.5-0.22-0.5-0.5c0-0.28 0.22-0.5 0.5-0.5c0.28,0 0.5,0.22 0.5,0.5c0,0.28-0.22,0.5-0.5,0.5Z";
         assert_eq!(path_reference, path_relative.as_str());
