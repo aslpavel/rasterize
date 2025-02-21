@@ -42,20 +42,20 @@ pub use crate::rasterize::{
 };
 #[cfg(feature = "serde")]
 pub use color::RGBADeserializer;
-pub use color::{linear_to_srgb, srgb_to_linear, Color, ColorError, LinColor, RGBA, SVG_COLORS};
+pub use color::{Color, ColorError, LinColor, RGBA, SVG_COLORS, linear_to_srgb, srgb_to_linear};
 pub use curve::{
     Cubic, Curve, CurveExtremities, CurveFlattenIter, CurveRoots, Line, Quad, Segment,
 };
 pub use ellipse::EllipArc;
 pub use geometry::{
-    Align, BBox, Point, Scalar, ScalarFormat, ScalarFormatter, Transform, EPSILON, EPSILON_SQRT, PI,
+    Align, BBox, EPSILON, EPSILON_SQRT, PI, Point, Scalar, ScalarFormat, ScalarFormatter, Transform,
 };
 pub use grad::{GradLinear, GradRadial, GradSpread, GradStop, GradStops};
 pub use image::{
     Image, ImageIter, ImageMut, ImageMutIter, ImageMutRef, ImageOwned, ImageRef, Shape,
 };
 pub use path::{
-    FillRule, LineCap, LineJoin, Path, PathBuilder, StrokeStyle, SubPath, DEFAULT_FLATNESS,
+    DEFAULT_FLATNESS, FillRule, LineCap, LineJoin, Path, PathBuilder, StrokeStyle, SubPath,
 };
 pub use scene::{Layer, Scene};
 pub use svg::{SvgParserError, SvgPathCmd, SvgPathParser};

@@ -356,8 +356,14 @@ fn generate_font(
     glyphs: impl IntoIterator<Item = Glyph>,
 ) -> Result<(), std::io::Error> {
     writeln!(out, "<?xml version=\"1.0\" standalone=\"no\"?>")?;
-    writeln!(out, "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\" >")?;
-    writeln!(out, "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" version=\"1.1\"> ")?;
+    writeln!(
+        out,
+        "<!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd\" >"
+    )?;
+    writeln!(
+        out,
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" version=\"1.1\"> "
+    )?;
     writeln!(out, "<defs>")?;
     writeln!(out, "  <font horiz-adv-x=\"500\">")?;
     writeln!(out, "  <font-face")?;

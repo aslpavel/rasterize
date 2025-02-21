@@ -1,12 +1,12 @@
 //! All the things you need to handle bezier curves
 
 use crate::{
+    BBox, EPSILON, EllipArc, LineCap, LineJoin, Point, Scalar, StrokeStyle, SvgParserError,
+    SvgPathCmd, SvgPathParser, Transform,
     utils::{
-        clamp, cubic_solve, integrate_quadrature, quadratic_solve, ArrayIter, M3x3, M4x4,
-        QUADRATURE_16, QUADRATURE_32,
+        ArrayIter, M3x3, M4x4, QUADRATURE_16, QUADRATURE_32, clamp, cubic_solve,
+        integrate_quadrature, quadratic_solve,
     },
-    BBox, EllipArc, LineCap, LineJoin, Point, Scalar, StrokeStyle, SvgParserError, SvgPathCmd,
-    SvgPathParser, Transform, EPSILON,
 };
 use std::{fmt, io::Cursor, str::FromStr};
 
@@ -834,7 +834,14 @@ impl Curve for Cubic {
     fn roots(&self) -> CurveRoots {
         let mut result = CurveRoots::new();
         // curve(t)_y = 0
-        let Self([Point([_, y0]), Point([_, y1]), Point([_, y2]), Point([_, y3])]) = *self;
+        let Self(
+            [
+                Point([_, y0]),
+                Point([_, y1]),
+                Point([_, y2]),
+                Point([_, y3]),
+            ],
+        ) = *self;
         let a = -y0 + 3.0 * y1 - 3.0 * y2 + y3;
         let b = 3.0 * y0 - 6.0 * y1 + 3.0 * y2;
         let c = -3.0 * y0 + 3.0 * y1;

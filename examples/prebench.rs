@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Instant};
 
 use rasterize::{
-    BBox, FillRule, Image, LinColor, Path, Point, Scalar, Scene, Size, Transform, RGBA,
+    BBox, FillRule, Image, LinColor, Path, Point, RGBA, Scalar, Scene, Size, Transform,
 };
 
 type Error = Box<dyn std::error::Error>;

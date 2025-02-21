@@ -1,7 +1,7 @@
-use crate::{simd::f32x4, Paint, Point, Scalar, Transform, Units};
+use crate::{Paint, Point, Scalar, Transform, Units, simd::f32x4};
 use bytemuck::{Pod, Zeroable};
 #[cfg(feature = "serde")]
-use serde::{de::DeserializeSeed, Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de::DeserializeSeed};
 use std::{
     collections::HashMap,
     fmt,
@@ -115,7 +115,7 @@ impl RGBA {
             };
             let mut hex = bytes
                 .chunks(2)
-                .map(|pair| Ok(digit(pair[0])? << 4 | digit(pair[1])?));
+                .map(|pair| Ok((digit(pair[0])? << 4) | digit(pair[1])?));
             RGBA::new(
                 hex.next().unwrap_or(Ok(0))?,
                 hex.next().unwrap_or(Ok(0))?,

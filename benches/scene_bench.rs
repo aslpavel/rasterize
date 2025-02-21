@@ -1,6 +1,6 @@
 #![deny(warnings)]
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
-use rasterize::{BBox, FillRule, LinColor, Path, Point, Scalar, Scene, Size, Transform, RGBA};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
+use rasterize::{BBox, FillRule, LinColor, Path, Point, RGBA, Scalar, Scene, Size, Transform};
 use std::sync::Arc;
 
 fn many_cirles_benchmark(c: &mut Criterion) {

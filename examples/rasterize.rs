@@ -8,7 +8,7 @@ use std::{
     io::{BufWriter, Read},
     sync::Arc,
 };
-use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt::format::FmtSpan};
 
 type Error = Box<dyn std::error::Error>;
 

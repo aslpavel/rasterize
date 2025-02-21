@@ -1,7 +1,7 @@
 use crate::{
-    curve::line_offset, rasterize::Rasterizer, utils::clamp, BBox, Cubic, Curve, EllipArc,
-    ImageMut, LinColor, Line, Paint, Point, Quad, Scalar, ScalarFormatter, Segment, Size,
-    SvgParserError, SvgPathParser, Transform, EPSILON,
+    BBox, Cubic, Curve, EPSILON, EllipArc, ImageMut, LinColor, Line, Paint, Point, Quad, Scalar,
+    ScalarFormatter, Segment, Size, SvgParserError, SvgPathParser, Transform, curve::line_offset,
+    rasterize::Rasterizer, utils::clamp,
 };
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -1092,7 +1092,7 @@ impl<'de> Deserialize<'de> for Path {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{assert_approx_eq, PI};
+    use crate::{PI, assert_approx_eq};
 
     fn assert_path_eq(p0: &Path, p1: &Path) {
         assert_eq!(format!("{:#}", p0), format!("{:#}", p1));

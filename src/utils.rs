@@ -1,5 +1,5 @@
 //! Utility functions and types used across the library
-use crate::{Scalar, EPSILON, PI};
+use crate::{EPSILON, PI, Scalar};
 use std::{fmt, iter::FusedIterator, ops::Mul};
 
 /// Restrict value to a certain interval
@@ -400,7 +400,7 @@ pub(crate) fn is_default<T: Default + PartialEq>(val: &T) -> bool {
 /// by adding `#[serde(with = "serde_from_str")]`
 #[cfg(feature = "serde")]
 pub(crate) mod serde_from_str {
-    use serde::{de, Deserialize, Deserializer, Serializer};
+    use serde::{Deserialize, Deserializer, Serializer, de};
     use std::{borrow::Cow, fmt::Display, str::FromStr};
 
     pub fn serialize<T, S>(value: &T, serializer: S) -> Result<S::Ok, S::Error>

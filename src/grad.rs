@@ -1,6 +1,6 @@
-use crate::{utils::quadratic_solve, Color, LinColor, Paint, Point, Scalar, Transform, Units};
+use crate::{Color, LinColor, Paint, Point, Scalar, Transform, Units, utils::quadratic_solve};
 #[cfg(feature = "serde")]
-use serde::{de, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de};
 use std::cmp::Ordering;
 
 /// Gradient spread logic for the parameter smaller than 0 and greater than 1

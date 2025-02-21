@@ -1,6 +1,6 @@
 use crate::{
-    utils::clamp, ArcPaint, BBox, Color, FillRule, Image, ImageMut, ImageOwned, LinColor, Paint,
-    Path, Rasterizer, Scalar, Shape, Size, StrokeStyle, Transform, Units,
+    ArcPaint, BBox, Color, FillRule, Image, ImageMut, ImageOwned, LinColor, Paint, Path,
+    Rasterizer, Scalar, Shape, Size, StrokeStyle, Transform, Units, utils::clamp,
 };
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -588,7 +588,7 @@ mod serde_paint {
     use crate::{GradLinear, GradRadial, LinColor};
 
     use super::{Arc, ArcPaint};
-    use serde::{de, ser, Deserialize, Deserializer, Serialize, Serializer};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser};
     use serde_json::Value;
 
     pub fn serialize<S>(paint: &ArcPaint, serializer: S) -> Result<S::Ok, S::Error>

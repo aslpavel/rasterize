@@ -26,8 +26,8 @@
 //!  - this method is slower
 //!  - but requires less memory
 use crate::{
-    Color, Curve, FillRule, ImageMut, ImageOwned, LinColor, Line, Path, Point, Scalar, Transform,
-    DEFAULT_FLATNESS, EPSILON, EPSILON_SQRT,
+    Color, Curve, DEFAULT_FLATNESS, EPSILON, EPSILON_SQRT, FillRule, ImageMut, ImageOwned,
+    LinColor, Line, Path, Point, Scalar, Transform,
 };
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -939,7 +939,7 @@ fn split_at_zero_x(line: Line) -> (Line, Option<Line>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{assert_approx_eq, Image};
+    use crate::{Image, assert_approx_eq};
     type Error = Box<dyn std::error::Error>;
 
     #[test]

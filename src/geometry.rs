@@ -1,7 +1,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-use crate::{utils::clamp, Line, Size, SvgParserError};
+use crate::{Line, Size, SvgParserError, utils::clamp};
 use std::{
     fmt,
     ops::{Add, Div, Mul, Sub},
@@ -72,7 +72,7 @@ impl ScalarFormatter {
 
     pub fn round_significant(value: f64, precision: usize) -> f64 {
         if value.abs() < EPSILON {
-            return 0.0;
+            0.0
         } else {
             let shift = precision as i32 - value.abs().log10().ceil() as i32;
             let shift_factor = 10_f64.powi(shift);
@@ -734,7 +734,7 @@ impl<'de> Deserialize<'de> for BBox {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{assert_approx_eq, Curve};
+    use crate::{Curve, assert_approx_eq};
     type Error = Box<dyn std::error::Error>;
 
     #[test]
@@ -801,16 +801,18 @@ mod tests {
         assert!(tr2.apply(s2.min).is_close_to(Point::new(3.0, 10.0)));
 
         let tr3 = Transform::fit_bbox(s1, d, Align::Mid);
-        assert!(tr3
-            .apply((s1.min + s1.max) / 2.0)
-            .is_close_to((d.min + d.max) / 2.0));
+        assert!(
+            tr3.apply((s1.min + s1.max) / 2.0)
+                .is_close_to((d.min + d.max) / 2.0)
+        );
         assert!(tr3.apply(s1.min).is_close_to(Point::new(5.5, 5.0)));
         assert!(tr3.apply(s1.max).is_close_to(Point::new(10.5, 15.0)));
 
         let tr4 = Transform::fit_bbox(s2, d, Align::Mid);
-        assert!(tr4
-            .apply((s2.min + s2.max) / 2.0)
-            .is_close_to((d.min + d.max) / 2.0));
+        assert!(
+            tr4.apply((s2.min + s2.max) / 2.0)
+                .is_close_to((d.min + d.max) / 2.0)
+        );
         assert!(tr4.apply(s2.min).is_close_to(Point::new(3.0, 7.5)));
         assert!(tr4.apply(s2.max).is_close_to(Point::new(13.0, 12.5)));
 

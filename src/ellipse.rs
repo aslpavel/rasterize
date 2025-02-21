@@ -1,4 +1,4 @@
-use crate::{BBox, Cubic, Curve, CurveFlattenIter, Line, Point, Scalar, Transform, PI};
+use crate::{BBox, Cubic, Curve, CurveFlattenIter, Line, PI, Point, Scalar, Transform};
 use std::fmt;
 
 /// Elliptical Arc

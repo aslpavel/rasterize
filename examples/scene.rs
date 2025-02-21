@@ -6,7 +6,7 @@ use std::{
     io::{BufReader, BufWriter},
 };
 use tracing::debug_span;
-use tracing_subscriber::{fmt::format::FmtSpan, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt::format::FmtSpan};
 
 type Error = Box<dyn std::error::Error>;
 
