@@ -5,7 +5,8 @@ use rasterize::*;
 use std::{
     env,
     fs::File,
-    io::{BufWriter, Read},
+    io::{BufWriter, Read, Write},
+    str::FromStr,
     sync::Arc,
 };
 use tracing_subscriber::{EnvFilter, fmt::format::FmtSpan};
@@ -18,10 +19,42 @@ enum RasterizerType {
     SignedDifference,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum OutputFormat {
+    Bmp,
+    Rgba,
+    Png,
+}
+
+impl OutputFormat {
+    fn write(self, image: &Layer<LinColor>, out: impl Write) -> Result<(), Error> {
+        match self {
+            OutputFormat::Bmp => image.write_bmp(out)?,
+            OutputFormat::Png => image.write_png(out)?,
+            OutputFormat::Rgba => image.write_rgba(out)?,
+        }
+        Ok(())
+    }
+}
+
+impl FromStr for OutputFormat {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "bmp" => Ok(OutputFormat::Bmp),
+            "png" => Ok(OutputFormat::Png),
+            "rgba" => Ok(OutputFormat::Rgba),
+            _ => Err(format!("Invalid output format: {s}").into()),
+        }
+    }
+}
+
 #[derive(Debug)]
 struct Args {
     input_file: String,
     output_file: String,
+    output_format: OutputFormat,
     outline: bool,
     width: Option<usize>,
     stroke: Option<Scalar>,
@@ -46,6 +79,7 @@ impl Args {
         let mut result = Args {
             input_file: String::new(),
             output_file: String::new(),
+            output_format: OutputFormat::Bmp,
             outline: false,
             width: None,
             stroke: None,
@@ -82,6 +116,10 @@ impl Args {
                 }
                 "-o" => {
                     result.outline = true;
+                }
+                "-of" => {
+                    let format = args.next().ok_or("-of requries argument")?.parse()?;
+                    result.output_format = format;
                 }
                 "-a" => {
                     result.rasterizer = RasterizerType::ActiveEdge;
@@ -123,7 +161,7 @@ impl Args {
             );
             eprintln!("\nUSAGE:");
             eprintln!(
-                "    {} [-w <width>] [-b <bbox>] [-s <stroke>] [-f <flatness>] [-o] [-a] [-fg <color>] [-bg <color>] <file.path> <out.bmp>",
+                "    {} [-w <width>] [-b <bbox>] [-s <stroke>] [-f <flatness>] [-o] [-of <format>] [-a] [-fg <color>] [-bg <color>] <file.path> <output_file>",
                 cmd
             );
             eprintln!("\nARGS:");
@@ -132,6 +170,7 @@ impl Args {
             eprintln!("    -t <transform>     apply transform");
             eprintln!("    -s <stroke_width>  stroke path before rendering");
             eprintln!("    -o                 show outline with control points instead of filling");
+            eprintln!("    -of <format>       output file format (bmp, png, rgba)");
             eprintln!(
                 "    -a                 use active-edge instead of signed-difference rasterizer"
             );
@@ -315,9 +354,9 @@ fn main() -> Result<(), Error> {
         let _ = save.enter();
         if args.output_file != "-" {
             let mut image_file = BufWriter::new(File::create(args.output_file)?);
-            image.write_bmp(&mut image_file)?;
+            args.output_format.write(&image, &mut image_file)?;
         } else {
-            image.write_bmp(std::io::stdout())?;
+            args.output_format.write(&image, std::io::stdout())?;
         }
     }
 
