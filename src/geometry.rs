@@ -487,16 +487,32 @@ impl Transform {
     }
 
     /// Create transformation needed to fit source bounding box to provided size image
-    pub fn fit_size(src: BBox, size: Size, align: Align) -> Transform {
-        let dst = if size.width < 3 || size.height < 3 {
-            BBox::new((0.0, 0.0), (size.width as Scalar, size.height as Scalar))
-        } else {
-            BBox::new(
-                (1.0, 1.0),
-                ((size.width - 1) as Scalar, (size.height - 1) as Scalar),
-            )
+    pub fn fit_size(src: BBox, size: Size, align: Align) -> (Size, Transform) {
+        let src = {
+            let min = Point::new(src.min().x().floor(), src.min().y().floor());
+            let max = Point::new(src.max().x().ceil(), src.max().y().ceil());
+            BBox::new(min, max)
         };
-        Transform::fit_bbox(src, dst, align)
+        let (height, width) = match (size.height, size.width) {
+            (0, 0) => (src.height(), src.width()),
+            (height, 0) => {
+                let height = height as Scalar;
+                (height, (src.width() * height / src.height()).ceil())
+            }
+            (0, width) => {
+                let width = width as Scalar;
+                ((src.height() * width / src.width()).ceil(), width)
+            }
+            (height, width) => (height as Scalar, width as Scalar),
+        };
+        let dst = BBox::new((0.0, 0.0), (width, height));
+        (
+            Size {
+                height: height as usize,
+                width: width as usize,
+            },
+            Transform::fit_bbox(src, dst, align),
+        )
     }
 }
 

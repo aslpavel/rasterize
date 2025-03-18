@@ -1059,11 +1059,7 @@ impl FromStr for Path {
     type Err = SvgParserError;
 
     fn from_str(text: &str) -> Result<Path, Self::Err> {
-        let mut builder = PathBuilder::new();
-        for cmd in SvgPathParser::new(Cursor::new(text)) {
-            cmd?.apply(&mut builder);
-        }
-        Ok(builder.build())
+        Ok(Path::read_svg_path(Cursor::new(text))?)
     }
 }
 

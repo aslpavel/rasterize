@@ -5,7 +5,7 @@ use rasterize::*;
 use std::{
     env,
     fs::File,
-    io::{BufWriter, Read, Write},
+    io::{BufReader, BufWriter, Read, Write},
     str::FromStr,
     sync::Arc,
 };
@@ -23,6 +23,7 @@ enum RasterizerType {
 enum OutputFormat {
     Bmp,
     Rgba,
+    #[cfg(feature = "png")]
     Png,
 }
 
@@ -30,6 +31,7 @@ impl OutputFormat {
     fn write(self, image: &Layer<LinColor>, out: impl Write) -> Result<(), Error> {
         match self {
             OutputFormat::Bmp => image.write_bmp(out)?,
+            #[cfg(feature = "png")]
             OutputFormat::Png => image.write_png(out)?,
             OutputFormat::Rgba => image.write_rgba(out)?,
         }
@@ -43,8 +45,11 @@ impl FromStr for OutputFormat {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "bmp" => Ok(OutputFormat::Bmp),
-            "png" => Ok(OutputFormat::Png),
             "rgba" => Ok(OutputFormat::Rgba),
+            #[cfg(feature = "png")]
+            "png" => Ok(OutputFormat::Png),
+            #[cfg(not(feature = "png"))]
+            "png" => Err("png feature is disabled".into()),
             _ => Err(format!("Invalid output format: {s}").into()),
         }
     }
@@ -56,14 +61,14 @@ struct Args {
     output_file: String,
     output_format: OutputFormat,
     outline: bool,
-    width: Option<usize>,
+    size: Size,
     stroke: Option<Scalar>,
     flatness: Scalar,
     rasterizer: RasterizerType,
-    tr: Transform,
+    tr: Option<Transform>,
     fg: Option<LinColor>,
     bg: Option<LinColor>,
-    bbox: Option<BBox>,
+    view_box: Option<BBox>,
 }
 
 impl Args {
@@ -81,45 +86,46 @@ impl Args {
             output_file: String::new(),
             output_format: OutputFormat::Bmp,
             outline: false,
-            width: None,
+            size: Size {
+                height: 0,
+                width: 0,
+            },
             stroke: None,
             flatness: DEFAULT_FLATNESS,
             rasterizer: RasterizerType::SignedDifference,
-            tr: Transform::identity(),
+            tr: None,
             fg: None,
             bg: None,
-            bbox: None,
+            view_box: None,
         };
         let mut positional = 0;
         let mut args = env::args();
-        let cmd = args.next().unwrap();
+        let _cmd = args.next().unwrap();
         while let Some(arg) = args.next() {
             match arg.as_ref() {
                 "-h" => {
-                    positional = 0;
-                    break;
+                    result.size.height = args.next().ok_or("-h requires argument")?.parse()?;
                 }
                 "-w" => {
-                    let width = args.next().ok_or("-w requires argument")?;
-                    result.width = Some(width.parse()?);
+                    result.size.width = args.next().ok_or("-w requires argument")?.parse()?;
                 }
                 "-b" => {
-                    let bbox = args.next().ok_or("-b requires argument")?;
-                    result.bbox = Some(bbox.parse()?);
+                    let view_box = args.next().ok_or("-b requires argument")?;
+                    result.view_box.replace(view_box.parse()?);
                 }
                 "-t" => {
-                    result.tr = args.next().ok_or("-t requires argument")?.parse()?;
+                    let tr = args.next().ok_or("-t requires argument")?.parse()?;
+                    result.tr.replace(tr);
                 }
                 "-s" => {
                     let stroke = args.next().ok_or("-s requres argument")?;
-                    result.stroke = Some(stroke.parse()?);
+                    result.stroke.replace(stroke.parse()?);
                 }
                 "-o" => {
                     result.outline = true;
                 }
                 "-of" => {
-                    let format = args.next().ok_or("-of requries argument")?.parse()?;
-                    result.output_format = format;
+                    result.output_format = args.next().ok_or("-of requries argument")?.parse()?;
                 }
                 "-a" => {
                     result.rasterizer = RasterizerType::ActiveEdge;
@@ -161,12 +167,16 @@ impl Args {
             );
             eprintln!("\nUSAGE:");
             eprintln!(
-                "    {} [-w <width>] [-b <bbox>] [-s <stroke>] [-f <flatness>] [-o] [-of <format>] [-a] [-fg <color>] [-bg <color>] <file.path> <output_file>",
-                cmd
+                "    rasterize [-h <height>] [-w <width>] [-b <bbox>] [-t <transform>] [-s <stroke>]",
             );
+            eprintln!(
+                "              [-f <flatness>] [-o] [-of <format>] [-a] [-fg <color>] [-bg <color>]",
+            );
+            eprintln!("              <input_file> <output_file>");
             eprintln!("\nARGS:");
+            eprintln!("    -h <height>        height in pixels of the output image");
             eprintln!("    -w <width>         width in pixels of the output image");
-            eprintln!("    -b <bbox>          custom bounding box");
+            eprintln!("    -b <view_box>      view box");
             eprintln!("    -t <transform>     apply transform");
             eprintln!("    -s <stroke_width>  stroke path before rendering");
             eprintln!("    -o                 show outline with control points instead of filling");
@@ -180,24 +190,12 @@ impl Args {
                 "    -f <flatness>      flatness used by rasterizer (defualt: {})",
                 DEFAULT_FLATNESS
             );
-            eprintln!("    <file.path>        file containing SVG path ('-' means stdin)");
-            eprintln!("    <out.bmp>          image rendered in the BMP format ('-' means stdout)");
+            eprintln!("    <input_file>       file containing SVG path ('-' means stdin)");
+            eprintln!("    <output_file>      image rendered in the BMP format ('-' means stdout)");
             std::process::exit(1);
         }
         Ok(result)
     }
-}
-
-/// Load path for the file
-fn path_load(path: String) -> Result<Path, Error> {
-    let mut contents = String::new();
-    if path != "-" {
-        let mut file = File::open(path)?;
-        file.read_to_string(&mut contents)?;
-    } else {
-        std::io::stdin().read_to_string(&mut contents)?;
-    }
-    Ok(tracing::debug_span!("[parse]").in_scope(|| contents.parse())?)
 }
 
 /// Convert path to the outline with control points.
@@ -273,35 +271,41 @@ fn main() -> Result<(), Error> {
     let args = Args::parse()?;
     let rasterizer = args.get_rasterizer();
 
-    let path = match args.stroke {
-        None => path_load(args.input_file)?,
-        Some(stroke_width) => {
-            let path = path_load(args.input_file)?;
-            let stroke_style = StrokeStyle {
-                width: stroke_width,
-                line_join: LineJoin::Round,
-                line_cap: LineCap::Round,
-            };
-            tracing::debug_span!("[stroke]").in_scope(|| path.stroke(stroke_style))
-        }
+    // load path
+    let mut path = {
+        let file: &mut dyn Read = match args.input_file.as_str() {
+            "-" => &mut std::io::stdin(),
+            input_file => &mut File::open(input_file)?,
+        };
+        tracing::debug_span!("[parse]").in_scope(|| Path::read_svg_path(BufReader::new(file)))?
     };
+
+    // transform
+    if let Some(tr) = args.tr {
+        path.transform(tr);
+    }
+
+    // stroke
+    if let Some(stroke_width) = args.stroke {
+        let stroke_style = StrokeStyle {
+            width: stroke_width,
+            line_join: LineJoin::Round,
+            line_cap: LineCap::Round,
+        };
+        path = tracing::debug_span!("[stroke]").in_scope(|| path.stroke(stroke_style));
+    }
+
+    // allocate path
     let path = Arc::new(path);
     tracing::debug!("[path:segments_count] {}", path.segments_count());
 
-    // transform if needed
-    let tr = match args.width {
-        Some(width) if width > 2 => {
-            let src_bbox = match args.bbox {
-                Some(bbox) => bbox.transform(args.tr),
-                None => path.bbox(args.tr).ok_or("path is empty")?,
-            };
-            let width = width as Scalar;
-            let height = src_bbox.height() * width / src_bbox.width();
-            let dst_bbox = BBox::new(Point::new(1.0, 1.0), Point::new(width - 1.0, height - 1.0));
-            Transform::fit_bbox(src_bbox, dst_bbox, Align::Mid) * args.tr
-        }
-        _ => args.tr,
+    // render transform
+    let Some(view_box) = args.view_box.or_else(|| path.bbox(Transform::identity())) else {
+        return Err("nothing to render".into());
     };
+    tracing::debug!(?view_box, "[view box]");
+    let (size, tr) = Transform::fit_size(view_box, args.size, Align::Mid);
+    let bbox = BBox::new((0.0, 0.0), (size.width as Scalar, size.height as Scalar));
 
     // scene
     let mut group = Vec::new();
@@ -322,14 +326,6 @@ fn main() -> Result<(), Error> {
     let scene = Scene::group(group);
 
     // add background or checkerboard
-    let bbox = match args.bbox {
-        Some(bbox) => bbox.transform(tr),
-        None => scene
-            .bbox(Transform::identity())
-            .ok_or("nothing to render")?,
-    };
-    tracing::debug!(?bbox, "[bbox]");
-    let bbox = BBox::new((bbox.x().round(), bbox.y().round()), bbox.max());
     let (scene, bg) = match args.bg {
         None => {
             let scene = Scene::group(vec![
