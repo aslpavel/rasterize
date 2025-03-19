@@ -52,7 +52,8 @@ pub use geometry::{
 };
 pub use grad::{GradLinear, GradRadial, GradSpread, GradStop, GradStops};
 pub use image::{
-    Image, ImageIter, ImageMut, ImageMutIter, ImageMutRef, ImageOwned, ImageRef, Shape,
+    Image, ImageIter, ImageMut, ImageMutIter, ImageMutRef, ImageOwned, ImageRef, ImageWriteFormat,
+    Shape,
 };
 pub use path::{
     DEFAULT_FLATNESS, FillRule, LineCap, LineJoin, Path, PathBuilder, StrokeStyle, SubPath,

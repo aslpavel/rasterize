@@ -1,5 +1,5 @@
 use crate::{Color, Size};
-use std::{any::type_name, fmt, io::Write, sync::Arc};
+use std::{any::type_name, fmt, io::Write, str::FromStr, sync::Arc};
 
 /// Shape defines size and layout of the data inside an image
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -118,6 +118,20 @@ pub trait Image {
         }
     }
 
+    fn write(self, fmt: ImageWriteFormat, out: impl Write) -> Result<(), std::io::Error>
+    where
+        Self::Pixel: Color,
+        Self: Sized,
+    {
+        match fmt {
+            ImageWriteFormat::Bmp => self.write_bmp(out)?,
+            #[cfg(feature = "png")]
+            ImageWriteFormat::Png => self.write_png(out)?,
+            ImageWriteFormat::Rgba => self.write_rgba(out)?,
+        }
+        Ok(())
+    }
+
     /// Write raw (height, width, RGBA...) data
     fn write_rgba<W>(&self, mut out: W) -> Result<(), std::io::Error>
     where
@@ -214,6 +228,31 @@ pub trait Image {
         }
         stream_writer.flush()?;
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub enum ImageWriteFormat {
+    #[default]
+    Bmp,
+    Rgba,
+    #[cfg(feature = "png")]
+    Png,
+}
+
+impl FromStr for ImageWriteFormat {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "bmp" => Ok(ImageWriteFormat::Bmp),
+            "rgba" => Ok(ImageWriteFormat::Rgba),
+            #[cfg(feature = "png")]
+            "png" => Ok(ImageWriteFormat::Png),
+            #[cfg(not(feature = "png"))]
+            "png" => Err("png feature is disabled".into()),
+            _ => Err(format!("Invalid output format: {s}")),
+        }
     }
 }
 

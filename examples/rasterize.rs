@@ -5,8 +5,7 @@ use rasterize::*;
 use std::{
     env,
     fs::File,
-    io::{BufReader, BufWriter, Read, Write},
-    str::FromStr,
+    io::{BufReader, BufWriter, Read},
     sync::Arc,
 };
 use tracing_subscriber::{EnvFilter, fmt::format::FmtSpan};
@@ -19,47 +18,11 @@ enum RasterizerType {
     SignedDifference,
 }
 
-#[derive(Debug, Clone, Copy)]
-enum OutputFormat {
-    Bmp,
-    Rgba,
-    #[cfg(feature = "png")]
-    Png,
-}
-
-impl OutputFormat {
-    fn write(self, image: &Layer<LinColor>, out: impl Write) -> Result<(), Error> {
-        match self {
-            OutputFormat::Bmp => image.write_bmp(out)?,
-            #[cfg(feature = "png")]
-            OutputFormat::Png => image.write_png(out)?,
-            OutputFormat::Rgba => image.write_rgba(out)?,
-        }
-        Ok(())
-    }
-}
-
-impl FromStr for OutputFormat {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "bmp" => Ok(OutputFormat::Bmp),
-            "rgba" => Ok(OutputFormat::Rgba),
-            #[cfg(feature = "png")]
-            "png" => Ok(OutputFormat::Png),
-            #[cfg(not(feature = "png"))]
-            "png" => Err("png feature is disabled".into()),
-            _ => Err(format!("Invalid output format: {s}").into()),
-        }
-    }
-}
-
 #[derive(Debug)]
 struct Args {
     input_file: String,
     output_file: String,
-    output_format: OutputFormat,
+    output_format: ImageWriteFormat,
     outline: bool,
     size: Size,
     stroke: Option<Scalar>,
@@ -84,7 +47,7 @@ impl Args {
         let mut result = Args {
             input_file: String::new(),
             output_file: String::new(),
-            output_format: OutputFormat::Bmp,
+            output_format: ImageWriteFormat::Bmp,
             outline: false,
             size: Size {
                 height: 0,
@@ -109,8 +72,8 @@ impl Args {
                 "-w" => {
                     result.size.width = args.next().ok_or("-w requires argument")?.parse()?;
                 }
-                "-b" => {
-                    let view_box = args.next().ok_or("-b requires argument")?;
+                "-v" => {
+                    let view_box = args.next().ok_or("-v requires argument")?;
                     result.view_box.replace(view_box.parse()?);
                 }
                 "-t" => {
@@ -121,21 +84,8 @@ impl Args {
                     let stroke = args.next().ok_or("-s requres argument")?;
                     result.stroke.replace(stroke.parse()?);
                 }
-                "-o" => {
-                    result.outline = true;
-                }
-                "-of" => {
-                    result.output_format = args.next().ok_or("-of requries argument")?.parse()?;
-                }
-                "-a" => {
-                    result.rasterizer = RasterizerType::ActiveEdge;
-                }
                 "-f" => {
-                    let flatness: Scalar = args.next().ok_or("-f requres argument")?.parse()?;
-                    if flatness < EPSILON {
-                        return Err("flatness is too small".into());
-                    }
-                    result.flatness = flatness;
+                    result.output_format = args.next().ok_or("-of requries argument")?.parse()?;
                 }
                 "-fg" => {
                     let fg = args
@@ -151,6 +101,19 @@ impl Args {
                         .parse()?;
                     result.bg.replace(bg);
                 }
+                "-ro" => {
+                    result.outline = true;
+                }
+                "-ra" => {
+                    result.rasterizer = RasterizerType::ActiveEdge;
+                }
+                "-rf" => {
+                    let flatness: Scalar = args.next().ok_or("-rf requres argument")?.parse()?;
+                    if flatness < EPSILON {
+                        return Err("flatness is too small".into());
+                    }
+                    result.flatness = flatness;
+                }
                 _ => {
                     positional += 1;
                     match positional {
@@ -163,35 +126,38 @@ impl Args {
         }
         if positional < 2 {
             eprintln!(
-                "Very simple tool that accepts SVG path as an input and produces rasterized image"
+                "Very simple tool that accepts SVG path as an input and produces rasterized image",
             );
             eprintln!("\nUSAGE:");
             eprintln!(
-                "    rasterize [-h <height>] [-w <width>] [-b <bbox>] [-t <transform>] [-s <stroke>]",
+                "    rasterize [-h <height>] [-w <width>] [-v <view_box>] [-t <transform>] [-s <stroke>]",
             );
             eprintln!(
-                "              [-f <flatness>] [-o] [-of <format>] [-a] [-fg <color>] [-bg <color>]",
+                "              [-fg <color>] [-bg <color>] [-f <format>] [-rf <flatness>] [-ro] [-ra]",
             );
             eprintln!("              <input_file> <output_file>");
             eprintln!("\nARGS:");
             eprintln!("    -h <height>        height in pixels of the output image");
             eprintln!("    -w <width>         width in pixels of the output image");
-            eprintln!("    -b <view_box>      view box");
+            eprintln!("    -v <view_box>      view box");
             eprintln!("    -t <transform>     apply transform");
             eprintln!("    -s <stroke_width>  stroke path before rendering");
-            eprintln!("    -o                 show outline with control points instead of filling");
-            eprintln!("    -of <format>       output file format (bmp, png, rgba)");
-            eprintln!(
-                "    -a                 use active-edge instead of signed-difference rasterizer"
-            );
+            eprintln!("    -f <format>        output file format (bmp, png, rgba)");
             eprintln!("    -fg <color>        foreground color");
             eprintln!("    -bg <color>        background color");
             eprintln!(
-                "    -f <flatness>      flatness used by rasterizer (defualt: {})",
+                "    -rf <flatness>     flatness used by rasterizer (defualt: {})",
                 DEFAULT_FLATNESS
+            );
+            eprintln!(
+                "    -ro                rasterize outline with control points instead of filling"
+            );
+            eprintln!(
+                "    -ra                rasterize active-edge instead of signed-difference rasterizer"
             );
             eprintln!("    <input_file>       file containing SVG path ('-' means stdin)");
             eprintln!("    <output_file>      image rendered in the BMP format ('-' means stdout)");
+            eprintln!("\nVERSION: {}", env!("CARGO_PKG_VERSION"));
             std::process::exit(1);
         }
         Ok(result)
@@ -350,9 +316,9 @@ fn main() -> Result<(), Error> {
         let _ = save.enter();
         if args.output_file != "-" {
             let mut image_file = BufWriter::new(File::create(args.output_file)?);
-            args.output_format.write(&image, &mut image_file)?;
+            image.write(args.output_format, &mut image_file)?;
         } else {
-            args.output_format.write(&image, std::io::stdout())?;
+            image.write(args.output_format, std::io::stdout())?;
         }
     }
 
