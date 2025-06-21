@@ -1,9 +1,9 @@
 #![deny(warnings)]
-
-use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use rasterize::*;
 use std::{
     fs::File,
+    hint::black_box,
     io::{Cursor, Read},
     time::Duration,
 };

@@ -33,7 +33,7 @@ bytemuck = { version = "1.21", features = ["derive"] }
 lexical-core = { version = "^1.0", default-features = false, features = [ "write-floats", "format" ] }
 
 [dev-dependencies]
-criterion = { version = "^0.5", features = ["html_reports"] }
+criterion = { version = "^0.6", features = ["html_reports"] }
 tracing-subscriber = { version = "^0.3", features = ["env-filter"] }
 
 [[bench]]

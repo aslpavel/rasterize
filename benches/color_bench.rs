@@ -1,8 +1,9 @@
-use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use rasterize::{
     linear_to_srgb,
     simd::{f32x4, l2s},
 };
+use std::hint::black_box;
 
 fn linear_to_srgb_bench(c: &mut Criterion) {
     let v0 = [0.001, 0.1, 0.2, 0.7];
