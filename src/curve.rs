@@ -873,34 +873,6 @@ impl Curve for Cubic {
     }
 }
 
-pub struct CubicFlattenIter {
-    flatness: Scalar,
-    cubics: Vec<Cubic>,
-}
-
-impl Iterator for CubicFlattenIter {
-    type Item = Line;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.cubics.pop() {
-                None => {
-                    return None;
-                }
-                Some(cubic) if cubic.flatness() < self.flatness => {
-                    let Cubic([p0, _p1, _p2, p3]) = cubic;
-                    return Some(Line([p0, p3]));
-                }
-                Some(cubic) => {
-                    let (c0, c1) = cubic.split();
-                    self.cubics.push(c1);
-                    self.cubics.push(c0);
-                }
-            }
-        }
-    }
-}
-
 impl From<Quad> for Cubic {
     fn from(quad: Quad) -> Self {
         let Quad([p0, p1, p2]) = quad;
@@ -1452,7 +1424,7 @@ fn cubic_offset_should_split(cubic: Cubic) -> bool {
         return true;
     }
     // distance between center mass and midpoint of a curve,
-    // should be bigger then 0.1 of the bounding box diagonal
+    // should be bigger than 0.1 of the bounding box diagonal
     let c_mass = (p0 + p1 + p2 + p3) / 4.0;
     let c_mid = cubic.at(0.5);
     let dist = (c_mass - c_mid).length();
