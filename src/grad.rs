@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize, de};
 use std::cmp::Ordering;
 
 /// Gradient spread logic for the parameter smaller than 0 and greater than 1
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[cfg_attr(
     feature = "serde",
     derive(Serialize, Deserialize),
@@ -12,6 +12,7 @@ use std::cmp::Ordering;
 )]
 pub enum GradSpread {
     /// Use the same colors as the edge of the gradient
+    #[default]
     Pad,
     /// Repeat gradient
     Repeat,
@@ -27,12 +28,6 @@ impl GradSpread {
             GradSpread::Repeat => t.rem_euclid(1.0),
             GradSpread::Reflect => ((t + 1.0).rem_euclid(2.0) - 1.0).abs(),
         }
-    }
-}
-
-impl Default for GradSpread {
-    fn default() -> Self {
-        Self::Pad
     }
 }
 

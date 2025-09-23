@@ -1393,15 +1393,15 @@ fn cubic_offset_rec(
         let result: Segment = Cubic(points).into();
         // there could a disconnect between offset curves.
         // For example M0,0 C10,5 0,5 10,0.
-        if let Some(last) = last {
-            if !last.end().is_close_to(result.start()) {
-                let stroke_style = StrokeStyle {
-                    width: dist * 2.0,
-                    line_join: LineJoin::Round,
-                    line_cap: LineCap::Round,
-                };
-                out.extend(last.line_join(result, stroke_style));
-            }
+        if let Some(last) = last
+            && !last.end().is_close_to(result.start())
+        {
+            let stroke_style = StrokeStyle {
+                width: dist * 2.0,
+                line_join: LineJoin::Round,
+                line_cap: LineCap::Round,
+            };
+            out.extend(last.line_join(result, stroke_style));
         }
         out.extend(Some(result));
         Some(result)

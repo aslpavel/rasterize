@@ -94,7 +94,7 @@ impl Default for LineJoin {
 
 /// `LineCap` specifies the shape to be used at the end of open sub-paths when they are stroked.
 /// See [SVG specification](https://www.w3.org/TR/SVG2/painting.html#LineCaps) for more details.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 #[cfg_attr(
     feature = "serde",
     derive(Serialize, Deserialize),
@@ -102,17 +102,12 @@ impl Default for LineJoin {
 )]
 pub enum LineCap {
     /// Connect path segments with straight line.
+    #[default]
     Butt,
     /// Add half-square to the end of the segments
     Square,
     /// Add half-circle to the end of the segments
     Round,
-}
-
-impl Default for LineCap {
-    fn default() -> Self {
-        Self::Butt
-    }
 }
 
 /// Style used to generate stroke

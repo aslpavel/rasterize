@@ -166,19 +166,14 @@ impl Rasterizer for Box<dyn Rasterizer> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Units {
     #[cfg_attr(feature = "serde", serde(rename = "userSpaceOnUse"))]
+    #[default]
     UserSpaceOnUse,
     #[cfg_attr(feature = "serde", serde(rename = "objectBoundingBox"))]
     BoundingBox,
-}
-
-impl Default for Units {
-    fn default() -> Self {
-        Self::UserSpaceOnUse
-    }
 }
 
 /// Common interface for anything that can be used to fill an area

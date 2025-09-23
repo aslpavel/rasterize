@@ -20,7 +20,7 @@ pub const PI: f64 = std::f64::consts::PI;
 const SCALAR_PRECISION: usize = 4;
 const SCALAR_FORMAT: u128 = lexical_core::NumberFormatBuilder::new()
     .required_integer_digits(false)
-    .build();
+    .build_strict();
 const SCALAR_FORMAT_OPTIONS: lexical_core::WriteFloatOptions =
     lexical_core::WriteFloatOptions::builder()
         .max_significant_digits(std::num::NonZero::new(SCALAR_PRECISION))
