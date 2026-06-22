@@ -2,6 +2,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{Line, Size, SvgParserError, utils::clamp};
+use lexical_write_float::ToLexicalWithOptions;
 use std::{
     fmt,
     ops::{Add, Div, Mul, Sub},
@@ -18,26 +19,25 @@ pub const EPSILON_SQRT: f64 = 1.490_116_119_384_765_6e-8;
 pub const PI: f64 = std::f64::consts::PI;
 
 const SCALAR_PRECISION: usize = 4;
-const SCALAR_FORMAT: u128 = lexical_core::NumberFormatBuilder::new()
+const SCALAR_FORMAT: u128 = lexical_write_float::NumberFormatBuilder::new()
     .required_integer_digits(false)
     .build_strict();
-const SCALAR_FORMAT_OPTIONS: lexical_core::WriteFloatOptions =
-    lexical_core::WriteFloatOptions::builder()
-        .max_significant_digits(std::num::NonZero::new(SCALAR_PRECISION))
-        .trim_floats(true)
-        .build_unchecked();
+const SCALAR_FORMAT_OPTIONS: lexical_write_float::Options = lexical_write_float::Options::builder()
+    .max_significant_digits(std::num::NonZero::new(SCALAR_PRECISION))
+    .trim_floats(true)
+    .build_unchecked();
 
 pub struct ScalarFormatter {
     precision: usize,
     round: bool, // whether to preround (correctly removes)
-    options: lexical_core::WriteFloatOptions,
-    buffer: [u8; lexical_core::BUFFER_SIZE],
+    options: lexical_write_float::Options,
+    buffer: [u8; lexical_write_float::BUFFER_SIZE],
 }
 impl ScalarFormatter {
     pub fn new(precision: Option<usize>, round: bool) -> Self {
         let options = precision
             .and_then(|precision| {
-                lexical_core::WriteFloatOptionsBuilder::new()
+                lexical_write_float::OptionsBuilder::new()
                     .max_significant_digits(std::num::NonZero::new(precision))
                     .trim_floats(true)
                     .build()
@@ -48,7 +48,7 @@ impl ScalarFormatter {
             precision: precision.unwrap_or(SCALAR_PRECISION),
             options,
             round,
-            buffer: [0u8; lexical_core::BUFFER_SIZE],
+            buffer: [0u8; lexical_write_float::BUFFER_SIZE],
         }
     }
 
@@ -60,7 +60,7 @@ impl ScalarFormatter {
         if self.round {
             value = Self::round_significant(value, self.precision);
         }
-        lexical_core::write_with_options::<_, SCALAR_FORMAT>(value, &mut self.buffer, &self.options)
+        value.to_lexical_with_options::<SCALAR_FORMAT>(&mut self.buffer, &self.options)
     }
 
     pub fn format_str(&mut self, value: Scalar) -> &str {

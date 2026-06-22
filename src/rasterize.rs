@@ -651,7 +651,7 @@ impl ActiveEdgeIter {
 
         // sort iterator by column
         self.iters_inactive
-            .sort_unstable_by(|a, b| b.column.cmp(&a.column));
+            .sort_unstable_by_key(|iter| std::cmp::Reverse(iter.column));
     }
 }
 
